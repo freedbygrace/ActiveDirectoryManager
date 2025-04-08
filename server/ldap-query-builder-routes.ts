@@ -537,7 +537,20 @@ export function registerLdapQueryBuilderRoutes(router: Router, storage: IStorage
    *             schema:
    *               type: array
    *               items:
-   *                 type: string
+   *                 type: object
+   *                 properties:
+   *                   name:
+   *                     type: string
+   *                     description: The attribute name
+   *                   type:
+   *                     type: string
+   *                     description: The attribute data type (string, number, boolean, datetime)
+   *                   description:
+   *                     type: string
+   *                     description: Human-readable description of the attribute
+   *                   isMultiValued:
+   *                     type: boolean
+   *                     description: Whether the attribute can have multiple values
    *       400:
    *         description: Invalid request parameters
    *       404:
