@@ -385,21 +385,21 @@ export class DatabaseStorage implements IStorage {
       
       // Apply where conditions if any
       if (whereClause) {
-        baseQuery = baseQuery.where(whereClause);
+        baseQuery = baseQuery.where(whereClause as any);
       }
       
       // Apply ordering if any
       if (orderClauses.length > 0) {
-        baseQuery = baseQuery.orderBy(...orderClauses);
+        baseQuery = baseQuery.orderBy(...orderClauses as any[]);
       }
       
       // Apply pagination if specified
       if (limit !== undefined) {
-        baseQuery = baseQuery.limit(limit);
+        baseQuery = baseQuery.limit(limit as any);
       }
       
       if (offset !== undefined) {
-        baseQuery = baseQuery.offset(offset);
+        baseQuery = baseQuery.offset(offset as any);
       }
       
       // Execute the query
@@ -411,7 +411,7 @@ export class DatabaseStorage implements IStorage {
           const filtered: Partial<AdUser> = { id: user.id };
           selectedFields.forEach(field => {
             if (field in user) {
-              filtered[field as keyof AdUser] = user[field as keyof AdUser];
+              filtered[field as keyof AdUser] = user[field as keyof AdUser] as any;
             }
           });
           return filtered as AdUser;
@@ -474,21 +474,21 @@ export class DatabaseStorage implements IStorage {
       
       // Apply where conditions if any
       if (whereClause) {
-        baseQuery = baseQuery.where(whereClause);
+        baseQuery = baseQuery.where(whereClause as any);
       }
       
       // Apply ordering if any
       if (orderClauses.length > 0) {
-        baseQuery = baseQuery.orderBy(...orderClauses);
+        baseQuery = baseQuery.orderBy(...orderClauses as any[]);
       }
       
       // Apply pagination if specified
       if (limit !== undefined) {
-        baseQuery = baseQuery.limit(limit);
+        baseQuery = baseQuery.limit(limit as any);
       }
       
       if (offset !== undefined) {
-        baseQuery = baseQuery.offset(offset);
+        baseQuery = baseQuery.offset(offset as any);
       }
       
       // Execute the query
@@ -500,7 +500,7 @@ export class DatabaseStorage implements IStorage {
           const filtered: Partial<AdGroup> = { id: group.id };
           selectedFields.forEach(field => {
             if (field in group) {
-              filtered[field as keyof AdGroup] = group[field as keyof AdGroup];
+              filtered[field as keyof AdGroup] = group[field as keyof AdGroup] as any;
             }
           });
           return filtered as AdGroup;

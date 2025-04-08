@@ -226,15 +226,15 @@ export default function LdapQueryBuilderPage() {
   const queriesColumns = [
     {
       header: "Name",
-      accessorKey: "name",
+      accessorKey: "name" as keyof LdapQuery,
     },
     {
       header: "Description",
-      accessorKey: "description",
+      accessorKey: "description" as keyof LdapQuery,
     },
     {
       header: "Target",
-      accessorKey: "targetObject",
+      accessorKey: "targetObject" as keyof LdapQuery,
       cell: (row: LdapQuery) => {
         const targets: Record<string, string> = {
           users: "Users",
@@ -247,13 +247,13 @@ export default function LdapQueryBuilderPage() {
     },
     {
       header: "Last Updated",
-      accessorKey: "updatedAt",
+      accessorKey: "updatedAt" as keyof LdapQuery,
       cell: (row: LdapQuery) => 
         row.updatedAt ? format(new Date(row.updatedAt), "MMM dd, yyyy HH:mm") : "",
     },
     {
       header: "",
-      accessorKey: "id",
+      accessorKey: "id" as keyof LdapQuery,
       cell: (row: LdapQuery) => (
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
@@ -294,7 +294,7 @@ export default function LdapQueryBuilderPage() {
     const firstResult = testResults[0];
     return Object.keys(firstResult).map(key => ({
       header: key,
-      accessorKey: key,
+      accessorKey: key as keyof typeof firstResult,
       cell: (row: any) => {
         const value = row[key];
         if (value === null || value === undefined) return "-";
