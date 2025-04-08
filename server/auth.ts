@@ -95,132 +95,62 @@ export function setupAuth(app: Express) {
     }
   });
 
-  // Registration endpoint - fixed with better error handling
+  // Registration endpoint
   app.post("/api/register", async (req, res, next) => {
     try {
-      console.log("Registration attempt:", { ...req.body, password: "***" });
-      
-      // Validate inputs
       const validationResult = loginSchema.safeParse(req.body);
       if (!validationResult.success) {
-        console.log("Validation failed:", validationResult.error.errors);
         return res.status(400).json({ message: "Invalid input", errors: validationResult.error.errors });
       }
 
       const { username, password } = req.body;
-      
-      // Check for existing user
-      try {
-        const existingUser = await storage.getUserByUsername(username);
-        if (existingUser) {
-          console.log("Username already exists:", username);
-          return res.status(400).json({ message: "Username already exists" });
-        }
-      } catch (error) {
-        console.error("Error checking for existing user:", error);
-        return res.status(500).json({ message: "Error checking for existing user" });
+      const existingUser = await storage.getUserByUsername(username);
+      if (existingUser) {
+        return res.status(400).json({ message: "Username already exists" });
       }
 
-      // Hash password
-      let hashedPassword;
-      try {
-        hashedPassword = await hashPassword(password);
-      } catch (error) {
-        console.error("Error hashing password:", error);
-        return res.status(500).json({ message: "Error processing password" });
-      }
-      
-      // Get default role
+      const hashedPassword = await hashPassword(password);
+      // Get the default role if role ID isn't specified
       let roleId = req.body.roleId;
       if (!roleId) {
-        try {
-          const defaultRole = await storage.getDefaultRole();
-          roleId = defaultRole?.id;
-          console.log("Using default role ID:", roleId);
-        } catch (error) {
-          console.error("Error getting default role:", error);
-          return res.status(500).json({ message: "Error getting default role" });
-        }
+        const defaultRole = await storage.getDefaultRole();
+        roleId = defaultRole?.id;
       }
       
-      // Create user
-      let user;
-      try {
-        user = await storage.createUser({
-          username,
-          password: hashedPassword,
-          email: req.body.email || null,
-          fullName: req.body.fullName || null,
-          roleId: roleId,
-        });
-        console.log("User created successfully:", { id: user.id, username });
-      } catch (error) {
-        console.error("Error creating user:", error);
-        return res.status(500).json({ message: "Error creating user" });
-      }
+      const user = await storage.createUser({
+        username,
+        password: hashedPassword,
+        email: req.body.email,
+        fullName: req.body.fullName,
+        roleId: roleId,
+      });
 
       // Remove password from response
       const userResponse = { ...user, password: undefined };
 
-      // Manual login instead of using req.login
-      try {
-        req.user = user;
-        // Use req.session to store user data
-        if (req.session) {
-          req.session.userId = user.id;
-        }
-        
-        // Send success response
-        console.log("Registration completed successfully");
-        return res.status(201).json(userResponse);
-      } catch (error) {
-        console.error("Error during session setup:", error);
-        // Still return the created user even if session setup fails
-        return res.status(201).json({ 
-          ...userResponse, 
-          warning: "User created but session setup failed, please log in manually" 
-        });
-      }
+      req.login(user, (err) => {
+        if (err) return next(err);
+        res.status(201).json(userResponse);
+      });
     } catch (error) {
-      console.error("Unexpected error during registration:", error);
-      return res.status(500).json({ message: "Internal server error during registration" });
+      next(error);
     }
   });
 
-  // Login endpoint - fixed without relying on req.isAuthenticated
+  // Login endpoint
   app.post("/api/login", (req, res, next) => {
-    try {
-      passport.authenticate("local", (err: any, user: any, info: any) => {
-        if (err) {
-          console.error("Authentication error:", err);
-          return res.status(500).json({ message: "Internal server error during authentication" });
-        }
-        
-        if (!user) {
-          return res.status(401).json({ message: info?.message || "Authentication failed" });
-        }
-        
-        // Manual login with try-catch to safely handle errors
-        try {
-          req.login(user, (loginErr) => {
-            if (loginErr) {
-              console.error("Login error:", loginErr);
-              return res.status(500).json({ message: "Error during login process" });
-            }
-            
-            // Remove password from response
-            const userResponse = { ...user, password: undefined };
-            return res.json(userResponse);
-          });
-        } catch (loginError) {
-          console.error("Exception during login:", loginError);
-          return res.status(500).json({ message: "Login process failed" });
-        }
-      })(req, res, next);
-    } catch (error) {
-      console.error("Unexpected error in login route:", error);
-      return res.status(500).json({ message: "Internal server error" });
-    }
+    passport.authenticate("local", (err: any, user: any, info: any) => {
+      if (err) return next(err);
+      if (!user) {
+        return res.status(401).json({ message: info?.message || "Authentication failed" });
+      }
+      req.login(user, (loginErr) => {
+        if (loginErr) return next(loginErr);
+        // Remove password from response
+        const userResponse = { ...user, password: undefined };
+        res.json(userResponse);
+      });
+    })(req, res, next);
   });
 
   // Logout endpoint
@@ -235,31 +165,23 @@ export function setupAuth(app: Express) {
     });
   });
 
-  // Get current user endpoint - fixed without relying on req.isAuthenticated
+  // Get current user endpoint
   app.get("/api/user", (req, res) => {
-    try {
-      // Check if user exists in session instead of using isAuthenticated
-      if (!req.user) {
-        return res.status(401).json({ message: "Not authenticated" });
-      }
-      
-      // Remove password from response
-      const userResponse = { ...req.user, password: undefined };
-      res.json(userResponse);
-    } catch (error) {
-      console.error("Error in user endpoint:", error);
-      res.status(500).json({ message: "Internal server error" });
+    if (!req.isAuthenticated()) {
+      return res.status(401).json({ message: "Not authenticated" });
     }
+    // Remove password from response
+    const userResponse = { ...req.user, password: undefined };
+    res.json(userResponse);
   });
 
-  // Generate API token endpoint - fixed without relying on req.isAuthenticated
+  // Generate API token endpoint
   app.post("/api/tokens", (req, res, next) => {
-    try {
-      // Check if user exists in session
-      if (!req.user) {
-        return res.status(401).json({ message: "Not authenticated" });
-      }
+    if (!req.isAuthenticated()) {
+      return res.status(401).json({ message: "Not authenticated" });
+    }
 
+    try {
       const { name, expiresAt, roleId, customPermissions } = req.body;
       if (!name) {
         return res.status(400).json({ message: "Token name is required" });
@@ -289,8 +211,7 @@ export function setupAuth(app: Express) {
 
       res.status(201).json(apiToken);
     } catch (error) {
-      console.error("Error generating API token:", error);
-      res.status(500).json({ message: "Failed to generate API token" });
+      next(error);
     }
   });
 

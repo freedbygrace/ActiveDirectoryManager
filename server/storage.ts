@@ -4,9 +4,8 @@ import {
   AdUser, InsertAdUser, AdGroup, InsertAdGroup, 
   AdOrgUnit, InsertAdOrgUnit, AdComputer, InsertAdComputer, 
   AdDomain, InsertAdDomain, Role, ApiQuery,
-  LdapQuery, InsertLdapQuery, LdapQueryVersion, InsertLdapQueryVersion,
   users, apiTokens, ldapConnections, adUsers, adGroups, adOrgUnits, adComputers, adDomains,
-  roles, ldapQueries, ldapQueryVersions
+  roles
 } from "@shared/schema";
 import session from "express-session";
 import createMemoryStore from "memorystore";
@@ -32,9 +31,6 @@ const pool = new Pool({
 const PostgresStore = connectPg(session);
 
 export interface IStorage {
-  // Session store for authentication
-  sessionStore: session.Store;
-  
   // User management
   getUser(id: number): Promise<User | undefined>;
   getUserByUsername(username: string): Promise<User | undefined>;
@@ -60,15 +56,6 @@ export interface IStorage {
   updateLdapConnection(id: number, connection: Partial<LdapConnection>): Promise<LdapConnection | undefined>;
   deleteLdapConnection(id: number): Promise<boolean>;
   listLdapConnections(): Promise<LdapConnection[]>;
-
-  // LDAP Query Builder
-  getLdapQuery(id: number): Promise<LdapQuery | undefined>;
-  getLdapQueries(): Promise<LdapQuery[]>;
-  createLdapQuery(query: InsertLdapQuery): Promise<LdapQuery>;
-  updateLdapQuery(id: number, query: Partial<LdapQuery>): Promise<LdapQuery | undefined>;
-  deleteLdapQuery(id: number): Promise<boolean>;
-  getLdapQueryVersions(queryId: number): Promise<LdapQueryVersion[]>;
-  createLdapQueryVersion(version: InsertLdapQueryVersion): Promise<LdapQueryVersion>;
 
   // AD Users
   getAdUser(id: number): Promise<AdUser | undefined>;
@@ -104,11 +91,14 @@ export interface IStorage {
   updateAdDomain(id: number, domain: Partial<AdDomain>): Promise<AdDomain | undefined>;
   deleteAdDomain(id: number): Promise<boolean>;
   listAdDomains(connectionId: number, query?: any): Promise<AdDomain[]>;
+
+  // Session store
+  sessionStore: any;
 }
 
 // Database Storage implementation
 export class DatabaseStorage implements IStorage {
-  sessionStore: session.Store;
+  sessionStore: any;
 
   constructor() {
     this.sessionStore = new PostgresStore({
@@ -208,142 +198,6 @@ export class DatabaseStorage implements IStorage {
     return db.select().from(ldapConnections);
   }
 
-  // LDAP Query Builder
-  async getLdapQuery(id: number): Promise<LdapQuery | undefined> {
-    const cacheKey = `ldapQuery:${id}`;
-    
-    // Try to get from cache first
-    const cachedData = await getCached<LdapQuery>(cacheKey);
-    if (cachedData) {
-      debug(`Cache hit for ${cacheKey}`);
-      return cachedData;
-    }
-    
-    const result = await db.select().from(ldapQueries).where(eq(ldapQueries.id, id));
-    
-    if (result.length > 0) {
-      // Cache the query for faster access
-      await setCached(cacheKey, result[0], CACHE_TTL.MEDIUM);
-      return result[0];
-    }
-    
-    return undefined;
-  }
-
-  async getLdapQueries(): Promise<LdapQuery[]> {
-    const cacheKey = 'ldapQueries:all';
-    
-    // Try to get from cache first
-    const cachedData = await getCached<LdapQuery[]>(cacheKey);
-    if (cachedData) {
-      debug(`Cache hit for ${cacheKey}`);
-      return cachedData;
-    }
-    
-    const queries = await db.select().from(ldapQueries);
-    
-    // Cache the results
-    await setCached(cacheKey, queries, CACHE_TTL.MEDIUM);
-    return queries;
-  }
-
-  async createLdapQuery(query: InsertLdapQuery): Promise<LdapQuery> {
-    // Create the query
-    const result = await db.insert(ldapQueries).values({
-      name: query.name,
-      description: query.description,
-      targetObject: query.targetObject,
-      filterJson: query.filterJson,
-      ldapFilter: query.ldapFilter,
-      readableFilter: query.readableFilter,
-      createdBy: query.createdBy,
-      modifiedBy: query.createdBy // Initially, creator and modifier are the same
-    }).returning();
-    
-    // Invalidate relevant caches
-    invalidateCache('ldapQueries:all');
-    
-    return result[0];
-  }
-
-  async updateLdapQuery(id: number, queryData: Partial<LdapQuery>): Promise<LdapQuery | undefined> {
-    // Update the query
-    const result = await db.update(ldapQueries)
-      .set({
-        ...queryData,
-        updatedAt: new Date()
-      })
-      .where(eq(ldapQueries.id, id))
-      .returning();
-    
-    if (result.length > 0) {
-      // Invalidate relevant caches
-      invalidateCache(`ldapQuery:${id}`);
-      invalidateCache('ldapQueries:all');
-      
-      return result[0];
-    }
-    
-    return undefined;
-  }
-
-  async deleteLdapQuery(id: number): Promise<boolean> {
-    // Delete the query (versions will be deleted via cascade)
-    const result = await db.delete(ldapQueries)
-      .where(eq(ldapQueries.id, id))
-      .returning({ id: ldapQueries.id });
-    
-    const deleted = result.length > 0;
-    
-    if (deleted) {
-      // Invalidate relevant caches
-      invalidateCache(`ldapQuery:${id}`);
-      invalidateCachePattern(`ldapQueryVersions:${id}:*`);
-      invalidateCache('ldapQueries:all');
-    }
-    
-    return deleted;
-  }
-
-  async getLdapQueryVersions(queryId: number): Promise<LdapQueryVersion[]> {
-    const cacheKey = `ldapQueryVersions:${queryId}:all`;
-    
-    // Try to get from cache first
-    const cachedData = await getCached<LdapQueryVersion[]>(cacheKey);
-    if (cachedData) {
-      debug(`Cache hit for ${cacheKey}`);
-      return cachedData;
-    }
-    
-    const versions = await db.select()
-      .from(ldapQueryVersions)
-      .where(eq(ldapQueryVersions.queryId, queryId))
-      .orderBy(ldapQueryVersions.version);
-    
-    // Cache the results
-    await setCached(cacheKey, versions, CACHE_TTL.MEDIUM);
-    
-    return versions;
-  }
-
-  async createLdapQueryVersion(version: InsertLdapQueryVersion): Promise<LdapQueryVersion> {
-    const result = await db.insert(ldapQueryVersions).values({
-      queryId: version.queryId,
-      version: version.version,
-      filterJson: version.filterJson,
-      ldapFilter: version.ldapFilter,
-      readableFilter: version.readableFilter,
-      targetObject: version.targetObject,
-      createdBy: version.createdBy,
-      modifiedBy: version.modifiedBy
-    }).returning();
-    
-    // Invalidate relevant caches
-    invalidateCachePattern(`ldapQueryVersions:${version.queryId}:*`);
-    
-    return result[0];
-  }
-
   // AD Users
   async getAdUser(id: number): Promise<AdUser | undefined> {
     const result = await db.select().from(adUsers).where(eq(adUsers.id, id));
@@ -385,21 +239,21 @@ export class DatabaseStorage implements IStorage {
       
       // Apply where conditions if any
       if (whereClause) {
-        baseQuery = baseQuery.where(whereClause as any);
+        baseQuery = baseQuery.where(whereClause);
       }
       
       // Apply ordering if any
       if (orderClauses.length > 0) {
-        baseQuery = baseQuery.orderBy(...orderClauses as any[]);
+        baseQuery = baseQuery.orderBy(...orderClauses);
       }
       
       // Apply pagination if specified
       if (limit !== undefined) {
-        baseQuery = baseQuery.limit(limit as any);
+        baseQuery = baseQuery.limit(limit);
       }
       
       if (offset !== undefined) {
-        baseQuery = baseQuery.offset(offset as any);
+        baseQuery = baseQuery.offset(offset);
       }
       
       // Execute the query
@@ -411,7 +265,7 @@ export class DatabaseStorage implements IStorage {
           const filtered: Partial<AdUser> = { id: user.id };
           selectedFields.forEach(field => {
             if (field in user) {
-              filtered[field as keyof AdUser] = user[field as keyof AdUser] as any;
+              filtered[field as keyof AdUser] = user[field as keyof AdUser];
             }
           });
           return filtered as AdUser;
@@ -474,21 +328,21 @@ export class DatabaseStorage implements IStorage {
       
       // Apply where conditions if any
       if (whereClause) {
-        baseQuery = baseQuery.where(whereClause as any);
+        baseQuery = baseQuery.where(whereClause);
       }
       
       // Apply ordering if any
       if (orderClauses.length > 0) {
-        baseQuery = baseQuery.orderBy(...orderClauses as any[]);
+        baseQuery = baseQuery.orderBy(...orderClauses);
       }
       
       // Apply pagination if specified
       if (limit !== undefined) {
-        baseQuery = baseQuery.limit(limit as any);
+        baseQuery = baseQuery.limit(limit);
       }
       
       if (offset !== undefined) {
-        baseQuery = baseQuery.offset(offset as any);
+        baseQuery = baseQuery.offset(offset);
       }
       
       // Execute the query
@@ -500,7 +354,7 @@ export class DatabaseStorage implements IStorage {
           const filtered: Partial<AdGroup> = { id: group.id };
           selectedFields.forEach(field => {
             if (field in group) {
-              filtered[field as keyof AdGroup] = group[field as keyof AdGroup] as any;
+              filtered[field as keyof AdGroup] = group[field as keyof AdGroup];
             }
           });
           return filtered as AdGroup;

@@ -100,29 +100,18 @@ export default function AuthPage() {
     },
   });
 
-  // Register mutation - using our simplified endpoint
+  // Register mutation
   const registerMutation = useMutation({
     mutationFn: async (credentials: any) => {
-      try {
-        const res = await apiRequest("POST", "/api/simple-register", credentials);
-        if (!res.ok) {
-          const errorData = await res.json();
-          throw new Error(errorData.message || "Registration failed");
-        }
-        return await res.json();
-      } catch (error) {
-        console.error("Registration error:", error);
-        throw error instanceof Error ? error : new Error("Unknown registration error");
-      }
+      const res = await apiRequest("POST", "/api/register", credentials);
+      return await res.json();
     },
-    onSuccess: (response) => {
+    onSuccess: (user) => {
       toast({
         title: "Registration successful",
-        description: response.message || `Welcome, ${response.username}!`,
+        description: `Welcome, ${user.username}!`,
       });
-      // Switch to login tab automatically
-      const loginTab = document.querySelector('[data-state="inactive"][data-value="login"]') as HTMLElement;
-      if (loginTab) loginTab.click();
+      navigate('/');
     },
     onError: (error: Error) => {
       toast({

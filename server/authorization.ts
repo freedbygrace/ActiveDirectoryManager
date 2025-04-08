@@ -16,66 +16,61 @@ export type RequirePermissionOptions = RequireAuthOptions & {
 // Default middleware that verifies a user is authenticated
 export function requireAuth(options: RequireAuthOptions = {}) {
   return async (req: Request, res: Response, next: NextFunction) => {
-    try {
-      // Check for session authentication - just check if req.user exists
-      if (req.user) {
-        return next();
-      }
+    // Check for session authentication
+    if (req.isAuthenticated()) {
+      return next();
+    }
 
-      // Check for API token authentication if allowed
-      if (options.allowApiToken) {
-        const authHeader = req.headers.authorization;
-        if (authHeader && authHeader.startsWith("Bearer ")) {
-          const token = authHeader.substring(7);
-          
-          try {
-            // Lookup the token
-            const [apiToken] = await db.select()
-              .from(apiTokens)
-              .where(eq(apiTokens.token, token))
-              .limit(1);
+    // Check for API token authentication if allowed
+    if (options.allowApiToken) {
+      const authHeader = req.headers.authorization;
+      if (authHeader && authHeader.startsWith("Bearer ")) {
+        const token = authHeader.substring(7);
+        
+        try {
+          // Lookup the token
+          const [apiToken] = await db.select()
+            .from(apiTokens)
+            .where(eq(apiTokens.token, token))
+            .limit(1);
 
-            if (!apiToken) {
-              return res.status(401).json({ message: "Invalid API token" });
-            }
-
-            // Check if token has expired
-            if (apiToken.expiresAt && new Date(apiToken.expiresAt) < new Date()) {
-              return res.status(401).json({ message: "API token has expired" });
-            }
-
-            // Set token info on the request
-            req.user = {
-              id: apiToken.userId,
-              username: '',
-              password: '',
-              fullName: null, 
-              email: null,
-              createdAt: null,
-              // Add tokenId for identifying which token was used
-              tokenId: apiToken.id,
-              // Add roleId for permission checking
-              roleId: apiToken.roleId,
-              // Store custom permissions if available
-              customPermissions: (Array.isArray(apiToken.customPermissions) ? 
-                apiToken.customPermissions : 
-                (apiToken.customPermissions ? JSON.parse(String(apiToken.customPermissions)) : [])) as string[]
-            };
-
-            return next();
-          } catch (error) {
-            console.error("API token authentication error:", error);
-            return res.status(500).json({ message: "Internal server error" });
+          if (!apiToken) {
+            return res.status(401).json({ message: "Invalid API token" });
           }
+
+          // Check if token has expired
+          if (apiToken.expiresAt && new Date(apiToken.expiresAt) < new Date()) {
+            return res.status(401).json({ message: "API token has expired" });
+          }
+
+          // Set token info on the request
+          req.user = {
+            id: apiToken.userId,
+            username: '',
+            password: '',
+            fullName: null, 
+            email: null,
+            createdAt: null,
+            // Add tokenId for identifying which token was used
+            tokenId: apiToken.id,
+            // Add roleId for permission checking
+            roleId: apiToken.roleId,
+            // Store custom permissions if available
+            customPermissions: (Array.isArray(apiToken.customPermissions) ? 
+              apiToken.customPermissions : 
+              (apiToken.customPermissions ? JSON.parse(String(apiToken.customPermissions)) : [])) as string[]
+          };
+
+          return next();
+        } catch (error) {
+          console.error("API token authentication error:", error);
+          return res.status(500).json({ message: "Internal server error" });
         }
       }
-      
-      // Not authenticated through any method
-      return res.status(401).json({ message: "Not authenticated" });
-    } catch (error) {
-      console.error("Authentication error:", error);
-      return res.status(500).json({ message: "Internal server error during authentication" });
     }
+
+    // Not authenticated through any method
+    return res.status(401).json({ message: "Not authenticated" });
   };
 }
 

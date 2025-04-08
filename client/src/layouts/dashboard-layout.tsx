@@ -67,7 +67,6 @@ const menuSections: MenuSection[] = [
     items: [
       { title: "API Tokens", path: "/api-tokens", icon: <Key className="h-4 w-4" /> },
       { title: "LDAP Connections", path: "/ldap-connections", icon: <Server className="h-4 w-4" /> },
-      { title: "LDAP Query Builder", path: "/ldap-query-builder", icon: <FolderClosed className="h-4 w-4" /> },
       { title: "Settings", path: "/settings", icon: <Settings className="h-4 w-4" /> },
       { title: "User Management", path: "/user-management", icon: <ShieldAlert className="h-4 w-4" /> },
     ],
