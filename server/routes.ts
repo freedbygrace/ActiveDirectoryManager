@@ -23,6 +23,72 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Initialize Role Based Access Control system
   await initializeRBAC();
+  
+  // Simple registration endpoint that bypasses the complex auth system
+  app.post("/api/simple-register", async (req, res) => {
+    try {
+      console.log("Simple registration attempt:", { ...req.body, password: "***" });
+      
+      const { username, password, email, fullName } = req.body;
+      
+      if (!username || !password) {
+        return res.status(400).json({ message: "Username and password are required" });
+      }
+      
+      // Check for existing user
+      try {
+        const existingUser = await storage.getUserByUsername(username);
+        if (existingUser) {
+          console.log("Username already exists:", username);
+          return res.status(400).json({ message: "Username already exists" });
+        }
+      } catch (error) {
+        console.error("Error checking for existing user:", error);
+        return res.status(500).json({ message: "Error checking for existing user" });
+      }
+      
+      // Set a default role ID
+      // In our system, roleId 2 is the standard user role
+      const roleId = 2; // Regular user role
+      console.log("Using default role ID:", roleId);
+      
+      // Hash the password
+      let hashedPassword;
+      try {
+        const salt = require('crypto').randomBytes(16).toString('hex');
+        const hash = require('crypto').scryptSync(password, salt, 64).toString('hex');
+        hashedPassword = `${hash}.${salt}`;
+      } catch (error) {
+        console.error("Error hashing password:", error);
+        return res.status(500).json({ message: "Error processing password" });
+      }
+      
+      // Create the user
+      try {
+        const user = await storage.createUser({
+          username,
+          password: hashedPassword,
+          email: email || null,
+          fullName: fullName || null,
+          roleId: roleId,
+        });
+        
+        console.log("User created successfully:", { id: user.id, username });
+        
+        const userResponse = { ...user, password: undefined };
+        return res.status(201).json({ 
+          ...userResponse,
+          message: "Registration successful, please log in" 
+        });
+      } catch (error) {
+        console.error("Error creating user:", error);
+        return res.status(500).json({ message: "Error creating user in database" });
+      }
+    } catch (error) {
+      console.error("Unexpected error during simple registration:", error);
+      return res.status(500).json({ message: "Internal server error during registration" });
+    }
+  });
 
   // Error handler for Zod validation errors
   const handleZodError = (err: ZodError, res: Response) => {
