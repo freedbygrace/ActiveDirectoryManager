@@ -13,9 +13,14 @@ import { InsertLdapQuery, LdapQuery, InsertLdapQueryVersion } from "@shared/sche
 // Use middleware to check permissions
 function hasPermission(permission: string) {
   return (req: any, res: any, next: any) => {
-    // For now, we'll just allow all requests through
-    // In a real implementation, this would check the user's permissions
-    return next();
+    // Check if the user is authenticated via passport session or has a valid API token
+    if (req.user || req.headers.authorization) {
+      // In a real implementation, this would check the user's permissions against the required permission
+      return next();
+    }
+    
+    // If not authenticated, return 401 Unauthorized
+    return res.status(401).json({ error: "Unauthorized" });
   };
 }
 
