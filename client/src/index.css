@@ -2,6 +2,16 @@
 @tailwind components;
 @tailwind utilities;
 
+@layer components {
+  .drawer-item {
+    @apply text-gray-700 hover:bg-gray-100 hover:text-primary focus:outline-none transition-colors duration-200;
+  }
+  
+  .drawer-item.active {
+    @apply bg-primary/10 text-primary font-medium;
+  }
+}
+
 @layer base {
   :root {
     --background: 0 0% 96%;

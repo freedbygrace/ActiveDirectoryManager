@@ -53,7 +53,7 @@ const swaggerOptions = {
             name: { type: "string" },
             token: { type: "string" },
             userId: { type: "integer" },
-            permissions: { type: "object" },
+            customPermissions: { type: "array", items: { type: "string" } },
             expiresAt: { type: "string", format: "date-time" },
             createdAt: { type: "string", format: "date-time" },
           },
@@ -240,8 +240,17 @@ const swaggerOptions = {
 const swaggerSpec = swaggerJsdoc(swaggerOptions);
 
 export function setupSwagger(app: Express) {
+  // Mount at both paths for backward compatibility
   app.use("/api/docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+  app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+  
+  // Provide the JSON spec at multiple paths
   app.get("/api/swagger.json", (req, res) => {
+    res.setHeader("Content-Type", "application/json");
+    res.send(swaggerSpec);
+  });
+  
+  app.get("/api-docs/swagger.json", (req, res) => {
     res.setHeader("Content-Type", "application/json");
     res.send(swaggerSpec);
   });

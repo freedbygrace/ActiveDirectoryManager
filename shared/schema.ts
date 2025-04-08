@@ -1,6 +1,104 @@
-import { pgTable, text, serial, integer, boolean, timestamp, jsonb } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, integer, boolean, timestamp, jsonb, primaryKey } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
+import { relations } from "drizzle-orm";
+
+// Role-based access control tables
+export const roles = pgTable("roles", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull().unique(),
+  description: text("description"),
+  isDefault: boolean("is_default").default(false),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+// Define available permissions
+export const PERMISSIONS = {
+  // User management
+  VIEW_USERS: "view:users",
+  CREATE_USERS: "create:users",
+  UPDATE_USERS: "update:users",
+  DELETE_USERS: "delete:users",
+  
+  // LDAP connections
+  VIEW_LDAP_CONNECTIONS: "view:ldap_connections",
+  CREATE_LDAP_CONNECTIONS: "create:ldap_connections",
+  UPDATE_LDAP_CONNECTIONS: "update:ldap_connections",
+  DELETE_LDAP_CONNECTIONS: "delete:ldap_connections",
+  
+  // Active Directory management
+  VIEW_AD_USERS: "view:ad_users",
+  CREATE_AD_USERS: "create:ad_users",
+  UPDATE_AD_USERS: "update:ad_users",
+  DELETE_AD_USERS: "delete:ad_users",
+  
+  VIEW_AD_GROUPS: "view:ad_groups",
+  CREATE_AD_GROUPS: "create:ad_groups",
+  UPDATE_AD_GROUPS: "update:ad_groups",
+  DELETE_AD_GROUPS: "delete:ad_groups",
+  
+  VIEW_AD_OUS: "view:ad_ous",
+  CREATE_AD_OUS: "create:ad_ous",
+  UPDATE_AD_OUS: "update:ad_ous",
+  DELETE_AD_OUS: "delete:ad_ous",
+  
+  VIEW_AD_COMPUTERS: "view:ad_computers",
+  CREATE_AD_COMPUTERS: "create:ad_computers",
+  UPDATE_AD_COMPUTERS: "update:ad_computers",
+  DELETE_AD_COMPUTERS: "delete:ad_computers",
+  
+  VIEW_AD_DOMAINS: "view:ad_domains",
+
+  // API Token management
+  MANAGE_API_TOKENS: "manage:api_tokens",
+  
+  // Administrative functions
+  MANAGE_ROLES: "manage:roles",
+  SYSTEM_ADMIN: "admin:system",
+} as const;
+
+// Create a Zod schema for permissions
+export const permissionsSchema = z.enum([
+  "view:users",
+  "create:users",
+  "update:users",
+  "delete:users",
+  "view:ldap_connections",
+  "create:ldap_connections",
+  "update:ldap_connections",
+  "delete:ldap_connections",
+  "view:ad_users",
+  "create:ad_users",
+  "update:ad_users",
+  "delete:ad_users",
+  "view:ad_groups",
+  "create:ad_groups",
+  "update:ad_groups",
+  "delete:ad_groups",
+  "view:ad_ous",
+  "create:ad_ous",
+  "update:ad_ous",
+  "delete:ad_ous",
+  "view:ad_computers",
+  "create:ad_computers",
+  "update:ad_computers",
+  "delete:ad_computers",
+  "view:ad_domains",
+  "manage:api_tokens",
+  "manage:roles",
+  "admin:system"
+]);
+
+export type Permission = z.infer<typeof permissionsSchema>;
+
+export const rolePermissions = pgTable("role_permissions", {
+  roleId: integer("role_id").notNull().references(() => roles.id, { onDelete: "cascade" }),
+  permission: text("permission").notNull(),
+}, table => {
+  return {
+    pk: primaryKey({ columns: [table.roleId, table.permission] }),
+  };
+});
 
 // User schema for local authentication
 export const users = pgTable("users", {
@@ -9,7 +107,7 @@ export const users = pgTable("users", {
   password: text("password").notNull(),
   email: text("email"),
   fullName: text("full_name"),
-  role: text("role").default("user"),
+  roleId: integer("role_id").references(() => roles.id),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -18,8 +116,9 @@ export const apiTokens = pgTable("api_tokens", {
   id: serial("id").primaryKey(),
   name: text("name").notNull(),
   token: text("token").notNull().unique(),
-  userId: integer("user_id").notNull(),
-  permissions: jsonb("permissions").notNull(),
+  userId: integer("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  roleId: integer("role_id").references(() => roles.id),
+  customPermissions: jsonb("custom_permissions"),
   expiresAt: timestamp("expires_at"),
   createdAt: timestamp("created_at").defaultNow(),
 });
@@ -100,7 +199,42 @@ export const adDomains = pgTable("ad_domains", {
   adProperties: jsonb("ad_properties"),
 });
 
+// Define relations between tables
+export const rolesRelations = relations(roles, ({ many }) => ({
+  permissions: many(rolePermissions),
+  users: many(users),
+  apiTokens: many(apiTokens),
+}));
+
+export const rolePermissionsRelations = relations(rolePermissions, ({ one }) => ({
+  role: one(roles, {
+    fields: [rolePermissions.roleId],
+    references: [roles.id],
+  }),
+}));
+
+export const usersRelations = relations(users, ({ one, many }) => ({
+  role: one(roles, {
+    fields: [users.roleId],
+    references: [roles.id],
+  }),
+  apiTokens: many(apiTokens),
+}));
+
+export const apiTokensRelations = relations(apiTokens, ({ one }) => ({
+  user: one(users, {
+    fields: [apiTokens.userId],
+    references: [users.id],
+  }),
+  role: one(roles, {
+    fields: [apiTokens.roleId],
+    references: [roles.id],
+  }),
+}));
+
 // Generate insertion schemas
+export const insertRoleSchema = createInsertSchema(roles).omit({ id: true, createdAt: true });
+export const insertRolePermissionSchema = createInsertSchema(rolePermissions);
 export const insertUserSchema = createInsertSchema(users).omit({ id: true, createdAt: true });
 export const insertApiTokenSchema = createInsertSchema(apiTokens).omit({ id: true, createdAt: true });
 export const insertLdapConnectionSchema = createInsertSchema(ldapConnections).omit({ id: true, createdAt: true, lastConnected: true });
@@ -127,7 +261,16 @@ export const apiQuerySchema = z.object({
 });
 
 // Export types
-export type User = typeof users.$inferSelect;
+export type Role = typeof roles.$inferSelect;
+export type InsertRole = z.infer<typeof insertRoleSchema>;
+export type RolePermission = typeof rolePermissions.$inferSelect;
+export type InsertRolePermission = z.infer<typeof insertRolePermissionSchema>;
+export type User = typeof users.$inferSelect & {
+  // For API token authentication
+  tokenId?: number;
+  customPermissions?: string[];
+  role?: string;
+};
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type ApiToken = typeof apiTokens.$inferSelect;
 export type InsertApiToken = z.infer<typeof insertApiTokenSchema>;
