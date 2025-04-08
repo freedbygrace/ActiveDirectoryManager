@@ -1,201 +1,131 @@
-import { EventEmitter } from 'events';
-import ldap from 'ldapjs';
-import { LdapConnection } from '@shared/schema';
-import { storage } from './storage';
+import { LdapConnection } from "@shared/schema";
+import debugLib from "debug";
+import * as ldapjs from "ldapjs";
+import { promisify } from "util";
 
-class LdapClient extends EventEmitter {
-  private clients: Map<number, ldap.Client> = new Map();
-  private isConnected: Map<number, boolean> = new Map();
+const debug = debugLib("app:ldap");
+
+/**
+ * Connect to LDAP server and return a client
+ */
+export async function connectToLdap(connection: LdapConnection): Promise<ldapjs.Client> {
+  const url = `${connection.useSSL ? "ldaps" : "ldap"}://${connection.server}:${connection.port}`;
   
-  async connect(connection: LdapConnection): Promise<boolean> {
-    try {
-      const clientOptions: ldap.ClientOptions = {
-        url: `${connection.useTLS ? 'ldaps' : 'ldap'}://${connection.server}:${connection.port}`,
-        reconnect: {
-          initialDelay: 1000,
-          maxDelay: 10000,
-          failAfter: 10
-        },
-        timeout: 5000,
-        connectTimeout: 10000
-      };
-      
-      const client = ldap.createClient(clientOptions);
-      
-      return new Promise((resolve, reject) => {
-        client.on('error', async (err) => {
-          console.error(`LDAP connection error for ${connection.name}:`, err);
-          this.isConnected.set(connection.id, false);
-          await storage.updateLdapConnection(connection.id, { status: 'disconnected' });
-          this.emit('status', { 
-            connectionId: connection.id, 
-            status: 'disconnected', 
-            error: err.message 
-          });
-        });
-        
-        client.bind(connection.username, connection.password, async (err) => {
-          if (err) {
-            console.error(`LDAP bind error for ${connection.name}:`, err);
-            this.isConnected.set(connection.id, false);
-            await storage.updateLdapConnection(connection.id, { status: 'disconnected' });
-            this.emit('status', { 
-              connectionId: connection.id, 
-              status: 'disconnected', 
-              error: err.message 
-            });
-            reject(err);
-            return;
-          }
-          
-          this.clients.set(connection.id, client);
-          this.isConnected.set(connection.id, true);
-          await storage.updateLdapConnection(connection.id, { 
-            status: 'connected',
-            lastConnected: new Date()
-          });
-          
-          this.emit('status', { 
-            connectionId: connection.id, 
-            status: 'connected' 
-          });
-          
-          resolve(true);
-        });
-      });
-    } catch (error) {
-      console.error(`LDAP connection error for ${connection.name}:`, error);
-      this.isConnected.set(connection.id, false);
-      await storage.updateLdapConnection(connection.id, { status: 'disconnected' });
-      this.emit('status', { 
-        connectionId: connection.id, 
-        status: 'disconnected', 
-        error: error instanceof Error ? error.message : String(error) 
-      });
-      throw error;
+  debug(`Connecting to LDAP server at ${url}`);
+  
+  const client = ldapjs.createClient({
+    url,
+    timeout: 5000,
+    connectTimeout: 10000,
+    idleTimeout: 30000,
+    reconnect: {
+      initialDelay: 100,
+      maxDelay: 1000,
+      failAfter: 10
     }
-  }
+  });
   
-  async disconnect(connectionId: number): Promise<void> {
-    const client = this.clients.get(connectionId);
-    if (client) {
-      return new Promise((resolve) => {
-        client.unbind(() => {
-          this.clients.delete(connectionId);
-          this.isConnected.set(connectionId, false);
-          resolve();
-        });
-      });
-    }
-  }
+  // Convert bind to promise
+  const bindAsync = promisify(client.bind).bind(client);
   
-  getClient(connectionId: number): ldap.Client | undefined {
-    return this.clients.get(connectionId);
-  }
-  
-  isConnectionActive(connectionId: number): boolean {
-    return this.isConnected.get(connectionId) || false;
-  }
-  
-  // LDAP CRUD operations
-  async searchUsers(connectionId: number, filter = '(objectClass=user)', attributes?: string[]): Promise<any[]> {
-    const client = this.getClient(connectionId);
-    if (!client) throw new Error('LDAP connection not established');
-    
-    const connection = await storage.getLdapConnection(connectionId);
-    if (!connection) throw new Error('LDAP connection not found');
-    
-    const baseDN = connection.baseDN || '';
-    const defaultAttributes = ['cn', 'sAMAccountName', 'mail', 'distinguishedName'];
-    const searchAttributes = attributes?.length ? attributes : defaultAttributes;
-    
-    return new Promise((resolve, reject) => {
-      const results: any[] = [];
-      
-      client.search(baseDN, {
-        filter,
-        scope: 'sub',
-        attributes: searchAttributes
-      }, (err, res) => {
-        if (err) {
-          reject(err);
-          return;
-        }
-        
-        res.on('searchEntry', (entry) => {
-          results.push(entry.object);
-        });
-        
-        res.on('error', (err) => {
-          reject(err);
-        });
-        
-        res.on('end', (result) => {
-          resolve(results);
-        });
-      });
-    });
-  }
-  
-  async searchGroups(connectionId: number, filter = '(objectClass=group)', attributes?: string[]): Promise<any[]> {
-    const defaultAttributes = ['cn', 'distinguishedName', 'member'];
-    return this.searchUsers(connectionId, filter, attributes || defaultAttributes);
-  }
-  
-  async searchOUs(connectionId: number, filter = '(objectClass=organizationalUnit)', attributes?: string[]): Promise<any[]> {
-    const defaultAttributes = ['ou', 'distinguishedName'];
-    return this.searchUsers(connectionId, filter, attributes || defaultAttributes);
-  }
-  
-  async searchComputers(connectionId: number, filter = '(objectClass=computer)', attributes?: string[]): Promise<any[]> {
-    const defaultAttributes = ['cn', 'distinguishedName', 'operatingSystem'];
-    return this.searchUsers(connectionId, filter, attributes || defaultAttributes);
-  }
-  
-  async createEntry(connectionId: number, dn: string, attributes: any): Promise<boolean> {
-    const client = this.getClient(connectionId);
-    if (!client) throw new Error('LDAP connection not established');
-    
-    return new Promise((resolve, reject) => {
-      client.add(dn, attributes, (err) => {
-        if (err) {
-          reject(err);
-          return;
-        }
-        resolve(true);
-      });
-    });
-  }
-  
-  async updateEntry(connectionId: number, dn: string, changes: any[]): Promise<boolean> {
-    const client = this.getClient(connectionId);
-    if (!client) throw new Error('LDAP connection not established');
-    
-    return new Promise((resolve, reject) => {
-      client.modify(dn, changes, (err) => {
-        if (err) {
-          reject(err);
-          return;
-        }
-        resolve(true);
-      });
-    });
-  }
-  
-  async deleteEntry(connectionId: number, dn: string): Promise<boolean> {
-    const client = this.getClient(connectionId);
-    if (!client) throw new Error('LDAP connection not established');
-    
-    return new Promise((resolve, reject) => {
-      client.del(dn, (err) => {
-        if (err) {
-          reject(err);
-          return;
-        }
-        resolve(true);
-      });
-    });
+  try {
+    // Bind with credentials
+    await bindAsync(connection.username, connection.password);
+    debug("Successfully authenticated to LDAP server");
+    return client;
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    debug("Failed to connect to LDAP server:", error);
+    throw new Error(`Failed to connect to LDAP server: ${errorMessage}`);
   }
 }
 
-export const ldapClient = new LdapClient();
+export interface LdapSearchOptions {
+  base?: string;
+  filter: string;
+  scope?: "base" | "one" | "sub";
+  attributes?: string[];
+  limit?: number;
+}
+
+/**
+ * Search LDAP directory with the provided options
+ */
+export async function searchLdap(client: ldapjs.Client, options: LdapSearchOptions): Promise<Record<string, any>[]> {
+  const {
+    base = "",
+    filter,
+    scope = "sub",
+    attributes,
+    limit = 1000
+  } = options;
+  
+  debug(`Searching LDAP with filter: ${filter}`);
+  
+  return new Promise((resolve, reject) => {
+    const results: Record<string, any>[] = [];
+    
+    client.search(base, {
+      filter,
+      scope, // ldapjs accepts 'base', 'one', 'sub' as strings
+      attributes,
+      sizeLimit: limit
+    }, (err: ldapjs.Error | null, res: ldapjs.SearchCallbackResponse) => {
+      if (err) {
+        debug("LDAP search error:", err);
+        return reject(err);
+      }
+      
+      // The types for ldapjs don't fully match the actual API
+      // We need to use any here because the type definitions are incomplete
+      res.on("searchEntry", (entry: any) => {
+        results.push(entry.object);
+      });
+      
+      res.on("error", (err: ldapjs.Error) => {
+        debug("LDAP search result error:", err);
+        reject(err);
+      });
+      
+      res.on("end", (result: any) => {
+        debug(`LDAP search completed with ${results.length} results`);
+        if (result && result.status !== 0) {
+          debug(`LDAP search ended with status: ${result.status}`);
+        }
+        resolve(results);
+      });
+    });
+  });
+}
+
+/**
+ * Test a connection to an LDAP server
+ */
+export async function testLdapConnection(connection: LdapConnection): Promise<boolean> {
+  try {
+    const client = await connectToLdap(connection);
+    client.destroy();
+    return true;
+  } catch (error: unknown) {
+    debug("LDAP connection test failed:", error);
+    return false;
+  }
+}
+
+/**
+ * Get basic info about an LDAP domain
+ */
+export async function getLdapDomainInfo(client: ldapjs.Client): Promise<Record<string, any> | null> {
+  try {
+    const results = await searchLdap(client, {
+      filter: "(objectClass=domain)",
+      scope: "base"
+    });
+    
+    return results.length > 0 ? results[0] : null;
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    debug("Failed to get LDAP domain info:", error);
+    throw new Error(`Failed to get LDAP domain info: ${errorMessage}`);
+  }
+}
