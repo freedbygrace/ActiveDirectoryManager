@@ -14,7 +14,14 @@ import { InsertLdapQuery, LdapQuery, InsertLdapQueryVersion } from "@shared/sche
 function hasPermission(permission: string) {
   return (req: any, res: any, next: any) => {
     // Check if the user is authenticated via passport session or has a valid API token
-    if (req.user || req.headers.authorization) {
+    if (
+      // Check for authenticated session (safely check if isAuthenticated is a function first)
+      (typeof req.isAuthenticated === 'function' && req.isAuthenticated()) ||
+      // Or check for existing user object (set by token auth)
+      req.user ||
+      // Or check for authorization header (token auth)
+      req.headers.authorization
+    ) {
       // In a real implementation, this would check the user's permissions against the required permission
       return next();
     }
