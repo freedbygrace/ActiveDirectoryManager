@@ -5,6 +5,7 @@ import { setupSwagger } from "./swagger";
 import { storage } from "./storage";
 import { apiQuerySchema, PERMISSIONS } from "@shared/schema";
 import { ZodError } from "zod";
+import rateLimit from "express-rate-limit";
 import { 
   requireAuth, 
   requirePermission, 
@@ -21,6 +22,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Initialize Role Based Access Control system
   await initializeRBAC();
+  
+  // Apply rate limiting middleware for API routes
+  const apiLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    max: 100, // limit each IP to 100 requests per windowMs
+    standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
+    legacyHeaders: false, // Disable the `X-RateLimit-*` headers
+    message: { message: 'Too many requests, please try again later.' },
+    skip: (req: any) => {
+      // Skip rate limiting for authenticated users with admin role
+      if (req.isAuthenticated && typeof req.isAuthenticated === 'function' && req.isAuthenticated()) {
+        return req.user?.role === 'admin';
+      }
+      return false;
+    }
+  });
+
+  // Apply the rate limiter to API routes
+  app.use('/api/', apiLimiter);
 
   // Error handler for Zod validation errors
   const handleZodError = (err: ZodError, res: Response) => {

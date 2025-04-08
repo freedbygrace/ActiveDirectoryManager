@@ -19,22 +19,6 @@ app.use(compression());
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 
-// Apply rate limiting middleware for API routes
-const apiLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // limit each IP to 100 requests per windowMs
-  standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
-  legacyHeaders: false, // Disable the `X-RateLimit-*` headers
-  message: { message: 'Too many requests, please try again later.' },
-  skip: (req) => {
-    // Skip rate limiting for authenticated users with admin role
-    return req.isAuthenticated() && req.user?.role === 'admin';
-  }
-});
-
-// Apply the rate limiter to API routes
-app.use('/api/', apiLimiter);
-
 // HTTP request logging (in development mode)
 if (process.env.NODE_ENV !== 'production') {
   app.use(morgan('dev', {
