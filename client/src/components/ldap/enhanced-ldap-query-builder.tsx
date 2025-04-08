@@ -11,7 +11,7 @@ import {
   CardFooter
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Loader2, Plus, Trash } from "lucide-react";
+import { Loader2, Plus, Trash, Info } from "lucide-react";
 import {
   Select,
   SelectContent,
@@ -28,6 +28,12 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 // Import shared types from our shared lib
 import { LdapOperator, LdapCondition, LdapAttribute } from "@/lib/ldap-types";
@@ -75,7 +81,7 @@ interface LdapQueryBuilderProps {
   onSave?: () => void;
 }
 
-export function LdapQueryBuilder({ 
+export function EnhancedLdapQueryBuilder({ 
   connections, 
   value, 
   onChange,
@@ -92,6 +98,18 @@ export function LdapQueryBuilder({
     queryKey: ["/api/ldap-queries/attributes", { connectionId: selectedConnectionId, targetObject: value.targetObject }],
     enabled: !!selectedConnectionId && !!value.targetObject,
   });
+
+  // Group attributes by their type for better organization
+  const groupedAttributes = React.useMemo(() => {
+    const grouped = {
+      string: availableAttributes.filter(attr => !attr.type || attr.type === "string"),
+      number: availableAttributes.filter(attr => attr.type === "number"),
+      datetime: availableAttributes.filter(attr => attr.type === "datetime"),
+      boolean: availableAttributes.filter(attr => attr.type === "boolean"),
+    };
+    
+    return grouped;
+  }, [availableAttributes]);
 
   // Update the selected connection ID if the connections list changes
   useEffect(() => {
@@ -185,6 +203,50 @@ export function LdapQueryBuilder({
     }
   };
 
+  // Get recommended operators based on attribute type
+  const getRecommendedOperators = (attributeName: string | undefined): LdapOperator[] => {
+    if (!attributeName) return comparisonOperators;
+    
+    const attribute = availableAttributes.find(attr => attr.name === attributeName);
+    if (!attribute) return comparisonOperators;
+    
+    // Return appropriate operators based on type
+    switch(attribute.type) {
+      case "number":
+        return [
+          LdapOperator.EQUALS,
+          LdapOperator.NOT_EQUALS,
+          LdapOperator.GREATER_THAN,
+          LdapOperator.LESS_THAN,
+          LdapOperator.PRESENT
+        ];
+      case "datetime":
+        return [
+          LdapOperator.EQUALS,
+          LdapOperator.NOT_EQUALS,
+          LdapOperator.GREATER_THAN,
+          LdapOperator.LESS_THAN,
+          LdapOperator.PRESENT
+        ];
+      case "boolean":
+        return [
+          LdapOperator.EQUALS,
+          LdapOperator.NOT_EQUALS,
+          LdapOperator.PRESENT
+        ];
+      default: // string
+        return [
+          LdapOperator.EQUALS,
+          LdapOperator.NOT_EQUALS,
+          LdapOperator.STARTS_WITH,
+          LdapOperator.ENDS_WITH,
+          LdapOperator.CONTAINS,
+          LdapOperator.PRESENT,
+          LdapOperator.APPROX
+        ];
+    }
+  };
+
   // UI component for rendering a single condition
   const ConditionItem = ({ 
     condition, 
@@ -194,6 +256,8 @@ export function LdapQueryBuilder({
     path: number[];
   }) => {
     const isLogical = logicalOperators.includes(condition.operator);
+    const selectedAttribute = availableAttributes.find(attr => attr.name === condition.attribute);
+    const recommendedOperators = !isLogical ? getRecommendedOperators(condition.attribute) : [];
     
     return (
       <div className="p-4 border rounded-md mb-2">
@@ -235,8 +299,21 @@ export function LdapQueryBuilder({
                   {operatorLabels[op]}
                 </SelectItem>
               ))}
-              <SelectItem value="divider" disabled className="font-semibold">
-                Comparison Operators
+              
+              {!isLogical && condition.attribute && (
+                <SelectItem value="divider" disabled className="font-semibold">
+                  Recommended Operators
+                </SelectItem>
+              )}
+              
+              {!isLogical && condition.attribute && recommendedOperators.map((op) => (
+                <SelectItem key={op} value={op} className="text-primary">
+                  {operatorLabels[op]}
+                </SelectItem>
+              ))}
+              
+              <SelectItem value="divider2" disabled className="font-semibold">
+                All Comparison Operators
               </SelectItem>
               {comparisonOperators.map((op) => (
                 <SelectItem key={op} value={op}>
@@ -256,10 +333,10 @@ export function LdapQueryBuilder({
                   onChange({ ...value, filter: newFilter });
                 }}
               >
-                <SelectTrigger className="w-[200px]">
+                <SelectTrigger className="w-[250px]">
                   <SelectValue placeholder="Select attribute" />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent className="max-h-[400px]">
                   {isLoadingAttributes ? (
                     <div className="flex items-center justify-center p-2">
                       <Loader2 className="h-4 w-4 animate-spin mr-2" />
@@ -270,11 +347,147 @@ export function LdapQueryBuilder({
                       No attributes available
                     </SelectItem>
                   ) : (
-                    availableAttributes.map((attr) => (
-                      <SelectItem key={attr.name} value={attr.name}>
-                        {attr.name} {attr.description ? `(${attr.description})` : ''}
-                      </SelectItem>
-                    ))
+                    <>
+                      {/* String attributes */}
+                      {groupedAttributes.string.length > 0 && (
+                        <>
+                          <SelectItem value="string_group" disabled className="font-semibold">
+                            Text Attributes
+                          </SelectItem>
+                          {groupedAttributes.string.map((attr) => (
+                            <SelectItem key={attr.name} value={attr.name}>
+                              <div className="flex items-center justify-between w-full">
+                                <span>{attr.name}</span>
+                                <div className="flex items-center">
+                                  {attr.isMultiValued && (
+                                    <Badge variant="outline" className="text-xs ml-2">
+                                      Multi
+                                    </Badge>
+                                  )}
+                                  {attr.description && (
+                                    <TooltipProvider>
+                                      <Tooltip>
+                                        <TooltipTrigger asChild>
+                                          <Info className="h-3 w-3 ml-2 text-muted-foreground" />
+                                        </TooltipTrigger>
+                                        <TooltipContent side="right">
+                                          <p className="max-w-[300px]">{attr.description}</p>
+                                        </TooltipContent>
+                                      </Tooltip>
+                                    </TooltipProvider>
+                                  )}
+                                </div>
+                              </div>
+                            </SelectItem>
+                          ))}
+                        </>
+                      )}
+                      
+                      {/* Number attributes */}
+                      {groupedAttributes.number.length > 0 && (
+                        <>
+                          <SelectItem value="number_group" disabled className="font-semibold">
+                            Number Attributes
+                          </SelectItem>
+                          {groupedAttributes.number.map((attr) => (
+                            <SelectItem key={attr.name} value={attr.name}>
+                              <div className="flex items-center justify-between w-full">
+                                <span>{attr.name}</span>
+                                <div className="flex items-center">
+                                  {attr.isMultiValued && (
+                                    <Badge variant="outline" className="text-xs ml-2">
+                                      Multi
+                                    </Badge>
+                                  )}
+                                  {attr.description && (
+                                    <TooltipProvider>
+                                      <Tooltip>
+                                        <TooltipTrigger asChild>
+                                          <Info className="h-3 w-3 ml-2 text-muted-foreground" />
+                                        </TooltipTrigger>
+                                        <TooltipContent side="right">
+                                          <p className="max-w-[300px]">{attr.description}</p>
+                                        </TooltipContent>
+                                      </Tooltip>
+                                    </TooltipProvider>
+                                  )}
+                                </div>
+                              </div>
+                            </SelectItem>
+                          ))}
+                        </>
+                      )}
+                      
+                      {/* DateTime attributes */}
+                      {groupedAttributes.datetime.length > 0 && (
+                        <>
+                          <SelectItem value="date_group" disabled className="font-semibold">
+                            Date/Time Attributes
+                          </SelectItem>
+                          {groupedAttributes.datetime.map((attr) => (
+                            <SelectItem key={attr.name} value={attr.name}>
+                              <div className="flex items-center justify-between w-full">
+                                <span>{attr.name}</span>
+                                <div className="flex items-center">
+                                  {attr.isMultiValued && (
+                                    <Badge variant="outline" className="text-xs ml-2">
+                                      Multi
+                                    </Badge>
+                                  )}
+                                  {attr.description && (
+                                    <TooltipProvider>
+                                      <Tooltip>
+                                        <TooltipTrigger asChild>
+                                          <Info className="h-3 w-3 ml-2 text-muted-foreground" />
+                                        </TooltipTrigger>
+                                        <TooltipContent side="right">
+                                          <p className="max-w-[300px]">{attr.description}</p>
+                                        </TooltipContent>
+                                      </Tooltip>
+                                    </TooltipProvider>
+                                  )}
+                                </div>
+                              </div>
+                            </SelectItem>
+                          ))}
+                        </>
+                      )}
+                      
+                      {/* Boolean attributes */}
+                      {groupedAttributes.boolean.length > 0 && (
+                        <>
+                          <SelectItem value="boolean_group" disabled className="font-semibold">
+                            Boolean Attributes
+                          </SelectItem>
+                          {groupedAttributes.boolean.map((attr) => (
+                            <SelectItem key={attr.name} value={attr.name}>
+                              <div className="flex items-center justify-between w-full">
+                                <span>{attr.name}</span>
+                                <div className="flex items-center">
+                                  {attr.isMultiValued && (
+                                    <Badge variant="outline" className="text-xs ml-2">
+                                      Multi
+                                    </Badge>
+                                  )}
+                                  {attr.description && (
+                                    <TooltipProvider>
+                                      <Tooltip>
+                                        <TooltipTrigger asChild>
+                                          <Info className="h-3 w-3 ml-2 text-muted-foreground" />
+                                        </TooltipTrigger>
+                                        <TooltipContent side="right">
+                                          <p className="max-w-[300px]">{attr.description}</p>
+                                        </TooltipContent>
+                                      </Tooltip>
+                                    </TooltipProvider>
+                                  )}
+                                </div>
+                              </div>
+                            </SelectItem>
+                          ))}
+                        </>
+                      )}
+                    </>
                   )}
                 </SelectContent>
               </Select>
@@ -282,7 +495,7 @@ export function LdapQueryBuilder({
               {condition.operator !== LdapOperator.PRESENT && (
                 <Input
                   value={condition.value || ""}
-                  placeholder="Value"
+                  placeholder={selectedAttribute?.type === "datetime" ? "YYYY-MM-DD" : "Value"}
                   className="flex-1"
                   onChange={(e) => {
                     const updatedCondition = { ...condition, value: e.target.value };
@@ -410,9 +623,37 @@ export function LdapQueryBuilder({
               <Label className="mb-2 block">Available Attributes</Label>
               <div className="flex flex-wrap gap-2 max-h-[150px] overflow-y-auto p-2 border rounded-md">
                 {availableAttributes.map((attr) => (
-                  <Badge key={attr.name} variant="outline" className="cursor-pointer">
-                    {attr.name} {attr.type ? `(${attr.type})` : ''}
-                  </Badge>
+                  <TooltipProvider key={attr.name}>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Badge 
+                          variant="outline" 
+                          className={`cursor-pointer ${
+                            attr.type === 'number' 
+                              ? 'bg-blue-50 dark:bg-blue-950' 
+                              : attr.type === 'datetime' 
+                                ? 'bg-amber-50 dark:bg-amber-950' 
+                                : attr.type === 'boolean' 
+                                  ? 'bg-green-50 dark:bg-green-950' 
+                                  : ''
+                          }`}
+                        >
+                          {attr.name}
+                          {attr.isMultiValued && <span className="ml-1 opacity-70">*</span>}
+                        </Badge>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <div>
+                          <p className="font-bold">{attr.name}</p>
+                          {attr.description && <p>{attr.description}</p>}
+                          <p className="text-xs mt-1">Type: {attr.type || 'string'}</p>
+                          {attr.isMultiValued && (
+                            <p className="text-xs">Multi-valued attribute</p>
+                          )}
+                        </div>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
                 ))}
               </div>
             </div>

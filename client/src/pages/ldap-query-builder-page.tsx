@@ -3,7 +3,9 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { DashboardLayout } from "@/layouts/dashboard-layout";
 import { LdapConnection, LdapQuery } from "@shared/schema";
-import { LdapQueryBuilder, LdapQueryBuilderParams, LdapOperator } from "@/components/ldap/ldap-query-builder";
+import { LdapQueryBuilderParams } from "@/components/ldap/ldap-query-builder";
+import { EnhancedLdapQueryBuilder } from "@/components/ldap/enhanced-ldap-query-builder";
+import { LdapCondition, LdapOperator } from "@/lib/ldap-types";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -180,7 +182,7 @@ export default function LdapQueryBuilderPage() {
     setActiveQuery(query);
     setQueryBuilderParams({
       targetObject: query.targetObject as "users" | "groups" | "computers" | "ous",
-      filter: query.filter
+      filter: query.filterJson as LdapCondition
     });
     setQueryName(query.name);
     setQueryDescription(query.description || "");
@@ -268,7 +270,7 @@ export default function LdapQueryBuilderPage() {
               testQueryMutation.mutate({
                 connectionId: connections.length > 0 ? connections[0].id : 0,
                 targetObject: row.targetObject,
-                filter: row.filter,
+                filter: row.filterJson as LdapCondition,
                 limit: 100
               });
             }}>
@@ -417,7 +419,7 @@ export default function LdapQueryBuilderPage() {
                 ) : null}
                 
                 <div className="pt-2">
-                  <LdapQueryBuilder
+                  <EnhancedLdapQueryBuilder
                     connections={connections}
                     value={queryBuilderParams}
                     onChange={setQueryBuilderParams}

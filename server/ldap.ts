@@ -134,10 +134,19 @@ export async function getLdapDomainInfo(client: ldapjs.Client): Promise<Record<s
  * Get available attributes for a specific object type from LDAP schema
  * This function retrieves attributes that are commonly used for the specified object type
  */
+export interface LdapAttributeMetadata {
+  name: string;
+  type?: string;
+  description?: string;
+  syntax?: string;
+  isMultiValued?: boolean;
+  isMandatory?: boolean;
+}
+
 export async function getLdapAvailableAttributes(
   client: ldapjs.Client,
   targetObject: "users" | "groups" | "computers" | "ous"
-): Promise<string[]> {
+): Promise<LdapAttributeMetadata[]> {
   debug(`Getting available attributes for ${targetObject}`);
   
   // Define common attributes for each object type
@@ -239,21 +248,65 @@ export async function getLdapAvailableAttributes(
     }
     
     // Combine common and specific attributes, then add dynamic attributes
-    let allAttributes = [...commonAttributes, ...specificAttributes[targetObject]];
+    let allAttributeNames = [...commonAttributes, ...specificAttributes[targetObject]];
     
     // Add any dynamic attributes that aren't already in our list
     dynamicAttributes.forEach(attr => {
-      if (!allAttributes.includes(attr)) {
-        allAttributes.push(attr);
+      if (!allAttributeNames.includes(attr)) {
+        allAttributeNames.push(attr);
       }
     });
     
-    // Sort alphabetically
-    return allAttributes.sort();
+    // Convert string attributes to metadata objects and sort alphabetically by name
+    const attributeMetadata: LdapAttributeMetadata[] = allAttributeNames.map((name: string) => {
+      // Attribute type inference based on common patterns
+      let type = "string";
+      if (name.toLowerCase().includes("count") || name.toLowerCase().includes("id") || 
+          name.endsWith("Type") || name.includes("ID")) {
+        type = "number";
+      } else if (name.toLowerCase().includes("time") || name.toLowerCase().includes("date") ||
+                name.toLowerCase().includes("created") || name.toLowerCase().includes("changed") ||
+                name.toLowerCase().includes("expires")) {
+        type = "datetime";
+      } else if (name.toLowerCase().includes("is") || name.toLowerCase().includes("has") ||
+                name.toLowerCase().includes("enabled") || name.toLowerCase().includes("disabled")) {
+        type = "boolean";
+      }
+
+      // Description inference based on name
+      let description = "";
+      if (name === "cn") description = "Common Name";
+      else if (name === "sn") description = "Surname";
+      else if (name === "givenName") description = "First Name";
+      else if (name === "sAMAccountName") description = "Login Name";
+      else if (name === "userPrincipalName") description = "User Principal Name";
+      else if (name === "mail") description = "Email Address";
+      else if (name === "memberOf") description = "Group Memberships";
+      else if (name === "member") description = "Members";
+      else if (name === "pwdLastSet") description = "Password Last Set";
+      else if (name === "lastLogon") description = "Last Login Time";
+      
+      return {
+        name,
+        type,
+        description: description || undefined,
+        // For multi-valued attributes we could infer based on name, but would be more accurate
+        // to use the schema information which we don't fully process here yet
+        isMultiValued: name === "memberOf" || name === "member" || name === "proxyAddresses" || 
+                       name === "objectClass" || name === "servicePrincipalName"
+      };
+    });
+
+    // Sort alphabetically by name
+    return attributeMetadata.sort((a, b) => a.name.localeCompare(b.name));
   } catch (error: unknown) {
     const errorMessage = error instanceof Error ? error.message : String(error);
     debug("Failed to get LDAP available attributes:", error);
+    
     // Return a default set of attributes instead of throwing
-    return [...commonAttributes, ...specificAttributes[targetObject]].sort();
+    const defaultAttributes = [...commonAttributes, ...specificAttributes[targetObject]].sort();
+    
+    // Convert to metadata objects with minimal information
+    return defaultAttributes.map(name => ({ name }));
   }
 }
