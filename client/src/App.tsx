@@ -11,7 +11,6 @@ import ComputersPage from "@/pages/computers-page";
 import DomainsPage from "@/pages/domains-page";
 import ApiTokensPage from "@/pages/api-tokens-page";
 import LdapConnectionsPage from "@/pages/ldap-connections-page";
-import LdapQueryBuilderPage from "@/pages/ldap-query-builder-page";
 import SettingsPage from "@/pages/settings-page";
 import UserManagementPage from "@/pages/user-management-page";
 import { ProtectedRoute } from "./lib/protected-route";
@@ -31,7 +30,6 @@ function Router() {
       <ProtectedRoute path="/domains" component={DomainsPage} />
       <ProtectedRoute path="/api-tokens" component={ApiTokensPage} />
       <ProtectedRoute path="/ldap-connections" component={LdapConnectionsPage} />
-      <ProtectedRoute path="/ldap-query-builder" component={LdapQueryBuilderPage} />
       <ProtectedRoute path="/settings" component={SettingsPage} />
       <ProtectedRoute path="/user-management" component={UserManagementPage} />
       <Route component={NotFound} />
