@@ -36,7 +36,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       return apiQuerySchema.parse(req.query);
     } catch (err) {
       if (err instanceof ZodError) {
-        return null;
+        console.error("Query parameter validation error:", err.errors);
+        return undefined;
       }
       throw err;
     }

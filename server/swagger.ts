@@ -1,6 +1,12 @@
 import swaggerJsdoc from "swagger-jsdoc";
 import swaggerUi from "swagger-ui-express";
-import { Express } from "express";
+import { Express, Request, Response } from "express";
+import fs from "fs";
+import path from "path";
+import { getQueryParametersDocumentation } from "./query-parser";
+import debugLib from "debug";
+
+const debug = debugLib('api:swagger');
 
 // Swagger definition
 const swaggerOptions = {
@@ -9,11 +15,19 @@ const swaggerOptions = {
     info: {
       title: "Active Directory Management API",
       version: "1.0.0",
-      description: "REST API for managing Active Directory resources",
+      description: "REST API for managing Active Directory resources. This API provides comprehensive capabilities for managing Active Directory users, groups, organizational units, and more through a RESTful interface.",
       contact: {
         name: "API Support",
         email: "support@example.com",
       },
+      license: {
+        name: "MIT",
+        url: "https://opensource.org/licenses/MIT",
+      }
+    },
+    externalDocs: {
+      description: "Find out more about this API",
+      url: "/api/docs/more-info"
     },
     servers: [
       {
@@ -240,9 +254,21 @@ const swaggerOptions = {
 const swaggerSpec = swaggerJsdoc(swaggerOptions);
 
 export function setupSwagger(app: Express) {
+  // Configure Swagger UI with additional options
+  const swaggerUiOptions = {
+    explorer: true,
+    swaggerOptions: {
+      persistAuthorization: true,
+      docExpansion: 'none',
+      tagsSorter: 'alpha',
+      operationsSorter: 'alpha',
+      filter: true,
+    },
+  };
+
   // Mount at both paths for backward compatibility
-  app.use("/api/docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
-  app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+  app.use("/api/docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec, swaggerUiOptions));
+  app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec, swaggerUiOptions));
   
   // Provide the JSON spec at multiple paths
   app.get("/api/swagger.json", (req, res) => {
@@ -253,5 +279,115 @@ export function setupSwagger(app: Express) {
   app.get("/api-docs/swagger.json", (req, res) => {
     res.setHeader("Content-Type", "application/json");
     res.send(swaggerSpec);
+  });
+
+  // Add download endpoint for the OpenAPI specification
+  app.get("/api/docs/download", (req, res) => {
+    const format = req.query.format?.toString().toLowerCase() || 'json';
+    
+    if (format === 'json') {
+      res.setHeader('Content-Disposition', 'attachment; filename=openapi-spec.json');
+      res.setHeader('Content-Type', 'application/json');
+      res.send(JSON.stringify(swaggerSpec, null, 2));
+    } else if (format === 'yaml' || format === 'yml') {
+      try {
+        // We'll need to import yaml dynamically or handle YAML conversion manually
+        // For simplicity, just sending JSON if yaml not supported
+        res.setHeader('Content-Disposition', 'attachment; filename=openapi-spec.json');
+        res.setHeader('Content-Type', 'application/json');
+        res.send(JSON.stringify(swaggerSpec, null, 2));
+        debug('YAML download requested but not implemented, sending JSON');
+      } catch (err) {
+        debug('Error generating YAML:', err);
+        res.setHeader('Content-Disposition', 'attachment; filename=openapi-spec.json');
+        res.setHeader('Content-Type', 'application/json');
+        res.send(JSON.stringify(swaggerSpec, null, 2));
+      }
+    } else {
+      res.status(400).send({ error: 'Invalid format. Supported formats: json, yaml' });
+    }
+  });
+
+  // Add documentation for query parameters and filtering
+  app.get("/api/docs/more-info", (req, res) => {
+    const queryParamsInfo = getQueryParametersDocumentation();
+    res.send(`
+      <html>
+        <head>
+          <title>Active Directory Management API - Advanced Usage</title>
+          <style>
+            body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 1200px; margin: 0 auto; padding: 20px; }
+            h1, h2, h3 { color: #0066cc; }
+            pre { background-color: #f5f5f5; padding: 10px; border-radius: 5px; overflow-x: auto; }
+            code { background-color: #f5f5f5; padding: 2px 4px; border-radius: 3px; }
+            table { border-collapse: collapse; width: 100%; margin-bottom: 20px; }
+            th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+            th { background-color: #f2f2f2; }
+            tr:nth-child(even) { background-color: #f9f9f9; }
+            .btn { display: inline-block; padding: 10px 15px; background-color: #0066cc; color: white; text-decoration: none; border-radius: 5px; margin: 10px 0; }
+            .btn:hover { background-color: #004c99; }
+          </style>
+        </head>
+        <body>
+          <h1>Active Directory Management API - Advanced Usage Guide</h1>
+          
+          <h2>API Documentation</h2>
+          <p>The complete API documentation is available at <a href="/api/docs">/api/docs</a>.</p>
+          <p>You can also download the OpenAPI specification:</p>
+          <p>
+            <a href="/api/docs/download?format=json" class="btn">Download OpenAPI Spec (JSON)</a>
+            <a href="/api/docs/download?format=yaml" class="btn">Download OpenAPI Spec (YAML)</a>
+          </p>
+          
+          <h2>Query Parameters and Filtering</h2>
+          <pre>${queryParamsInfo}</pre>
+          
+          <h2>Authentication</h2>
+          <p>This API supports two authentication methods:</p>
+          <ul>
+            <li><strong>Session-based authentication</strong>: Used when accessing the API from the web interface.</li>
+            <li><strong>API Token authentication</strong>: Used when accessing the API programmatically.</li>
+          </ul>
+          
+          <h3>API Token Authentication</h3>
+          <p>To authenticate using an API token, include the token in the Authorization header:</p>
+          <pre>Authorization: Bearer YOUR_API_TOKEN</pre>
+          
+          <h2>Rate Limiting</h2>
+          <p>The API has rate limiting in place to prevent abuse. The current limits are:</p>
+          <ul>
+            <li>100 requests per minute for authenticated users</li>
+            <li>20 requests per minute for unauthenticated users</li>
+          </ul>
+          
+          <h2>Error Handling</h2>
+          <p>The API returns consistent error responses with the following structure:</p>
+          <pre>{
+  "message": "Error message",
+  "errors": [
+    {
+      "path": ["field", "subfield"],
+      "message": "Specific error message"
+    }
+  ]
+}</pre>
+          
+          <h2>Example Usage</h2>
+          <h3>Filter Users by Name</h3>
+          <pre>GET /api/connections/1/ad-users?filter=displayName contains 'John'</pre>
+          
+          <h3>Select Specific Fields</h3>
+          <pre>GET /api/connections/1/ad-users?select=id,displayName,email</pre>
+          
+          <h3>Pagination</h3>
+          <pre>GET /api/connections/1/ad-users?top=10&skip=20</pre>
+          
+          <h3>Combining Parameters</h3>
+          <pre>GET /api/connections/1/ad-users?filter=enabled eq true&select=id,displayName,email&orderBy=displayName asc&top=10</pre>
+          
+          <p>Return to <a href="/api/docs">API Documentation</a></p>
+        </body>
+      </html>
+    `);
   });
 }
