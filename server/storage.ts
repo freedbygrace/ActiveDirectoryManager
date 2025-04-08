@@ -32,6 +32,9 @@ const pool = new Pool({
 const PostgresStore = connectPg(session);
 
 export interface IStorage {
+  // Session store for authentication
+  sessionStore: session.Store;
+  
   // User management
   getUser(id: number): Promise<User | undefined>;
   getUserByUsername(username: string): Promise<User | undefined>;
