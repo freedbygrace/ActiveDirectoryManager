@@ -48,6 +48,13 @@ export const PERMISSIONS = {
   DELETE_AD_COMPUTERS: "delete:ad_computers",
   
   VIEW_AD_DOMAINS: "view:ad_domains",
+  
+  // LDAP Query Builder
+  VIEW_LDAP_QUERIES: "view:ldap_queries",
+  CREATE_LDAP_QUERIES: "create:ldap_queries",
+  UPDATE_LDAP_QUERIES: "update:ldap_queries",
+  DELETE_LDAP_QUERIES: "delete:ldap_queries",
+  RUN_LDAP_QUERIES: "run:ldap_queries",
 
   // API Token management
   MANAGE_API_TOKENS: "manage:api_tokens",
@@ -84,6 +91,11 @@ export const permissionsSchema = z.enum([
   "update:ad_computers",
   "delete:ad_computers",
   "view:ad_domains",
+  "view:ldap_queries",
+  "create:ldap_queries",
+  "update:ldap_queries", 
+  "delete:ldap_queries",
+  "run:ldap_queries",
   "manage:api_tokens",
   "manage:roles",
   "admin:system"
@@ -199,6 +211,36 @@ export const adDomains = pgTable("ad_domains", {
   adProperties: jsonb("ad_properties"),
 });
 
+// LDAP Query Builder schemas
+export const ldapQueries = pgTable("ldap_queries", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull(),
+  description: text("description"),
+  targetObject: text("target_object").notNull(), // users, groups, computers, ous
+  filterJson: jsonb("filter").notNull(), // Serialized filter conditions
+  ldapFilter: text("ldap_filter").notNull(), // The actual LDAP filter string
+  readableFilter: text("readable_filter").notNull(), // Human-readable representation
+  version: integer("version").notNull().default(1),
+  createdBy: integer("created_by").notNull().references(() => users.id),
+  modifiedBy: integer("modified_by").notNull().references(() => users.id, { onDelete: "set null" }).default(1),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// LDAP Query Versions for revision history
+export const ldapQueryVersions = pgTable("ldap_query_versions", {
+  id: serial("id").primaryKey(),
+  queryId: integer("query_id").notNull().references(() => ldapQueries.id, { onDelete: "cascade" }),
+  version: integer("version").notNull(),
+  filterJson: jsonb("filter").notNull(), // Serialized filter conditions
+  ldapFilter: text("ldap_filter").notNull(), // The actual LDAP filter string
+  readableFilter: text("readable_filter").notNull(), // Human-readable representation
+  targetObject: text("target_object").notNull(), // users, groups, computers, ous
+  createdBy: integer("created_by").notNull().references(() => users.id, { onDelete: "set null" }).default(1), 
+  modifiedBy: integer("modified_by").notNull().references(() => users.id, { onDelete: "set null" }).default(1),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
 // Define relations between tables
 export const rolesRelations = relations(roles, ({ many }) => ({
   permissions: many(rolePermissions),
@@ -219,6 +261,8 @@ export const usersRelations = relations(users, ({ one, many }) => ({
     references: [roles.id],
   }),
   apiTokens: many(apiTokens),
+  createdQueries: many(ldapQueries, { relationName: "createdQueries" }),
+  modifiedQueries: many(ldapQueries, { relationName: "modifiedQueries" }),
 }));
 
 export const apiTokensRelations = relations(apiTokens, ({ one }) => ({
@@ -229,6 +273,31 @@ export const apiTokensRelations = relations(apiTokens, ({ one }) => ({
   role: one(roles, {
     fields: [apiTokens.roleId],
     references: [roles.id],
+  }),
+}));
+
+export const ldapQueriesRelations = relations(ldapQueries, ({ one, many }) => ({
+  creator: one(users, {
+    fields: [ldapQueries.createdBy],
+    references: [users.id],
+    relationName: "createdQueries",
+  }),
+  modifier: one(users, {
+    fields: [ldapQueries.modifiedBy],
+    references: [users.id],
+    relationName: "modifiedQueries",
+  }),
+  versions: many(ldapQueryVersions),
+}));
+
+export const ldapQueryVersionsRelations = relations(ldapQueryVersions, ({ one }) => ({
+  query: one(ldapQueries, {
+    fields: [ldapQueryVersions.queryId],
+    references: [ldapQueries.id],
+  }),
+  modifier: one(users, {
+    fields: [ldapQueryVersions.modifiedBy],
+    references: [users.id],
   }),
 }));
 
@@ -243,6 +312,8 @@ export const insertAdGroupSchema = createInsertSchema(adGroups).omit({ id: true 
 export const insertAdOrgUnitSchema = createInsertSchema(adOrgUnits).omit({ id: true });
 export const insertAdComputerSchema = createInsertSchema(adComputers).omit({ id: true });
 export const insertAdDomainSchema = createInsertSchema(adDomains).omit({ id: true });
+export const insertLdapQuerySchema = createInsertSchema(ldapQueries).omit({ id: true, createdAt: true, updatedAt: true, version: true });
+export const insertLdapQueryVersionSchema = createInsertSchema(ldapQueryVersions).omit({ id: true, createdAt: true });
 
 // Login schema
 export const loginSchema = z.object({
@@ -286,5 +357,9 @@ export type AdComputer = typeof adComputers.$inferSelect;
 export type InsertAdComputer = z.infer<typeof insertAdComputerSchema>;
 export type AdDomain = typeof adDomains.$inferSelect;
 export type InsertAdDomain = z.infer<typeof insertAdDomainSchema>;
+export type LdapQuery = typeof ldapQueries.$inferSelect;
+export type InsertLdapQuery = z.infer<typeof insertLdapQuerySchema>;
+export type LdapQueryVersion = typeof ldapQueryVersions.$inferSelect;
+export type InsertLdapQueryVersion = z.infer<typeof insertLdapQueryVersionSchema>;
 export type Login = z.infer<typeof loginSchema>;
 export type ApiQuery = z.infer<typeof apiQuerySchema>;

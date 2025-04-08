@@ -11,6 +11,8 @@ import {
   requireAdmin, 
   initializeRBAC
 } from "./authorization";
+import { registerLdapQueryBuilderRoutes } from "./ldap-query-builder-routes";
+import express from "express";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Setup authentication
@@ -825,6 +827,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       next(error);
     }
   });
+
+  // Set up LDAP query builder routes
+  const ldapQueryRouter = express.Router();
+  registerLdapQueryBuilderRoutes(ldapQueryRouter, storage);
+  app.use('/api', ldapQueryRouter);
 
   const httpServer = createServer(app);
 

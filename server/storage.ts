@@ -4,8 +4,9 @@ import {
   AdUser, InsertAdUser, AdGroup, InsertAdGroup, 
   AdOrgUnit, InsertAdOrgUnit, AdComputer, InsertAdComputer, 
   AdDomain, InsertAdDomain, Role, ApiQuery,
+  LdapQuery, InsertLdapQuery, LdapQueryVersion, InsertLdapQueryVersion,
   users, apiTokens, ldapConnections, adUsers, adGroups, adOrgUnits, adComputers, adDomains,
-  roles
+  roles, ldapQueries, ldapQueryVersions
 } from "@shared/schema";
 import session from "express-session";
 import createMemoryStore from "memorystore";
@@ -56,6 +57,15 @@ export interface IStorage {
   updateLdapConnection(id: number, connection: Partial<LdapConnection>): Promise<LdapConnection | undefined>;
   deleteLdapConnection(id: number): Promise<boolean>;
   listLdapConnections(): Promise<LdapConnection[]>;
+
+  // LDAP Query Builder
+  getLdapQuery(id: number): Promise<LdapQuery | undefined>;
+  getLdapQueries(): Promise<LdapQuery[]>;
+  createLdapQuery(query: InsertLdapQuery): Promise<LdapQuery>;
+  updateLdapQuery(id: number, query: Partial<LdapQuery>): Promise<LdapQuery | undefined>;
+  deleteLdapQuery(id: number): Promise<boolean>;
+  getLdapQueryVersions(queryId: number): Promise<LdapQueryVersion[]>;
+  createLdapQueryVersion(version: InsertLdapQueryVersion): Promise<LdapQueryVersion>;
 
   // AD Users
   getAdUser(id: number): Promise<AdUser | undefined>;
@@ -196,6 +206,142 @@ export class DatabaseStorage implements IStorage {
 
   async listLdapConnections(): Promise<LdapConnection[]> {
     return db.select().from(ldapConnections);
+  }
+
+  // LDAP Query Builder
+  async getLdapQuery(id: number): Promise<LdapQuery | undefined> {
+    const cacheKey = `ldapQuery:${id}`;
+    
+    // Try to get from cache first
+    const cachedData = await getCached<LdapQuery>(cacheKey);
+    if (cachedData) {
+      debug(`Cache hit for ${cacheKey}`);
+      return cachedData;
+    }
+    
+    const result = await db.select().from(ldapQueries).where(eq(ldapQueries.id, id));
+    
+    if (result.length > 0) {
+      // Cache the query for faster access
+      await setCached(cacheKey, result[0], CACHE_TTL.MEDIUM);
+      return result[0];
+    }
+    
+    return undefined;
+  }
+
+  async getLdapQueries(): Promise<LdapQuery[]> {
+    const cacheKey = 'ldapQueries:all';
+    
+    // Try to get from cache first
+    const cachedData = await getCached<LdapQuery[]>(cacheKey);
+    if (cachedData) {
+      debug(`Cache hit for ${cacheKey}`);
+      return cachedData;
+    }
+    
+    const queries = await db.select().from(ldapQueries);
+    
+    // Cache the results
+    await setCached(cacheKey, queries, CACHE_TTL.MEDIUM);
+    return queries;
+  }
+
+  async createLdapQuery(query: InsertLdapQuery): Promise<LdapQuery> {
+    // Create the query
+    const result = await db.insert(ldapQueries).values({
+      name: query.name,
+      description: query.description,
+      targetObject: query.targetObject,
+      filterJson: query.filterJson,
+      ldapFilter: query.ldapFilter,
+      readableFilter: query.readableFilter,
+      createdBy: query.createdBy,
+      modifiedBy: query.createdBy // Initially, creator and modifier are the same
+    }).returning();
+    
+    // Invalidate relevant caches
+    invalidateCache('ldapQueries:all');
+    
+    return result[0];
+  }
+
+  async updateLdapQuery(id: number, queryData: Partial<LdapQuery>): Promise<LdapQuery | undefined> {
+    // Update the query
+    const result = await db.update(ldapQueries)
+      .set({
+        ...queryData,
+        updatedAt: new Date()
+      })
+      .where(eq(ldapQueries.id, id))
+      .returning();
+    
+    if (result.length > 0) {
+      // Invalidate relevant caches
+      invalidateCache(`ldapQuery:${id}`);
+      invalidateCache('ldapQueries:all');
+      
+      return result[0];
+    }
+    
+    return undefined;
+  }
+
+  async deleteLdapQuery(id: number): Promise<boolean> {
+    // Delete the query (versions will be deleted via cascade)
+    const result = await db.delete(ldapQueries)
+      .where(eq(ldapQueries.id, id))
+      .returning({ id: ldapQueries.id });
+    
+    const deleted = result.length > 0;
+    
+    if (deleted) {
+      // Invalidate relevant caches
+      invalidateCache(`ldapQuery:${id}`);
+      invalidateCachePattern(`ldapQueryVersions:${id}:*`);
+      invalidateCache('ldapQueries:all');
+    }
+    
+    return deleted;
+  }
+
+  async getLdapQueryVersions(queryId: number): Promise<LdapQueryVersion[]> {
+    const cacheKey = `ldapQueryVersions:${queryId}:all`;
+    
+    // Try to get from cache first
+    const cachedData = await getCached<LdapQueryVersion[]>(cacheKey);
+    if (cachedData) {
+      debug(`Cache hit for ${cacheKey}`);
+      return cachedData;
+    }
+    
+    const versions = await db.select()
+      .from(ldapQueryVersions)
+      .where(eq(ldapQueryVersions.queryId, queryId))
+      .orderBy(ldapQueryVersions.version);
+    
+    // Cache the results
+    await setCached(cacheKey, versions, CACHE_TTL.MEDIUM);
+    
+    return versions;
+  }
+
+  async createLdapQueryVersion(version: InsertLdapQueryVersion): Promise<LdapQueryVersion> {
+    const result = await db.insert(ldapQueryVersions).values({
+      queryId: version.queryId,
+      version: version.version,
+      filterJson: version.filterJson,
+      ldapFilter: version.ldapFilter,
+      readableFilter: version.readableFilter,
+      targetObject: version.targetObject,
+      createdBy: version.createdBy,
+      modifiedBy: version.modifiedBy
+    }).returning();
+    
+    // Invalidate relevant caches
+    invalidateCachePattern(`ldapQueryVersions:${version.queryId}:*`);
+    
+    return result[0];
   }
 
   // AD Users
