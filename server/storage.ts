@@ -3,8 +3,9 @@ import {
   LdapConnection, InsertLdapConnection, 
   AdUser, InsertAdUser, AdGroup, InsertAdGroup, 
   AdOrgUnit, InsertAdOrgUnit, AdComputer, InsertAdComputer, 
-  AdDomain, InsertAdDomain,
-  users, apiTokens, ldapConnections, adUsers, adGroups, adOrgUnits, adComputers, adDomains
+  AdDomain, InsertAdDomain, Role,
+  users, apiTokens, ldapConnections, adUsers, adGroups, adOrgUnits, adComputers, adDomains,
+  roles
 } from "@shared/schema";
 import session from "express-session";
 import createMemoryStore from "memorystore";
@@ -32,7 +33,11 @@ export interface IStorage {
   updateUser(id: number, user: Partial<User>): Promise<User | undefined>;
   deleteUser(id: number): Promise<boolean>;
   listUsers(): Promise<User[]>;
-
+  
+  // Role management
+  getRole(id: number): Promise<Role | undefined>;
+  getDefaultRole(): Promise<Role | undefined>;
+  
   // API Token management
   getApiToken(id: number): Promise<ApiToken | undefined>;
   getApiTokenByToken(token: string): Promise<ApiToken | undefined>;
@@ -126,6 +131,17 @@ export class DatabaseStorage implements IStorage {
   async listUsers(): Promise<User[]> {
     return db.select().from(users);
   }
+  
+  // Role management
+  async getRole(id: number): Promise<Role | undefined> {
+    const result = await db.select().from(roles).where(eq(roles.id, id));
+    return result.length > 0 ? result[0] : undefined;
+  }
+  
+  async getDefaultRole(): Promise<Role | undefined> {
+    const result = await db.select().from(roles).where(eq(roles.isDefault, true));
+    return result.length > 0 ? result[0] : undefined;
+  }
 
   // API Token management
   async getApiToken(id: number): Promise<ApiToken | undefined> {
@@ -210,7 +226,7 @@ export class DatabaseStorage implements IStorage {
       
       return users.map(user => {
         const result: any = { id: user.id };
-        properties.forEach(prop => {
+        properties.forEach((prop: string) => {
           if ((user as any)[prop] !== undefined) {
             result[prop] = (user as any)[prop];
           }
@@ -253,7 +269,7 @@ export class DatabaseStorage implements IStorage {
       
       return groups.map(group => {
         const result: any = { id: group.id };
-        properties.forEach(prop => {
+        properties.forEach((prop: string) => {
           if ((group as any)[prop] !== undefined) {
             result[prop] = (group as any)[prop];
           }
@@ -296,7 +312,7 @@ export class DatabaseStorage implements IStorage {
       
       return orgUnits.map(ou => {
         const result: any = { id: ou.id };
-        properties.forEach(prop => {
+        properties.forEach((prop: string) => {
           if ((ou as any)[prop] !== undefined) {
             result[prop] = (ou as any)[prop];
           }
@@ -339,7 +355,7 @@ export class DatabaseStorage implements IStorage {
       
       return computers.map(computer => {
         const result: any = { id: computer.id };
-        properties.forEach(prop => {
+        properties.forEach((prop: string) => {
           if ((computer as any)[prop] !== undefined) {
             result[prop] = (computer as any)[prop];
           }
@@ -382,7 +398,7 @@ export class DatabaseStorage implements IStorage {
       
       return domains.map(domain => {
         const result: any = { id: domain.id };
-        properties.forEach(prop => {
+        properties.forEach((prop: string) => {
           if ((domain as any)[prop] !== undefined) {
             result[prop] = (domain as any)[prop];
           }

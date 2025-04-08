@@ -160,22 +160,21 @@ export function DashboardLayout({ children, title, description }: DashboardLayou
         } ${isMobile ? "absolute" : "relative"}`}
       >
         <div className="h-16 flex items-center px-4 border-b">
-          <Link href="/">
-            <a className="font-medium text-lg text-primary">AD Management API</a>
+          <Link href="/" className="font-medium text-lg text-primary">
+            AD Management API
           </Link>
         </div>
 
         <div className="overflow-y-auto h-[calc(100%-64px)]">
           <div className="px-2 pt-4">
-            <Link href="/">
-              <a
-                className={`drawer-item px-4 py-2 flex items-center space-x-3 rounded cursor-pointer ${
-                  location === "/" ? "active" : ""
-                }`}
-              >
-                <Home className="h-4 w-4" />
-                <span>Dashboard</span>
-              </a>
+            <Link 
+              href="/"
+              className={`drawer-item px-4 py-2 flex items-center space-x-3 rounded cursor-pointer ${
+                location === "/" ? "active" : ""
+              }`}
+            >
+              <Home className="h-4 w-4" />
+              <span>Dashboard</span>
             </Link>
 
             {menuSections.map((section, idx) => (
@@ -185,15 +184,15 @@ export function DashboardLayout({ children, title, description }: DashboardLayou
                 </div>
 
                 {section.items.map((item, itemIdx) => (
-                  <Link href={item.path} key={itemIdx}>
-                    <a
-                      className={`drawer-item px-4 py-2 flex items-center space-x-3 rounded cursor-pointer ${
-                        location === item.path ? "active" : ""
-                      }`}
-                    >
-                      {item.icon}
-                      <span>{item.title}</span>
-                    </a>
+                  <Link 
+                    href={item.path} 
+                    key={itemIdx}
+                    className={`drawer-item px-4 py-2 flex items-center space-x-3 rounded cursor-pointer ${
+                      location === item.path ? "active" : ""
+                    }`}
+                  >
+                    {item.icon}
+                    <span>{item.title}</span>
                   </Link>
                 ))}
               </div>

@@ -3,8 +3,14 @@ import { createServer, type Server } from "http";
 import { setupAuth } from "./auth";
 import { setupSwagger } from "./swagger";
 import { storage } from "./storage";
-import { apiQuerySchema } from "@shared/schema";
+import { apiQuerySchema, PERMISSIONS } from "@shared/schema";
 import { ZodError } from "zod";
+import { 
+  requireAuth, 
+  requirePermission, 
+  requireAdmin, 
+  initializeRBAC
+} from "./authorization";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Setup authentication
@@ -12,6 +18,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Setup Swagger documentation
   setupSwagger(app);
+
+  // Initialize Role Based Access Control system
+  await initializeRBAC();
 
   // Error handler for Zod validation errors
   const handleZodError = (err: ZodError, res: Response) => {
@@ -33,14 +42,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   };
 
-  // Middleware to check admin role
-  const requireAdmin = (req: Request, res: Response, next: NextFunction) => {
-    if (!req.isAuthenticated() || req.user.role !== "admin") {
-      return res.status(403).json({ message: "Access denied: Admin role required" });
-    }
-    next();
-  };
-
   /**
    * @swagger
    * /api/ldap-connections:
@@ -49,6 +50,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
    *     tags: [LDAP Connections]
    *     security:
    *       - cookieAuth: []
+   *       - bearerAuth: []
    *     responses:
    *       200:
    *         description: A list of LDAP connections
@@ -60,13 +62,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
    *                 $ref: '#/components/schemas/LdapConnection'
    *       401:
    *         $ref: '#/components/responses/UnauthorizedError'
+   *       403:
+   *         $ref: '#/components/responses/ForbiddenError'
    */
-  app.get("/api/ldap-connections", async (req, res, next) => {
+  app.get("/api/ldap-connections", requirePermission(PERMISSIONS.VIEW_LDAP_CONNECTIONS, { allowApiToken: true }), async (req, res, next) => {
     try {
-      if (!req.isAuthenticated()) {
-        return res.status(401).json({ message: "Not authenticated" });
-      }
-      
       const connections = await storage.listLdapConnections();
       
       // Hide sensitive fields like password
@@ -360,8 +360,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       // Only allow users to delete their own tokens unless they're admin
-      if (token.userId !== req.user.id && req.user.role !== "admin") {
-        return res.status(403).json({ message: "Forbidden: You cannot delete tokens that don't belong to you" });
+      if (token.userId !== req.user.id) {
+        // Get the user's role
+        const userRole = await storage.getRole(req.user.roleId!);
+        
+        if (userRole?.name !== "admin") {
+          return res.status(403).json({ message: "Forbidden: You cannot delete tokens that don't belong to you" });
+        }
       }
       
       const deleted = await storage.deleteApiToken(parseInt(req.params.id));

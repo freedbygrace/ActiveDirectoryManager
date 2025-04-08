@@ -110,12 +110,19 @@ export function setupAuth(app: Express) {
       }
 
       const hashedPassword = await hashPassword(password);
+      // Get the default role if role ID isn't specified
+      let roleId = req.body.roleId;
+      if (!roleId) {
+        const defaultRole = await storage.getDefaultRole();
+        roleId = defaultRole?.id;
+      }
+      
       const user = await storage.createUser({
         username,
         password: hashedPassword,
         email: req.body.email,
         fullName: req.body.fullName,
-        role: req.body.role || "user",
+        roleId: roleId,
       });
 
       // Remove password from response
@@ -132,7 +139,7 @@ export function setupAuth(app: Express) {
 
   // Login endpoint
   app.post("/api/login", (req, res, next) => {
-    passport.authenticate("local", (err, user, info) => {
+    passport.authenticate("local", (err: any, user: any, info: any) => {
       if (err) return next(err);
       if (!user) {
         return res.status(401).json({ message: info?.message || "Authentication failed" });
@@ -175,25 +182,30 @@ export function setupAuth(app: Express) {
     }
 
     try {
-      const { name, expiresAt, permissions } = req.body;
+      const { name, expiresAt, roleId, customPermissions } = req.body;
       if (!name) {
         return res.status(400).json({ message: "Token name is required" });
       }
 
+      // Create JWT token with user ID and optional permissions
       const token = jwt.sign(
         { 
           sub: req.user.id,
-          permissions 
+          customPermissions 
         },
         JWT_SECRET,
-        { expiresAt: expiresAt ? new Date(expiresAt) : undefined }
+        { 
+          expiresIn: expiresAt ? Math.floor((new Date(expiresAt).getTime() - Date.now()) / 1000) : '365d' 
+        }
       );
 
+      // Store the token in the database
       const apiToken = storage.createApiToken({
         name,
         token,
         userId: req.user.id,
-        permissions: permissions || {},
+        roleId: roleId || null,
+        customPermissions: customPermissions || null,
         expiresAt: expiresAt ? new Date(expiresAt) : null,
       });
 

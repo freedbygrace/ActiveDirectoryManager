@@ -42,6 +42,8 @@ const registerSchema = insertUserSchema.extend({
   acceptTerms: z.boolean().refine(val => val === true, {
     message: "You must accept the terms and conditions",
   }),
+  // Define roleId explicitly to match form values
+  roleId: z.number().optional().nullable(),
 }).refine(data => data.password === data.confirmPassword, {
   message: "Passwords do not match",
   path: ["confirmPassword"],
@@ -140,7 +142,7 @@ export default function AuthPage() {
       email: "",
       fullName: "",
       acceptTerms: false,
-      role: "user",
+      roleId: 2, // Assign the default "user" role ID
     },
   });
 
