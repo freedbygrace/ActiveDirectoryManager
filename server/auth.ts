@@ -95,45 +95,95 @@ export function setupAuth(app: Express) {
     }
   });
 
-  // Registration endpoint
+  // Registration endpoint - fixed with better error handling
   app.post("/api/register", async (req, res, next) => {
     try {
+      console.log("Registration attempt:", { ...req.body, password: "***" });
+      
+      // Validate inputs
       const validationResult = loginSchema.safeParse(req.body);
       if (!validationResult.success) {
+        console.log("Validation failed:", validationResult.error.errors);
         return res.status(400).json({ message: "Invalid input", errors: validationResult.error.errors });
       }
 
       const { username, password } = req.body;
-      const existingUser = await storage.getUserByUsername(username);
-      if (existingUser) {
-        return res.status(400).json({ message: "Username already exists" });
+      
+      // Check for existing user
+      try {
+        const existingUser = await storage.getUserByUsername(username);
+        if (existingUser) {
+          console.log("Username already exists:", username);
+          return res.status(400).json({ message: "Username already exists" });
+        }
+      } catch (error) {
+        console.error("Error checking for existing user:", error);
+        return res.status(500).json({ message: "Error checking for existing user" });
       }
 
-      const hashedPassword = await hashPassword(password);
-      // Get the default role if role ID isn't specified
-      let roleId = req.body.roleId;
-      if (!roleId) {
-        const defaultRole = await storage.getDefaultRole();
-        roleId = defaultRole?.id;
+      // Hash password
+      let hashedPassword;
+      try {
+        hashedPassword = await hashPassword(password);
+      } catch (error) {
+        console.error("Error hashing password:", error);
+        return res.status(500).json({ message: "Error processing password" });
       }
       
-      const user = await storage.createUser({
-        username,
-        password: hashedPassword,
-        email: req.body.email,
-        fullName: req.body.fullName,
-        roleId: roleId,
-      });
+      // Get default role
+      let roleId = req.body.roleId;
+      if (!roleId) {
+        try {
+          const defaultRole = await storage.getDefaultRole();
+          roleId = defaultRole?.id;
+          console.log("Using default role ID:", roleId);
+        } catch (error) {
+          console.error("Error getting default role:", error);
+          return res.status(500).json({ message: "Error getting default role" });
+        }
+      }
+      
+      // Create user
+      let user;
+      try {
+        user = await storage.createUser({
+          username,
+          password: hashedPassword,
+          email: req.body.email || null,
+          fullName: req.body.fullName || null,
+          roleId: roleId,
+        });
+        console.log("User created successfully:", { id: user.id, username });
+      } catch (error) {
+        console.error("Error creating user:", error);
+        return res.status(500).json({ message: "Error creating user" });
+      }
 
       // Remove password from response
       const userResponse = { ...user, password: undefined };
 
-      req.login(user, (err) => {
-        if (err) return next(err);
-        res.status(201).json(userResponse);
-      });
+      // Manual login instead of using req.login
+      try {
+        req.user = user;
+        // Use req.session to store user data
+        if (req.session) {
+          req.session.userId = user.id;
+        }
+        
+        // Send success response
+        console.log("Registration completed successfully");
+        return res.status(201).json(userResponse);
+      } catch (error) {
+        console.error("Error during session setup:", error);
+        // Still return the created user even if session setup fails
+        return res.status(201).json({ 
+          ...userResponse, 
+          warning: "User created but session setup failed, please log in manually" 
+        });
+      }
     } catch (error) {
-      next(error);
+      console.error("Unexpected error during registration:", error);
+      return res.status(500).json({ message: "Internal server error during registration" });
     }
   });
 
