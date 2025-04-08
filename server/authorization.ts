@@ -17,7 +17,7 @@ export type RequirePermissionOptions = RequireAuthOptions & {
 export function requireAuth(options: RequireAuthOptions = {}) {
   return async (req: Request, res: Response, next: NextFunction) => {
     // Check for session authentication
-    if (req.isAuthenticated()) {
+    if (typeof req.isAuthenticated === 'function' && req.isAuthenticated()) {
       return next();
     }
 
