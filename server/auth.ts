@@ -137,20 +137,40 @@ export function setupAuth(app: Express) {
     }
   });
 
-  // Login endpoint
+  // Login endpoint - fixed without relying on req.isAuthenticated
   app.post("/api/login", (req, res, next) => {
-    passport.authenticate("local", (err: any, user: any, info: any) => {
-      if (err) return next(err);
-      if (!user) {
-        return res.status(401).json({ message: info?.message || "Authentication failed" });
-      }
-      req.login(user, (loginErr) => {
-        if (loginErr) return next(loginErr);
-        // Remove password from response
-        const userResponse = { ...user, password: undefined };
-        res.json(userResponse);
-      });
-    })(req, res, next);
+    try {
+      passport.authenticate("local", (err: any, user: any, info: any) => {
+        if (err) {
+          console.error("Authentication error:", err);
+          return res.status(500).json({ message: "Internal server error during authentication" });
+        }
+        
+        if (!user) {
+          return res.status(401).json({ message: info?.message || "Authentication failed" });
+        }
+        
+        // Manual login with try-catch to safely handle errors
+        try {
+          req.login(user, (loginErr) => {
+            if (loginErr) {
+              console.error("Login error:", loginErr);
+              return res.status(500).json({ message: "Error during login process" });
+            }
+            
+            // Remove password from response
+            const userResponse = { ...user, password: undefined };
+            return res.json(userResponse);
+          });
+        } catch (loginError) {
+          console.error("Exception during login:", loginError);
+          return res.status(500).json({ message: "Login process failed" });
+        }
+      })(req, res, next);
+    } catch (error) {
+      console.error("Unexpected error in login route:", error);
+      return res.status(500).json({ message: "Internal server error" });
+    }
   });
 
   // Logout endpoint
@@ -165,23 +185,31 @@ export function setupAuth(app: Express) {
     });
   });
 
-  // Get current user endpoint
+  // Get current user endpoint - fixed without relying on req.isAuthenticated
   app.get("/api/user", (req, res) => {
-    if (!req.isAuthenticated()) {
-      return res.status(401).json({ message: "Not authenticated" });
+    try {
+      // Check if user exists in session instead of using isAuthenticated
+      if (!req.user) {
+        return res.status(401).json({ message: "Not authenticated" });
+      }
+      
+      // Remove password from response
+      const userResponse = { ...req.user, password: undefined };
+      res.json(userResponse);
+    } catch (error) {
+      console.error("Error in user endpoint:", error);
+      res.status(500).json({ message: "Internal server error" });
     }
-    // Remove password from response
-    const userResponse = { ...req.user, password: undefined };
-    res.json(userResponse);
   });
 
-  // Generate API token endpoint
+  // Generate API token endpoint - fixed without relying on req.isAuthenticated
   app.post("/api/tokens", (req, res, next) => {
-    if (!req.isAuthenticated()) {
-      return res.status(401).json({ message: "Not authenticated" });
-    }
-
     try {
+      // Check if user exists in session
+      if (!req.user) {
+        return res.status(401).json({ message: "Not authenticated" });
+      }
+
       const { name, expiresAt, roleId, customPermissions } = req.body;
       if (!name) {
         return res.status(400).json({ message: "Token name is required" });
@@ -211,7 +239,8 @@ export function setupAuth(app: Express) {
 
       res.status(201).json(apiToken);
     } catch (error) {
-      next(error);
+      console.error("Error generating API token:", error);
+      res.status(500).json({ message: "Failed to generate API token" });
     }
   });
 
