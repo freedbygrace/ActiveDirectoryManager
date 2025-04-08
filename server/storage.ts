@@ -4,8 +4,10 @@ import {
   AdUser, InsertAdUser, AdGroup, InsertAdGroup, 
   AdOrgUnit, InsertAdOrgUnit, AdComputer, InsertAdComputer, 
   AdDomain, InsertAdDomain, Role, ApiQuery,
+  LdapFilter, InsertLdapFilter, LdapFilterRevision, InsertLdapFilterRevision,
+  LdapAttribute, InsertLdapAttribute,
   users, apiTokens, ldapConnections, adUsers, adGroups, adOrgUnits, adComputers, adDomains,
-  roles
+  roles, ldapFilters, ldapFilterRevisions, ldapAttributes
 } from "@shared/schema";
 import session from "express-session";
 import createMemoryStore from "memorystore";
@@ -56,6 +58,25 @@ export interface IStorage {
   updateLdapConnection(id: number, connection: Partial<LdapConnection>): Promise<LdapConnection | undefined>;
   deleteLdapConnection(id: number): Promise<boolean>;
   listLdapConnections(): Promise<LdapConnection[]>;
+
+  // LDAP Query Builder
+  getLdapAttributes(connectionId: number, objectClass: string): Promise<LdapAttribute[]>;
+  createLdapAttribute(attribute: InsertLdapAttribute): Promise<LdapAttribute>;
+  updateLdapAttribute(id: number, attribute: Partial<LdapAttribute>): Promise<LdapAttribute | undefined>;
+  deleteLdapAttribute(id: number): Promise<boolean>;
+  
+  getLdapFilter(id: number): Promise<LdapFilter | undefined>;
+  createLdapFilter(filter: InsertLdapFilter): Promise<LdapFilter>;
+  updateLdapFilter(id: number, filter: Partial<LdapFilter>): Promise<LdapFilter | undefined>;
+  deleteLdapFilter(id: number): Promise<boolean>;
+  listLdapFilters(connectionId: number): Promise<LdapFilter[]>;
+  
+  getLdapFilterRevisions(filterId: number): Promise<LdapFilterRevision[]>;
+  getLdapFilterRevision(id: number): Promise<LdapFilterRevision | undefined>;
+  createLdapFilterRevision(revision: InsertLdapFilterRevision): Promise<LdapFilterRevision>;
+  revertLdapFilterToRevision(filterId: number, revisionId: number): Promise<LdapFilter | undefined>;
+  
+  testLdapFilter(connectionId: number, ldapFilter: string, objectClass: string): Promise<any[]>;
 
   // AD Users
   getAdUser(id: number): Promise<AdUser | undefined>;
@@ -196,6 +217,336 @@ export class DatabaseStorage implements IStorage {
 
   async listLdapConnections(): Promise<LdapConnection[]> {
     return db.select().from(ldapConnections);
+  }
+  
+  // LDAP Query Builder methods
+  async getLdapAttributes(connectionId: number, objectClass: string): Promise<LdapAttribute[]> {
+    const cacheKey = `ldapAttributes:${connectionId}:${objectClass}`;
+    
+    // Try to get from cache first
+    const cachedData = await getCached<LdapAttribute[]>(cacheKey);
+    if (cachedData) {
+      debug(`Cache hit for ${cacheKey}`);
+      return cachedData;
+    }
+    
+    const attributes = await db.select()
+      .from(ldapAttributes)
+      .where(
+        and(
+          eq(ldapAttributes.connectionId, connectionId),
+          eq(ldapAttributes.objectClass, objectClass)
+        )
+      );
+    
+    // Cache the result
+    await setCached(cacheKey, attributes, CACHE_TTL.LONG);
+    return attributes;
+  }
+  
+  async createLdapAttribute(attribute: InsertLdapAttribute): Promise<LdapAttribute> {
+    debug(`Creating LDAP attribute: ${JSON.stringify(attribute)}`);
+    const result = await db.insert(ldapAttributes).values(attribute).returning();
+    
+    // Invalidate cache for the specific connection and object class
+    await invalidateCache(`ldapAttributes:${attribute.connectionId}:${attribute.objectClass}`);
+    
+    return result[0];
+  }
+  
+  async updateLdapAttribute(id: number, attribute: Partial<LdapAttribute>): Promise<LdapAttribute | undefined> {
+    debug(`Updating LDAP attribute ${id}: ${JSON.stringify(attribute)}`);
+    
+    // Get the attribute first to get connectionId and objectClass for cache invalidation
+    const existingAttribute = await this.getLdapAttribute(id);
+    if (!existingAttribute) {
+      return undefined;
+    }
+    
+    const result = await db.update(ldapAttributes)
+      .set({
+        ...attribute,
+        updatedAt: new Date()
+      })
+      .where(eq(ldapAttributes.id, id))
+      .returning();
+    
+    // Invalidate cache for the specific connection and object class
+    await invalidateCache(`ldapAttributes:${existingAttribute.connectionId}:${existingAttribute.objectClass}`);
+    
+    return result.length > 0 ? result[0] : undefined;
+  }
+  
+  async getLdapAttribute(id: number): Promise<LdapAttribute | undefined> {
+    const result = await db.select().from(ldapAttributes).where(eq(ldapAttributes.id, id));
+    return result.length > 0 ? result[0] : undefined;
+  }
+  
+  async deleteLdapAttribute(id: number): Promise<boolean> {
+    debug(`Deleting LDAP attribute ${id}`);
+    
+    // Get the attribute first to get connectionId and objectClass for cache invalidation
+    const existingAttribute = await this.getLdapAttribute(id);
+    if (!existingAttribute) {
+      return false;
+    }
+    
+    const result = await db.delete(ldapAttributes)
+      .where(eq(ldapAttributes.id, id))
+      .returning({ id: ldapAttributes.id });
+    
+    // Invalidate cache for the specific connection and object class
+    if (result.length > 0) {
+      await invalidateCache(`ldapAttributes:${existingAttribute.connectionId}:${existingAttribute.objectClass}`);
+      return true;
+    }
+    
+    return false;
+  }
+  
+  async getLdapFilter(id: number): Promise<LdapFilter | undefined> {
+    debug(`Getting LDAP filter ${id}`);
+    const result = await db.select().from(ldapFilters).where(eq(ldapFilters.id, id));
+    return result.length > 0 ? result[0] : undefined;
+  }
+  
+  async createLdapFilter(filter: InsertLdapFilter): Promise<LdapFilter> {
+    debug(`Creating LDAP filter: ${JSON.stringify(filter)}`);
+    
+    // Create the filter
+    const newFilter = await db.insert(ldapFilters).values({
+      ...filter,
+      currentVersion: 1,
+      modifiedAt: new Date(),
+    }).returning();
+    
+    // Also create the initial revision
+    await this.createLdapFilterRevision({
+      filterId: newFilter[0].id,
+      version: 1,
+      filter: filter.filter,
+      ldapFilter: filter.ldapFilter,
+      createdBy: filter.createdBy,
+      comment: "Initial version"
+    });
+    
+    // Invalidate the list cache
+    await invalidateCache(`ldapFilters:${filter.connectionId}`);
+    
+    return newFilter[0];
+  }
+  
+  async updateLdapFilter(id: number, filter: Partial<LdapFilter>): Promise<LdapFilter | undefined> {
+    debug(`Updating LDAP filter ${id}: ${JSON.stringify(filter)}`);
+    
+    // Get the current filter
+    const currentFilter = await this.getLdapFilter(id);
+    if (!currentFilter) {
+      return undefined;
+    }
+    
+    // If the filter structure or LDAP filter is changing, increment the version
+    const currentVersion = currentFilter.currentVersion || 1;
+    const newVersion = (filter.filter || filter.ldapFilter) 
+      ? currentVersion + 1 
+      : currentVersion;
+    
+    // Update the filter
+    const result = await db.update(ldapFilters)
+      .set({
+        ...filter,
+        currentVersion: newVersion,
+        modifiedAt: new Date()
+      })
+      .where(eq(ldapFilters.id, id))
+      .returning();
+    
+    // If version incremented, create a new revision
+    if (newVersion > (currentFilter.currentVersion || 0) && filter.filter && filter.ldapFilter) {
+      await this.createLdapFilterRevision({
+        filterId: id,
+        version: newVersion,
+        filter: filter.filter,
+        ldapFilter: filter.ldapFilter,
+        createdBy: filter.modifiedBy,
+        comment: `Version ${newVersion}`
+      });
+    }
+    
+    // Invalidate the cache
+    await invalidateCache(`ldapFilters:${currentFilter.connectionId}`);
+    await invalidateCache(`ldapFilter:${id}`);
+    
+    return result.length > 0 ? result[0] : undefined;
+  }
+  
+  async deleteLdapFilter(id: number): Promise<boolean> {
+    debug(`Deleting LDAP filter ${id}`);
+    
+    // Get the filter first for connection ID
+    const filter = await this.getLdapFilter(id);
+    if (!filter) {
+      return false;
+    }
+    
+    // Delete the filter (related revisions will be cascade deleted)
+    const result = await db.delete(ldapFilters)
+      .where(eq(ldapFilters.id, id))
+      .returning({ id: ldapFilters.id });
+    
+    // Invalidate the cache
+    if (result.length > 0) {
+      await invalidateCache(`ldapFilters:${filter.connectionId}`);
+      await invalidateCache(`ldapFilter:${id}`);
+      await invalidateCache(`ldapFilterRevisions:${id}`);
+      return true;
+    }
+    
+    return false;
+  }
+  
+  async listLdapFilters(connectionId: number): Promise<LdapFilter[]> {
+    const cacheKey = `ldapFilters:${connectionId}`;
+    
+    // Try to get from cache first
+    const cachedData = await getCached<LdapFilter[]>(cacheKey);
+    if (cachedData) {
+      debug(`Cache hit for ${cacheKey}`);
+      return cachedData;
+    }
+    
+    const filters = await db.select()
+      .from(ldapFilters)
+      .where(eq(ldapFilters.connectionId, connectionId));
+    
+    // Cache the result
+    await setCached(cacheKey, filters, CACHE_TTL.MEDIUM);
+    return filters;
+  }
+  
+  async getLdapFilterRevisions(filterId: number): Promise<LdapFilterRevision[]> {
+    const cacheKey = `ldapFilterRevisions:${filterId}`;
+    
+    // Try to get from cache first
+    const cachedData = await getCached<LdapFilterRevision[]>(cacheKey);
+    if (cachedData) {
+      debug(`Cache hit for ${cacheKey}`);
+      return cachedData;
+    }
+    
+    const revisions = await db.select()
+      .from(ldapFilterRevisions)
+      .where(eq(ldapFilterRevisions.filterId, filterId))
+      .orderBy(ldapFilterRevisions.version);
+    
+    // Cache the result
+    await setCached(cacheKey, revisions, CACHE_TTL.MEDIUM);
+    return revisions;
+  }
+  
+  async getLdapFilterRevision(id: number): Promise<LdapFilterRevision | undefined> {
+    debug(`Getting LDAP filter revision ${id}`);
+    const result = await db.select().from(ldapFilterRevisions).where(eq(ldapFilterRevisions.id, id));
+    return result.length > 0 ? result[0] : undefined;
+  }
+  
+  async createLdapFilterRevision(revision: InsertLdapFilterRevision): Promise<LdapFilterRevision> {
+    debug(`Creating LDAP filter revision: ${JSON.stringify(revision)}`);
+    const result = await db.insert(ldapFilterRevisions)
+      .values({
+        ...revision,
+        createdAt: new Date()
+      })
+      .returning();
+    
+    // Invalidate cache for the revisions list
+    await invalidateCache(`ldapFilterRevisions:${revision.filterId}`);
+    
+    return result[0];
+  }
+  
+  async revertLdapFilterToRevision(filterId: number, revisionId: number): Promise<LdapFilter | undefined> {
+    debug(`Reverting LDAP filter ${filterId} to revision ${revisionId}`);
+    
+    // Get the current filter
+    const filter = await this.getLdapFilter(filterId);
+    if (!filter) {
+      return undefined;
+    }
+    
+    // Get the target revision
+    const revision = await this.getLdapFilterRevision(revisionId);
+    if (!revision || revision.filterId !== filterId) {
+      return undefined;
+    }
+    
+    // Create a new revision with the next version number
+    const currentVersion = filter.currentVersion || 1;
+    const newVersion = currentVersion + 1;
+    
+    // Update the filter with the revision data
+    const result = await db.update(ldapFilters)
+      .set({
+        filter: revision.filter as any,
+        ldapFilter: revision.ldapFilter,
+        currentVersion: newVersion,
+        modifiedAt: new Date()
+      })
+      .where(eq(ldapFilters.id, filterId))
+      .returning();
+    
+    // Create a new revision record
+    await this.createLdapFilterRevision({
+      filterId,
+      version: newVersion,
+      filter: revision.filter as any,
+      ldapFilter: revision.ldapFilter,
+      createdBy: filter.modifiedBy,
+      comment: `Reverted to revision ${revision.version}`
+    });
+    
+    // Invalidate caches
+    await invalidateCache(`ldapFilters:${filter.connectionId}`);
+    await invalidateCache(`ldapFilter:${filterId}`);
+    
+    return result.length > 0 ? result[0] : undefined;
+  }
+  
+  async testLdapFilter(connectionId: number, ldapFilter: string, objectClass: string): Promise<any[]> {
+    debug(`Testing LDAP filter for connection ${connectionId}, object class ${objectClass}: ${ldapFilter}`);
+    
+    // This is a placeholder. In a real implementation, this would connect to the LDAP server
+    // and execute the query. For now, we'll simulate it using our existing data.
+    
+    let results: any[] = [];
+    
+    switch (objectClass) {
+      case 'user':
+        results = await this.listAdUsers(connectionId);
+        break;
+      case 'group':
+        results = await this.listAdGroups(connectionId);
+        break;
+      case 'organizationalUnit':
+        results = await this.listAdOrgUnits(connectionId);
+        break;
+      case 'computer':
+        results = await this.listAdComputers(connectionId);
+        break;
+      case 'domain':
+        results = await this.listAdDomains(connectionId);
+        break;
+      default:
+        throw new Error(`Unsupported object class: ${objectClass}`);
+    }
+    
+    // In a real implementation, we'd use the ldapFilter to filter the results
+    // Here we're just returning all items since we don't have a LDAP filter parser
+    
+    // Adding log of the test
+    debug(`LDAP filter test returned ${results.length} results`);
+    
+    return results;
   }
 
   // AD Users

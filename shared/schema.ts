@@ -1,4 +1,4 @@
-import { pgTable, text, serial, integer, boolean, timestamp, jsonb, primaryKey } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, integer, boolean, timestamp, jsonb, json, primaryKey } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 import { relations } from "drizzle-orm";
@@ -288,3 +288,112 @@ export type AdDomain = typeof adDomains.$inferSelect;
 export type InsertAdDomain = z.infer<typeof insertAdDomainSchema>;
 export type Login = z.infer<typeof loginSchema>;
 export type ApiQuery = z.infer<typeof apiQuerySchema>;
+
+// LDAP Query Builder schemas
+export const ldapFilterObjectClasses = ["user", "group", "organizationalUnit", "computer", "domain"] as const;
+
+// LDAP Filter schema
+export const ldapFilters = pgTable("ldap_filters", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull(),
+  description: text("description").default(""),
+  connectionId: integer("connection_id").references(() => ldapConnections.id, { onDelete: "cascade" }).notNull(),
+  objectClass: text("object_class").notNull(),
+  currentVersion: integer("current_version").default(1),
+  filter: jsonb("filter").notNull(), // JSON representation of the filter structure
+  ldapFilter: text("ldap_filter").notNull(), // The actual LDAP filter string
+  createdAt: timestamp("created_at").defaultNow(),
+  createdBy: integer("created_by").references(() => users.id),
+  modifiedAt: timestamp("modified_at").defaultNow(),
+  modifiedBy: integer("modified_by").references(() => users.id),
+  isActive: boolean("is_active").default(true),
+});
+
+// LDAP Filter Revision schema - stores the history of filter changes
+export const ldapFilterRevisions = pgTable("ldap_filter_revisions", {
+  id: serial("id").primaryKey(),
+  filterId: integer("filter_id").references(() => ldapFilters.id, { onDelete: "cascade" }).notNull(),
+  version: integer("version").notNull(),
+  filter: jsonb("filter").notNull(), // Stores the filter structure
+  ldapFilter: text("ldap_filter").notNull(), // The actual LDAP filter string
+  createdAt: timestamp("created_at").defaultNow(),
+  createdBy: integer("created_by").references(() => users.id),
+  comment: text("comment"),
+});
+
+// LDAP Attribute schema - stores known attributes for connections
+export const ldapAttributes = pgTable("ldap_attributes", {
+  id: serial("id").primaryKey(),
+  connectionId: integer("connection_id").references(() => ldapConnections.id, { onDelete: "cascade" }).notNull(),
+  name: text("name").notNull(),
+  displayName: text("display_name"),
+  description: text("description"),
+  type: text("type"),
+  multiValued: boolean("multi_valued").default(false),
+  objectClass: text("object_class").notNull(),
+  isIndexed: boolean("is_indexed").default(false),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// Define relations
+export const ldapFiltersRelations = relations(ldapFilters, ({ one, many }) => ({
+  connection: one(ldapConnections, {
+    fields: [ldapFilters.connectionId],
+    references: [ldapConnections.id],
+  }),
+  creator: one(users, {
+    fields: [ldapFilters.createdBy],
+    references: [users.id],
+  }),
+  modifier: one(users, {
+    fields: [ldapFilters.modifiedBy],
+    references: [users.id],
+  }),
+  revisions: many(ldapFilterRevisions),
+}));
+
+export const ldapFilterRevisionsRelations = relations(ldapFilterRevisions, ({ one }) => ({
+  filter: one(ldapFilters, {
+    fields: [ldapFilterRevisions.filterId],
+    references: [ldapFilters.id],
+  }),
+  creator: one(users, {
+    fields: [ldapFilterRevisions.createdBy],
+    references: [users.id],
+  }),
+}));
+
+export const ldapAttributesRelations = relations(ldapAttributes, ({ one }) => ({
+  connection: one(ldapConnections, {
+    fields: [ldapAttributes.connectionId],
+    references: [ldapConnections.id],
+  }),
+}));
+
+// Generate insertion schemas
+export const insertLdapFilterSchema = createInsertSchema(ldapFilters).omit({ 
+  id: true, 
+  createdAt: true, 
+  modifiedAt: true,
+  currentVersion: true 
+});
+
+export const insertLdapFilterRevisionSchema = createInsertSchema(ldapFilterRevisions).omit({ 
+  id: true, 
+  createdAt: true 
+});
+
+export const insertLdapAttributeSchema = createInsertSchema(ldapAttributes).omit({ 
+  id: true, 
+  createdAt: true, 
+  updatedAt: true 
+});
+
+// Export types
+export type LdapFilter = typeof ldapFilters.$inferSelect;
+export type InsertLdapFilter = z.infer<typeof insertLdapFilterSchema>;
+export type LdapFilterRevision = typeof ldapFilterRevisions.$inferSelect;
+export type InsertLdapFilterRevision = z.infer<typeof insertLdapFilterRevisionSchema>;
+export type LdapAttribute = typeof ldapAttributes.$inferSelect;
+export type InsertLdapAttribute = z.infer<typeof insertLdapAttributeSchema>;
