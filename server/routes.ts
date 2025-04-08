@@ -846,6 +846,747 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  /**
+   * @swagger
+   * /api/connections/{connectionId}/ldap-attributes:
+   *   get:
+   *     summary: Get LDAP attributes for a specific object class
+   *     tags: [LDAP Query Builder]
+   *     security:
+   *       - cookieAuth: []
+   *     parameters:
+   *       - name: connectionId
+   *         in: path
+   *         required: true
+   *         schema:
+   *           type: integer
+   *       - name: objectClass
+   *         in: query
+   *         required: true
+   *         schema:
+   *           type: string
+   *           enum: [user, group, organizationalUnit, computer, domain]
+   *     responses:
+   *       200:
+   *         description: List of LDAP attributes
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: array
+   *               items:
+   *                 $ref: '#/components/schemas/LdapAttribute'
+   *       401:
+   *         $ref: '#/components/responses/UnauthorizedError'
+   *       404:
+   *         $ref: '#/components/responses/NotFoundError'
+   */
+  app.get("/api/connections/:connectionId/ldap-attributes", requireAuth, async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const connectionId = parseInt(req.params.connectionId);
+      const objectClass = req.query.objectClass as string;
+      
+      if (!objectClass) {
+        return res.status(400).json({ message: "objectClass parameter is required" });
+      }
+      
+      // Verify the connection exists
+      const connection = await storage.getLdapConnection(connectionId);
+      if (!connection) {
+        return res.status(404).json({ message: "LDAP connection not found" });
+      }
+      
+      const attributes = await storage.getLdapAttributes(connectionId, objectClass);
+      res.json(attributes);
+    } catch (error) {
+      next(error);
+    }
+  });
+  
+  /**
+   * @swagger
+   * /api/connections/{connectionId}/ldap-attributes:
+   *   post:
+   *     summary: Create a new LDAP attribute
+   *     tags: [LDAP Query Builder]
+   *     security:
+   *       - cookieAuth: []
+   *     parameters:
+   *       - name: connectionId
+   *         in: path
+   *         required: true
+   *         schema:
+   *           type: integer
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             required:
+   *               - name
+   *               - objectClass
+   *             properties:
+   *               name:
+   *                 type: string
+   *               displayName:
+   *                 type: string
+   *               description:
+   *                 type: string
+   *               type:
+   *                 type: string
+   *               multiValued:
+   *                 type: boolean
+   *               objectClass:
+   *                 type: string
+   *                 enum: [user, group, organizationalUnit, computer, domain]
+   *               isIndexed:
+   *                 type: boolean
+   *     responses:
+   *       201:
+   *         description: Attribute created successfully
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/LdapAttribute'
+   *       400:
+   *         $ref: '#/components/responses/BadRequestError'
+   *       401:
+   *         $ref: '#/components/responses/UnauthorizedError'
+   */
+  app.post("/api/connections/:connectionId/ldap-attributes", requireAdmin, async (req, res, next) => {
+    try {
+      const connectionId = parseInt(req.params.connectionId);
+      
+      // Verify the connection exists
+      const connection = await storage.getLdapConnection(connectionId);
+      if (!connection) {
+        return res.status(404).json({ message: "LDAP connection not found" });
+      }
+      
+      const attribute = await storage.createLdapAttribute({
+        ...req.body,
+        connectionId
+      });
+      
+      res.status(201).json(attribute);
+    } catch (error) {
+      next(error);
+    }
+  });
+  
+  /**
+   * @swagger
+   * /api/ldap-attributes/{id}:
+   *   put:
+   *     summary: Update an LDAP attribute
+   *     tags: [LDAP Query Builder]
+   *     security:
+   *       - cookieAuth: []
+   *     parameters:
+   *       - name: id
+   *         in: path
+   *         required: true
+   *         schema:
+   *           type: integer
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             properties:
+   *               displayName:
+   *                 type: string
+   *               description:
+   *                 type: string
+   *               type:
+   *                 type: string
+   *               multiValued:
+   *                 type: boolean
+   *               isIndexed:
+   *                 type: boolean
+   *     responses:
+   *       200:
+   *         description: Attribute updated successfully
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/LdapAttribute'
+   *       400:
+   *         $ref: '#/components/responses/BadRequestError'
+   *       401:
+   *         $ref: '#/components/responses/UnauthorizedError'
+   *       404:
+   *         $ref: '#/components/responses/NotFoundError'
+   */
+  app.put("/api/ldap-attributes/:id", requireAdmin, async (req, res, next) => {
+    try {
+      const id = parseInt(req.params.id);
+      const updatedAttribute = await storage.updateLdapAttribute(id, req.body);
+      
+      if (!updatedAttribute) {
+        return res.status(404).json({ message: "LDAP attribute not found" });
+      }
+      
+      res.json(updatedAttribute);
+    } catch (error) {
+      next(error);
+    }
+  });
+  
+  /**
+   * @swagger
+   * /api/ldap-attributes/{id}:
+   *   delete:
+   *     summary: Delete an LDAP attribute
+   *     tags: [LDAP Query Builder]
+   *     security:
+   *       - cookieAuth: []
+   *     parameters:
+   *       - name: id
+   *         in: path
+   *         required: true
+   *         schema:
+   *           type: integer
+   *     responses:
+   *       200:
+   *         description: Attribute deleted successfully
+   *       401:
+   *         $ref: '#/components/responses/UnauthorizedError'
+   *       404:
+   *         $ref: '#/components/responses/NotFoundError'
+   */
+  app.delete("/api/ldap-attributes/:id", requireAdmin, async (req, res, next) => {
+    try {
+      const id = parseInt(req.params.id);
+      const deleted = await storage.deleteLdapAttribute(id);
+      
+      if (!deleted) {
+        return res.status(404).json({ message: "LDAP attribute not found" });
+      }
+      
+      res.json({ success: true });
+    } catch (error) {
+      next(error);
+    }
+  });
+  
+  /**
+   * @swagger
+   * /api/connections/{connectionId}/ldap-filters:
+   *   get:
+   *     summary: List LDAP filters for a connection
+   *     tags: [LDAP Query Builder]
+   *     security:
+   *       - cookieAuth: []
+   *     parameters:
+   *       - name: connectionId
+   *         in: path
+   *         required: true
+   *         schema:
+   *           type: integer
+   *     responses:
+   *       200:
+   *         description: List of LDAP filters
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: array
+   *               items:
+   *                 $ref: '#/components/schemas/LdapFilter'
+   *       401:
+   *         $ref: '#/components/responses/UnauthorizedError'
+   *       404:
+   *         $ref: '#/components/responses/NotFoundError'
+   */
+  /**
+   * @swagger
+   * /api/connections/{connectionId}/test-filter:
+   *   post:
+   *     summary: Test an LDAP filter against a connection
+   *     tags: [LDAP Query Builder]
+   *     security:
+   *       - cookieAuth: []
+   *     parameters:
+   *       - name: connectionId
+   *         in: path
+   *         required: true
+   *         schema:
+   *           type: integer
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             required:
+   *               - ldapFilter
+   *               - objectClass
+   *             properties:
+   *               ldapFilter:
+   *                 type: string
+   *               objectClass:
+   *                 type: string
+   *                 enum: [user, group, organizationalUnit, computer, domain]
+   *     responses:
+   *       200:
+   *         description: Filter test results
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: array
+   *               items:
+   *                 type: object
+   *       400:
+   *         $ref: '#/components/responses/BadRequestError'
+   *       401:
+   *         $ref: '#/components/responses/UnauthorizedError'
+   *       404:
+   *         $ref: '#/components/responses/NotFoundError'
+   */
+  app.post("/api/connections/:connectionId/test-filter", requireAuth, async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const connectionId = parseInt(req.params.connectionId);
+      const { ldapFilter, objectClass } = req.body;
+      
+      if (!ldapFilter || !objectClass) {
+        return res.status(400).json({ message: "ldapFilter and objectClass are required" });
+      }
+      
+      // Verify the connection exists
+      const connection = await storage.getLdapConnection(connectionId);
+      if (!connection) {
+        return res.status(404).json({ message: "LDAP connection not found" });
+      }
+      
+      // Test the filter
+      const results = await storage.testLdapFilter(connectionId, ldapFilter, objectClass);
+      res.json(results);
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.get("/api/connections/:connectionId/ldap-filters", requireAuth, async (req, res, next) => {
+    try {
+      const connectionId = parseInt(req.params.connectionId);
+      
+      // Verify the connection exists
+      const connection = await storage.getLdapConnection(connectionId);
+      if (!connection) {
+        return res.status(404).json({ message: "LDAP connection not found" });
+      }
+      
+      const filters = await storage.listLdapFilters(connectionId);
+      res.json(filters);
+    } catch (error) {
+      next(error);
+    }
+  });
+  
+  /**
+   * @swagger
+   * /api/connections/{connectionId}/ldap-filters:
+   *   post:
+   *     summary: Create a new LDAP filter
+   *     tags: [LDAP Query Builder]
+   *     security:
+   *       - cookieAuth: []
+   *     parameters:
+   *       - name: connectionId
+   *         in: path
+   *         required: true
+   *         schema:
+   *           type: integer
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             required:
+   *               - name
+   *               - objectClass
+   *               - filter
+   *               - ldapFilter
+   *             properties:
+   *               name:
+   *                 type: string
+   *               description:
+   *                 type: string
+   *               objectClass:
+   *                 type: string
+   *                 enum: [user, group, organizationalUnit, computer, domain]
+   *               filter:
+   *                 type: object
+   *               ldapFilter:
+   *                 type: string
+   *     responses:
+   *       201:
+   *         description: Filter created successfully
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/LdapFilter'
+   *       400:
+   *         $ref: '#/components/responses/BadRequestError'
+   *       401:
+   *         $ref: '#/components/responses/UnauthorizedError'
+   */
+  app.post("/api/connections/:connectionId/ldap-filters", requireAuth, async (req, res, next) => {
+    try {
+      const connectionId = parseInt(req.params.connectionId);
+      
+      // Verify the connection exists
+      const connection = await storage.getLdapConnection(connectionId);
+      if (!connection) {
+        return res.status(404).json({ message: "LDAP connection not found" });
+      }
+      
+      const filter = await storage.createLdapFilter({
+        ...req.body,
+        connectionId,
+        createdBy: req.user.id,
+        modifiedBy: req.user.id
+      });
+      
+      res.status(201).json(filter);
+    } catch (error) {
+      next(error);
+    }
+  });
+  
+  /**
+   * @swagger
+   * /api/ldap-filters/{id}:
+   *   get:
+   *     summary: Get a specific LDAP filter
+   *     tags: [LDAP Query Builder]
+   *     security:
+   *       - cookieAuth: []
+   *     parameters:
+   *       - name: id
+   *         in: path
+   *         required: true
+   *         schema:
+   *           type: integer
+   *     responses:
+   *       200:
+   *         description: LDAP filter details
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/LdapFilter'
+   *       401:
+   *         $ref: '#/components/responses/UnauthorizedError'
+   *       404:
+   *         $ref: '#/components/responses/NotFoundError'
+   */
+  app.get("/api/ldap-filters/:id", requireAuth, async (req, res, next) => {
+    try {
+      const id = parseInt(req.params.id);
+      const filter = await storage.getLdapFilter(id);
+      
+      if (!filter) {
+        return res.status(404).json({ message: "LDAP filter not found" });
+      }
+      
+      res.json(filter);
+    } catch (error) {
+      next(error);
+    }
+  });
+  
+  /**
+   * @swagger
+   * /api/ldap-filters/{id}:
+   *   put:
+   *     summary: Update an LDAP filter
+   *     tags: [LDAP Query Builder]
+   *     security:
+   *       - cookieAuth: []
+   *     parameters:
+   *       - name: id
+   *         in: path
+   *         required: true
+   *         schema:
+   *           type: integer
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             properties:
+   *               name:
+   *                 type: string
+   *               description:
+   *                 type: string
+   *               filter:
+   *                 type: object
+   *               ldapFilter:
+   *                 type: string
+   *               isActive:
+   *                 type: boolean
+   *     responses:
+   *       200:
+   *         description: Filter updated successfully
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/LdapFilter'
+   *       400:
+   *         $ref: '#/components/responses/BadRequestError'
+   *       401:
+   *         $ref: '#/components/responses/UnauthorizedError'
+   *       404:
+   *         $ref: '#/components/responses/NotFoundError'
+   */
+  app.put("/api/ldap-filters/:id", requireAuth, async (req, res, next) => {
+    try {
+      const id = parseInt(req.params.id);
+      
+      // Check if the filter exists
+      const existingFilter = await storage.getLdapFilter(id);
+      if (!existingFilter) {
+        return res.status(404).json({ message: "LDAP filter not found" });
+      }
+      
+      // Update with the current user as modifier
+      const updatedFilter = await storage.updateLdapFilter(id, {
+        ...req.body,
+        modifiedBy: req.user.id
+      });
+      
+      res.json(updatedFilter);
+    } catch (error) {
+      next(error);
+    }
+  });
+  
+  /**
+   * @swagger
+   * /api/ldap-filters/{id}:
+   *   delete:
+   *     summary: Delete an LDAP filter
+   *     tags: [LDAP Query Builder]
+   *     security:
+   *       - cookieAuth: []
+   *     parameters:
+   *       - name: id
+   *         in: path
+   *         required: true
+   *         schema:
+   *           type: integer
+   *     responses:
+   *       200:
+   *         description: Filter deleted successfully
+   *       401:
+   *         $ref: '#/components/responses/UnauthorizedError'
+   *       404:
+   *         $ref: '#/components/responses/NotFoundError'
+   */
+  app.delete("/api/ldap-filters/:id", requireAuth, async (req, res, next) => {
+    try {
+      const id = parseInt(req.params.id);
+      
+      // Check if the filter exists and if the user is allowed to delete it
+      const filter = await storage.getLdapFilter(id);
+      if (!filter) {
+        return res.status(404).json({ message: "LDAP filter not found" });
+      }
+      
+      // Only allow the creator or admins to delete
+      if (filter.createdBy !== req.user.id) {
+        const userRole = await storage.getRole(req.user.roleId!);
+        if (userRole?.name !== "admin") {
+          return res.status(403).json({ message: "You are not authorized to delete this filter" });
+        }
+      }
+      
+      const deleted = await storage.deleteLdapFilter(id);
+      res.json({ success: deleted });
+    } catch (error) {
+      next(error);
+    }
+  });
+  
+  /**
+   * @swagger
+   * /api/ldap-filters/{filterId}/revisions:
+   *   get:
+   *     summary: Get the revision history for an LDAP filter
+   *     tags: [LDAP Query Builder]
+   *     security:
+   *       - cookieAuth: []
+   *     parameters:
+   *       - name: filterId
+   *         in: path
+   *         required: true
+   *         schema:
+   *           type: integer
+   *     responses:
+   *       200:
+   *         description: List of filter revisions
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: array
+   *               items:
+   *                 $ref: '#/components/schemas/LdapFilterRevision'
+   *       401:
+   *         $ref: '#/components/responses/UnauthorizedError'
+   *       404:
+   *         $ref: '#/components/responses/NotFoundError'
+   */
+  app.get("/api/ldap-filters/:filterId/revisions", requireAuth, async (req, res, next) => {
+    try {
+      const filterId = parseInt(req.params.filterId);
+      
+      // Check if the filter exists
+      const filter = await storage.getLdapFilter(filterId);
+      if (!filter) {
+        return res.status(404).json({ message: "LDAP filter not found" });
+      }
+      
+      const revisions = await storage.getLdapFilterRevisions(filterId);
+      res.json(revisions);
+    } catch (error) {
+      next(error);
+    }
+  });
+  
+  /**
+   * @swagger
+   * /api/ldap-filters/{filterId}/revert/{revisionId}:
+   *   post:
+   *     summary: Revert a filter to a previous revision
+   *     tags: [LDAP Query Builder]
+   *     security:
+   *       - cookieAuth: []
+   *     parameters:
+   *       - name: filterId
+   *         in: path
+   *         required: true
+   *         schema:
+   *           type: integer
+   *       - name: revisionId
+   *         in: path
+   *         required: true
+   *         schema:
+   *           type: integer
+   *     responses:
+   *       200:
+   *         description: Filter reverted successfully
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/LdapFilter'
+   *       401:
+   *         $ref: '#/components/responses/UnauthorizedError'
+   *       404:
+   *         $ref: '#/components/responses/NotFoundError'
+   */
+  app.post("/api/ldap-filters/:filterId/revert/:revisionId", requireAuth, async (req, res, next) => {
+    try {
+      const filterId = parseInt(req.params.filterId);
+      const revisionId = parseInt(req.params.revisionId);
+      
+      // Check if the filter exists
+      const filter = await storage.getLdapFilter(filterId);
+      if (!filter) {
+        return res.status(404).json({ message: "LDAP filter not found" });
+      }
+      
+      // Check if the user has permission to modify this filter
+      if (filter.createdBy !== req.user.id) {
+        const userRole = await storage.getRole(req.user.roleId!);
+        if (userRole?.name !== "admin") {
+          return res.status(403).json({ message: "You are not authorized to modify this filter" });
+        }
+      }
+      
+      // First update the modifiedBy to the current user
+      await storage.updateLdapFilter(filterId, { modifiedBy: req.user.id });
+      
+      // Then perform the revert
+      const revertedFilter = await storage.revertLdapFilterToRevision(filterId, revisionId);
+      
+      if (!revertedFilter) {
+        return res.status(404).json({ message: "Failed to revert filter or revision not found" });
+      }
+      
+      res.json(revertedFilter);
+    } catch (error) {
+      next(error);
+    }
+  });
+  
+  /**
+   * @swagger
+   * /api/connections/{connectionId}/test-ldap-filter:
+   *   post:
+   *     summary: Test an LDAP filter against a connection
+   *     tags: [LDAP Query Builder]
+   *     security:
+   *       - cookieAuth: []
+   *     parameters:
+   *       - name: connectionId
+   *         in: path
+   *         required: true
+   *         schema:
+   *           type: integer
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             required:
+   *               - ldapFilter
+   *               - objectClass
+   *             properties:
+   *               ldapFilter:
+   *                 type: string
+   *               objectClass:
+   *                 type: string
+   *                 enum: [user, group, organizationalUnit, computer, domain]
+   *     responses:
+   *       200:
+   *         description: Test results
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: array
+   *               items:
+   *                 type: object
+   *       400:
+   *         $ref: '#/components/responses/BadRequestError'
+   *       401:
+   *         $ref: '#/components/responses/UnauthorizedError'
+   */
+  app.post("/api/connections/:connectionId/test-ldap-filter", requireAuth, async (req, res, next) => {
+    try {
+      const connectionId = parseInt(req.params.connectionId);
+      const { ldapFilter, objectClass } = req.body;
+      
+      if (!ldapFilter || !objectClass) {
+        return res.status(400).json({ message: "ldapFilter and objectClass are required" });
+      }
+      
+      // Verify the connection exists
+      const connection = await storage.getLdapConnection(connectionId);
+      if (!connection) {
+        return res.status(404).json({ message: "LDAP connection not found" });
+      }
+      
+      const results = await storage.testLdapFilter(connectionId, ldapFilter, objectClass);
+      res.json(results);
+    } catch (error) {
+      next(error);
+    }
+  });
+
   const httpServer = createServer(app);
 
   return httpServer;
