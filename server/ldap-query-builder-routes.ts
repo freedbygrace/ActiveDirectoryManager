@@ -6,7 +6,7 @@ import {
   buildLdapFilter,
   LdapQueryBuilder
 } from "./ldap-filter-builder";
-import { connectToLdap, searchLdap } from "./ldap";
+import { connectToLdap, searchLdap, getLdapAvailableAttributes } from "./ldap";
 import { IStorage } from "./storage";
 import { InsertLdapQuery, LdapQuery, InsertLdapQueryVersion } from "@shared/schema";
 
@@ -506,6 +506,87 @@ export function registerLdapQueryBuilderRoutes(router: Router, storage: IStorage
    *       404:
    *         description: Connection not found
    */
+  /**
+   * @swagger
+   * /ldap-queries/attributes:
+   *   get:
+   *     summary: Get available LDAP attributes
+   *     description: Retrieve a list of available attributes for the specified object type from an LDAP connection
+   *     tags: [LDAP Query Builder]
+   *     security:
+   *       - bearerAuth: []
+   *     parameters:
+   *       - in: query
+   *         name: connectionId
+   *         required: true
+   *         schema:
+   *           type: integer
+   *         description: LDAP Connection ID
+   *       - in: query
+   *         name: targetObject
+   *         required: true
+   *         schema:
+   *           type: string
+   *           enum: [users, groups, computers, ous]
+   *         description: The type of object to get attributes for
+   *     responses:
+   *       200:
+   *         description: A list of available attributes
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: array
+   *               items:
+   *                 type: string
+   *       400:
+   *         description: Invalid request parameters
+   *       404:
+   *         description: Connection not found
+   */
+  router.get("/ldap-queries/attributes", hasPermission("read:ldap_objects"), async (req, res) => {
+    try {
+      const connectionId = parseInt(req.query.connectionId as string);
+      const targetObject = req.query.targetObject as "users" | "groups" | "computers" | "ous";
+      
+      if (isNaN(connectionId)) {
+        return res.status(400).json({ error: "Invalid connection ID" });
+      }
+      
+      if (!targetObject || !["users", "groups", "computers", "ous"].includes(targetObject)) {
+        return res.status(400).json({ error: "Invalid target object type" });
+      }
+      
+      // Get the connection
+      const connection = await storage.getLdapConnection(connectionId);
+      if (!connection) {
+        return res.status(404).json({ error: "LDAP connection not found" });
+      }
+      
+      // Connect to LDAP
+      try {
+        const client = await connectToLdap(connection);
+        
+        // Get available attributes
+        const attributes = await getLdapAvailableAttributes(client, targetObject);
+        
+        // Close the connection
+        client.destroy();
+        
+        // Return the attributes
+        res.json(attributes);
+      } catch (error) {
+        console.error("Error connecting to LDAP:", error);
+        return res.status(500).json({ 
+          error: "Failed to connect to LDAP server", 
+          details: error instanceof Error ? error.message : String(error)
+        });
+      }
+    } catch (error) {
+      console.error("Error getting LDAP attributes:", error);
+      res.status(500).json({ error: "Failed to retrieve LDAP attributes" });
+    }
+  });
+
   router.post("/ldap-queries/test", hasPermission("read:ldap_objects"), async (req, res) => {
     try {
       const { connectionId, targetObject, filter, limit = 100, properties = [] } = req.body;
