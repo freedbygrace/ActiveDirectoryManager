@@ -104,14 +104,11 @@ export interface IStorage {
   updateAdDomain(id: number, domain: Partial<AdDomain>): Promise<AdDomain | undefined>;
   deleteAdDomain(id: number): Promise<boolean>;
   listAdDomains(connectionId: number, query?: any): Promise<AdDomain[]>;
-
-  // Session store
-  sessionStore: any;
 }
 
 // Database Storage implementation
 export class DatabaseStorage implements IStorage {
-  sessionStore: any;
+  sessionStore: session.Store;
 
   constructor() {
     this.sessionStore = new PostgresStore({
