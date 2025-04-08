@@ -1,4 +1,5 @@
-import { Switch, Route } from "wouter";
+import { useState, useEffect } from "react";
+import { Switch, Route, useLocation } from "wouter";
 import { Toaster } from "@/components/ui/toaster";
 import NotFound from "@/pages/not-found";
 import AuthPage from "@/pages/auth-page";
@@ -13,6 +14,7 @@ import LdapConnectionsPage from "@/pages/ldap-connections-page";
 import SettingsPage from "@/pages/settings-page";
 import UserManagementPage from "@/pages/user-management-page";
 import { ProtectedRoute } from "./lib/protected-route";
+import { Loader2 } from "lucide-react";
 
 function Router() {
   return (
