@@ -10,25 +10,11 @@ import { connectToLdap, searchLdap, getLdapAvailableAttributes } from "./ldap";
 import { IStorage } from "./storage";
 import { InsertLdapQuery, LdapQuery, InsertLdapQueryVersion } from "@shared/schema";
 
-// Use middleware to check permissions
+import { requirePermission } from "./authorization";
+
+// Use the proper auth middleware from authorization.ts with option to allow API tokens
 function hasPermission(permission: string) {
-  return (req: any, res: any, next: any) => {
-    // Check if the user is authenticated via passport session or has a valid API token
-    if (
-      // Check for authenticated session (safely check if isAuthenticated is a function first)
-      (typeof req.isAuthenticated === 'function' && req.isAuthenticated()) ||
-      // Or check for existing user object (set by token auth)
-      req.user ||
-      // Or check for authorization header (token auth)
-      req.headers.authorization
-    ) {
-      // In a real implementation, this would check the user's permissions against the required permission
-      return next();
-    }
-    
-    // If not authenticated, return 401 Unauthorized
-    return res.status(401).json({ error: "Unauthorized" });
-  };
+  return requirePermission(permission, { allowApiToken: true });
 }
 
 export function registerLdapQueryBuilderRoutes(router: Router, storage: IStorage) {
