@@ -1,283 +1,248 @@
-import swaggerJsdoc from 'swagger-jsdoc';
-import swaggerUi from 'swagger-ui-express';
-import { Express } from 'express';
+import swaggerJsdoc from "swagger-jsdoc";
+import swaggerUi from "swagger-ui-express";
+import { Express } from "express";
 
-export const setupSwagger = (app: Express) => {
-  const options = {
-    definition: {
-      openapi: '3.0.0',
-      info: {
-        title: 'Active Directory Management API',
-        version: '1.0.0',
-        description: 'RESTful API for managing Active Directory resources',
-        contact: {
-          name: 'API Support',
-          email: 'support@example.com'
-        }
+// Swagger definition
+const swaggerOptions = {
+  definition: {
+    openapi: "3.0.0",
+    info: {
+      title: "Active Directory Management API",
+      version: "1.0.0",
+      description: "REST API for managing Active Directory resources",
+      contact: {
+        name: "API Support",
+        email: "support@example.com",
       },
-      servers: [
-        {
-          url: '/api',
-          description: 'API Server'
-        }
-      ],
-      components: {
-        securitySchemes: {
-          bearerAuth: {
-            type: 'http',
-            scheme: 'bearer',
-            bearerFormat: 'JWT'
-          }
-        },
-        schemas: {
-          User: {
-            type: 'object',
-            properties: {
-              id: {
-                type: 'integer',
-                description: 'User ID'
-              },
-              username: {
-                type: 'string',
-                description: 'Username'
-              },
-              email: {
-                type: 'string',
-                description: 'Email address'
-              },
-              isAdmin: {
-                type: 'boolean',
-                description: 'Admin status'
-              },
-              createdAt: {
-                type: 'string',
-                format: 'date-time',
-                description: 'Creation date'
-              }
-            }
-          },
-          ApiToken: {
-            type: 'object',
-            properties: {
-              id: {
-                type: 'integer',
-                description: 'Token ID'
-              },
-              name: {
-                type: 'string',
-                description: 'Token name'
-              },
-              token: {
-                type: 'string',
-                description: 'The actual token'
-              },
-              userId: {
-                type: 'integer',
-                description: 'User ID that owns the token'
-              },
-              createdAt: {
-                type: 'string',
-                format: 'date-time',
-                description: 'Creation date'
-              },
-              lastUsedAt: {
-                type: 'string',
-                format: 'date-time',
-                description: 'Last used date'
-              },
-              expiresAt: {
-                type: 'string',
-                format: 'date-time',
-                description: 'Expiration date'
-              }
-            }
-          },
-          LdapConnection: {
-            type: 'object',
-            properties: {
-              id: {
-                type: 'integer',
-                description: 'Connection ID'
-              },
-              name: {
-                type: 'string',
-                description: 'Connection name'
-              },
-              server: {
-                type: 'string',
-                description: 'Server hostname/IP'
-              },
-              port: {
-                type: 'integer',
-                description: 'Server port'
-              },
-              authType: {
-                type: 'string',
-                description: 'Authentication type'
-              },
-              username: {
-                type: 'string',
-                description: 'Username'
-              },
-              baseDN: {
-                type: 'string',
-                description: 'Base Distinguished Name'
-              },
-              useTLS: {
-                type: 'boolean',
-                description: 'Use TLS/SSL'
-              },
-              status: {
-                type: 'string',
-                description: 'Connection status'
-              },
-              lastConnected: {
-                type: 'string',
-                format: 'date-time',
-                description: 'Last connected timestamp'
-              }
-            }
-          },
-          ActivityLog: {
-            type: 'object',
-            properties: {
-              id: {
-                type: 'integer',
-                description: 'Log ID'
-              },
-              action: {
-                type: 'string',
-                description: 'Action performed'
-              },
-              resource: {
-                type: 'string',
-                description: 'Resource name'
-              },
-              resourceType: {
-                type: 'string',
-                description: 'Resource type'
-              },
-              userId: {
-                type: 'integer',
-                description: 'User ID'
-              },
-              username: {
-                type: 'string',
-                description: 'Username'
-              },
-              status: {
-                type: 'string',
-                description: 'Status'
-              },
-              details: {
-                type: 'object',
-                description: 'Additional details'
-              },
-              timestamp: {
-                type: 'string',
-                format: 'date-time',
-                description: 'Timestamp'
-              }
-            }
-          },
-          LdapUser: {
-            type: 'object',
-            properties: {
-              cn: {
-                type: 'string',
-                description: 'Common Name'
-              },
-              sAMAccountName: {
-                type: 'string',
-                description: 'SAM Account Name'
-              },
-              mail: {
-                type: 'string',
-                description: 'Email address'
-              },
-              distinguishedName: {
-                type: 'string',
-                description: 'Distinguished Name'
-              }
-            }
-          },
-          LdapGroup: {
-            type: 'object',
-            properties: {
-              cn: {
-                type: 'string',
-                description: 'Common Name'
-              },
-              distinguishedName: {
-                type: 'string',
-                description: 'Distinguished Name'
-              },
-              member: {
-                type: 'array',
-                items: {
-                  type: 'string'
-                },
-                description: 'Group members'
-              }
-            }
-          },
-          LdapOU: {
-            type: 'object',
-            properties: {
-              ou: {
-                type: 'string',
-                description: 'Organizational Unit name'
-              },
-              distinguishedName: {
-                type: 'string',
-                description: 'Distinguished Name'
-              }
-            }
-          },
-          LdapComputer: {
-            type: 'object',
-            properties: {
-              cn: {
-                type: 'string',
-                description: 'Computer name'
-              },
-              distinguishedName: {
-                type: 'string',
-                description: 'Distinguished Name'
-              },
-              operatingSystem: {
-                type: 'string',
-                description: 'Operating System'
-              }
-            }
-          },
-          Error: {
-            type: 'object',
-            properties: {
-              message: {
-                type: 'string',
-                description: 'Error message'
-              }
-            }
-          }
-        }
-      },
-      security: [
-        {
-          bearerAuth: []
-        }
-      ]
     },
-    apis: ['./server/api.ts']
-  };
+    servers: [
+      {
+        url: "/api",
+        description: "API base URL",
+      },
+    ],
+    components: {
+      securitySchemes: {
+        bearerAuth: {
+          type: "http",
+          scheme: "bearer",
+          bearerFormat: "JWT",
+        },
+        cookieAuth: {
+          type: "apiKey",
+          in: "cookie",
+          name: "connect.sid",
+        },
+      },
+      schemas: {
+        User: {
+          type: "object",
+          properties: {
+            id: { type: "integer" },
+            username: { type: "string" },
+            email: { type: "string" },
+            fullName: { type: "string" },
+            role: { type: "string" },
+            createdAt: { type: "string", format: "date-time" },
+          },
+        },
+        ApiToken: {
+          type: "object",
+          properties: {
+            id: { type: "integer" },
+            name: { type: "string" },
+            token: { type: "string" },
+            userId: { type: "integer" },
+            permissions: { type: "object" },
+            expiresAt: { type: "string", format: "date-time" },
+            createdAt: { type: "string", format: "date-time" },
+          },
+        },
+        LdapConnection: {
+          type: "object",
+          properties: {
+            id: { type: "integer" },
+            name: { type: "string" },
+            server: { type: "string" },
+            domain: { type: "string" },
+            port: { type: "integer" },
+            useSSL: { type: "boolean" },
+            username: { type: "string" },
+            status: { type: "string", enum: ["connected", "disconnected"] },
+            lastConnected: { type: "string", format: "date-time" },
+            createdAt: { type: "string", format: "date-time" },
+          },
+        },
+        AdUser: {
+          type: "object",
+          properties: {
+            id: { type: "integer" },
+            connectionId: { type: "integer" },
+            distinguishedName: { type: "string" },
+            sAMAccountName: { type: "string" },
+            userPrincipalName: { type: "string" },
+            givenName: { type: "string" },
+            surname: { type: "string" },
+            displayName: { type: "string" },
+            email: { type: "string" },
+            enabled: { type: "boolean" },
+            lastLogon: { type: "string", format: "date-time" },
+            memberOf: { type: "array", items: { type: "string" } },
+            adProperties: { type: "object" },
+          },
+        },
+        AdGroup: {
+          type: "object",
+          properties: {
+            id: { type: "integer" },
+            connectionId: { type: "integer" },
+            distinguishedName: { type: "string" },
+            sAMAccountName: { type: "string" },
+            groupType: { type: "string" },
+            description: { type: "string" },
+            members: { type: "array", items: { type: "string" } },
+            adProperties: { type: "object" },
+          },
+        },
+        AdOrgUnit: {
+          type: "object",
+          properties: {
+            id: { type: "integer" },
+            connectionId: { type: "integer" },
+            distinguishedName: { type: "string" },
+            name: { type: "string" },
+            description: { type: "string" },
+            adProperties: { type: "object" },
+          },
+        },
+        AdComputer: {
+          type: "object",
+          properties: {
+            id: { type: "integer" },
+            connectionId: { type: "integer" },
+            distinguishedName: { type: "string" },
+            name: { type: "string" },
+            dnsHostName: { type: "string" },
+            operatingSystem: { type: "string" },
+            operatingSystemVersion: { type: "string" },
+            lastLogon: { type: "string", format: "date-time" },
+            enabled: { type: "boolean" },
+            adProperties: { type: "object" },
+          },
+        },
+        AdDomain: {
+          type: "object",
+          properties: {
+            id: { type: "integer" },
+            connectionId: { type: "integer" },
+            distinguishedName: { type: "string" },
+            name: { type: "string" },
+            netBIOSName: { type: "string" },
+            forestName: { type: "string" },
+            domainFunctionality: { type: "string" },
+            adProperties: { type: "object" },
+          },
+        },
+        Error: {
+          type: "object",
+          properties: {
+            message: { type: "string" },
+            errors: {
+              type: "array",
+              items: {
+                type: "object",
+                properties: {
+                  path: { type: "array", items: { type: "string" } },
+                  message: { type: "string" },
+                },
+              },
+            },
+          },
+        },
+      },
+      parameters: {
+        filterParam: {
+          name: "filter",
+          in: "query",
+          description: "Filter expression (e.g. name eq 'John')",
+          schema: { type: "string" },
+        },
+        selectParam: {
+          name: "select",
+          in: "query",
+          description: "Properties to select (comma-separated)",
+          schema: { type: "string" },
+        },
+        expandParam: {
+          name: "expand",
+          in: "query",
+          description: "Related entities to expand (comma-separated)",
+          schema: { type: "string" },
+        },
+        orderByParam: {
+          name: "orderBy",
+          in: "query",
+          description: "Property to order by (e.g. name asc)",
+          schema: { type: "string" },
+        },
+        topParam: {
+          name: "top",
+          in: "query",
+          description: "Number of records to return",
+          schema: { type: "integer" },
+        },
+        skipParam: {
+          name: "skip",
+          in: "query",
+          description: "Number of records to skip",
+          schema: { type: "integer" },
+        },
+      },
+      responses: {
+        UnauthorizedError: {
+          description: "Authentication required",
+          content: {
+            "application/json": {
+              schema: { $ref: "#/components/schemas/Error" },
+            },
+          },
+        },
+        BadRequestError: {
+          description: "Invalid request",
+          content: {
+            "application/json": {
+              schema: { $ref: "#/components/schemas/Error" },
+            },
+          },
+        },
+        NotFoundError: {
+          description: "Resource not found",
+          content: {
+            "application/json": {
+              schema: { $ref: "#/components/schemas/Error" },
+            },
+          },
+        },
+      },
+    },
+    security: [
+      {
+        bearerAuth: [],
+      },
+      {
+        cookieAuth: [],
+      },
+    ],
+  },
+  apis: ["./server/routes.ts"], // Path to the API routes
+};
 
-  const swaggerSpec = swaggerJsdoc(options);
-  
-  app.use('/swagger-ui', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
-  
-  // Serve the OpenAPI spec as JSON
-  app.get('/swagger.json', (req, res) => {
-    res.setHeader('Content-Type', 'application/json');
+const swaggerSpec = swaggerJsdoc(swaggerOptions);
+
+export function setupSwagger(app: Express) {
+  app.use("/api/docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+  app.get("/api/swagger.json", (req, res) => {
+    res.setHeader("Content-Type", "application/json");
     res.send(swaggerSpec);
   });
-};
+}
