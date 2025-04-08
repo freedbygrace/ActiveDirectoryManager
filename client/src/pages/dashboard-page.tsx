@@ -4,7 +4,7 @@ import StatsCard from "@/components/dashboard/stats-card";
 import ApiActivityCard from "@/components/dashboard/api-activity-card";
 import ApiTokensCard from "@/components/dashboard/api-tokens-card";
 import LdapConnectionsCard from "@/components/dashboard/ldap-connections-card";
-import ApiDocumentationCard from "@/components/dashboard/api-documentation-card";
+import { ApiDocumentationCard } from "@/components/dashboard/api-documentation-card";
 import { 
   Users, 
   UserPlus, 

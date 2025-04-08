@@ -1,69 +1,70 @@
-import { 
-  Card, 
-  CardContent, 
-  CardHeader, 
-  CardTitle 
-} from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { ArrowRight } from "lucide-react";
+import { Download, FileJson, BookOpen, Share2 } from "lucide-react";
+import { Link } from "wouter";
 
-export default function ApiDocumentationCard() {
+export function ApiDocumentationCard() {
   return (
-    <Card>
-      <CardHeader className="px-6 py-4 border-b flex justify-between items-center">
-        <CardTitle>API Documentation</CardTitle>
-        <Button 
-          variant="link" 
-          className="p-0 h-auto font-medium text-sm text-primary"
-          onClick={() => window.open("/api-docs", "_blank")}
-        >
-          View Full Documentation
-        </Button>
+    <Card className="shadow-lg">
+      <CardHeader className="bg-gradient-to-r from-slate-100 to-slate-50 dark:from-slate-800 dark:to-slate-900">
+        <CardTitle className="text-xl flex items-center gap-2">
+          <BookOpen className="w-5 h-5" /> API Documentation
+        </CardTitle>
+        <CardDescription>
+          Explore and download the OpenAPI specification
+        </CardDescription>
       </CardHeader>
-      <CardContent className="p-4">
-        <div className="bg-muted rounded-md p-4 font-mono text-sm overflow-x-auto">
-<div className="text-xs whitespace-pre-wrap">
-<p className="font-bold mb-2"># Active Directory Management API</p>
-
-<p className="font-bold mt-3 mb-2">## User Endpoints</p>
-
-<p className="mb-1">GET /api/users</p>
-<p className="mb-1">- Query Parameters:</p>
-<p className="ml-4 mb-1">- filter: Filter users by property values (e.g. ?filter=name eq 'John')</p>
-<p className="ml-4 mb-1">- select: Select specific properties to return (e.g. ?select=id,name,email)</p>
-<p className="ml-4 mb-1">- expand: Include related entities (e.g. ?expand=groups)</p>
-<p className="ml-4 mb-1">- orderBy: Order results (e.g. ?orderBy=name asc)</p>
-<p className="ml-4 mb-1">- top: Limit number of results (e.g. ?top=10)</p>
-<p className="ml-4 mb-1">- skip: Skip number of results (e.g. ?skip=10)</p>
-
-<p className="mt-3 mb-1">POST /api/users</p>
-<p className="mb-1">- Create a new user in Active Directory</p>
-<p className="mb-1">- Request body: User object</p>
-
-<p className="mt-3 mb-1">GET /api/users/{"{userId}"}</p>
-<p className="mb-1">- Get a specific user by ID</p>
-<p className="mb-1">- Query Parameters:</p>
-<p className="ml-4 mb-1">- select: Select specific properties to return</p>
-
-<p className="mt-3 mb-1">PUT /api/users/{"{userId}"}</p>
-<p className="mb-1">- Update a specific user</p>
-<p className="mb-1">- Request body: User object with updated properties</p>
-
-<p className="mt-3 mb-1">DELETE /api/users/{"{userId}"}</p>
-<p className="mb-1">- Delete a specific user</p>
-</div>
-        </div>
-        
-        <div className="mt-4 flex justify-end">
-          <Button 
-            variant="link" 
-            className="p-0 h-auto font-medium text-sm text-primary"
-            onClick={() => window.open("/api-docs", "_blank")}
-          >
-            Go to Swagger Documentation <ArrowRight className="ml-1 h-4 w-4" />
-          </Button>
+      <CardContent className="pt-6">
+        <div className="grid gap-4">
+          <div>
+            <h3 className="text-sm font-medium mb-2">Overview</h3>
+            <p className="text-sm text-muted-foreground">
+              The Active Directory Management API provides a comprehensive interface for managing users, groups, organizational units, computers, and domains in your Active Directory environment.
+            </p>
+          </div>
+          <div>
+            <h3 className="text-sm font-medium mb-2">Documentation Links</h3>
+            <div className="flex flex-col gap-2">
+              <a 
+                href="/api/docs" 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="text-sm text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 flex items-center gap-1"
+              >
+                <BookOpen className="w-4 h-4" /> Interactive API Documentation
+              </a>
+              <a 
+                href="/api/docs/more-info" 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="text-sm text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 flex items-center gap-1"
+              >
+                <FileJson className="w-4 h-4" /> Advanced Usage Guide
+              </a>
+            </div>
+          </div>
         </div>
       </CardContent>
+      <CardFooter className="flex flex-wrap gap-2">
+        <a href="/api/docs/download?format=json" download="ad-management-api-spec.json">
+          <Button variant="outline" size="sm" className="h-8">
+            <Download className="mr-2 h-3 w-3" />
+            JSON Spec
+          </Button>
+        </a>
+        <a href="/api/docs/download?format=yaml" download="ad-management-api-spec.yaml">
+          <Button variant="outline" size="sm" className="h-8">
+            <Download className="mr-2 h-3 w-3" />
+            YAML Spec
+          </Button>
+        </a>
+        <Button variant="outline" size="sm" className="h-8 ml-auto" asChild>
+          <Link to="/api-tokens">
+            <Share2 className="mr-2 h-3 w-3" />
+            Manage API Tokens
+          </Link>
+        </Button>
+      </CardFooter>
     </Card>
   );
 }

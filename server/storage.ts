@@ -3,7 +3,7 @@ import {
   LdapConnection, InsertLdapConnection, 
   AdUser, InsertAdUser, AdGroup, InsertAdGroup, 
   AdOrgUnit, InsertAdOrgUnit, AdComputer, InsertAdComputer, 
-  AdDomain, InsertAdDomain, Role,
+  AdDomain, InsertAdDomain, Role, ApiQuery,
   users, apiTokens, ldapConnections, adUsers, adGroups, adOrgUnits, adComputers, adDomains,
   roles
 } from "@shared/schema";
@@ -11,9 +11,14 @@ import session from "express-session";
 import createMemoryStore from "memorystore";
 import crypto from "crypto";
 import { db } from "./db";
-import { eq, and } from "drizzle-orm";
+import { eq, and, type SQL } from "drizzle-orm";
 import connectPg from "connect-pg-simple";
 import { Pool } from "@neondatabase/serverless";
+import { applyQueryOptions } from "./query-parser";
+import debugLib from 'debug';
+import { getCached, setCached, CACHE_TTL, invalidateCache, invalidateCachePattern } from './cache';
+
+const debug = debugLib('api:storage');
 
 // Memory store for sessions
 const MemoryStore = createMemoryStore(session);
@@ -214,28 +219,72 @@ export class DatabaseStorage implements IStorage {
     return result.length > 0;
   }
 
-  async listAdUsers(connectionId: number, query?: any): Promise<AdUser[]> {
-    let adUsersQuery = db.select().from(adUsers).where(eq(adUsers.connectionId, connectionId));
+  async listAdUsers(connectionId: number, query?: ApiQuery): Promise<AdUser[]> {
+    const cacheKey = `adUsers:${connectionId}:${JSON.stringify(query || {})}`;
     
-    // Handle filtering logic
-    if (query && query.select) {
-      // Note: This is a simplified implementation
-      // For production, you would need a more robust property selection mechanism
-      const users = await adUsersQuery;
-      const properties = query.select.split(',');
-      
-      return users.map(user => {
-        const result: any = { id: user.id };
-        properties.forEach((prop: string) => {
-          if ((user as any)[prop] !== undefined) {
-            result[prop] = (user as any)[prop];
-          }
-        });
-        return result as AdUser;
-      });
+    // Try to get from cache first
+    const cachedData = await getCached<AdUser[]>(cacheKey);
+    if (cachedData) {
+      debug(`Cache hit for ${cacheKey}`);
+      return cachedData;
     }
     
-    return adUsersQuery;
+    let baseQuery = db.select().from(adUsers)
+      .where(eq(adUsers.connectionId, connectionId));
+    
+    if (query) {
+      // Apply advanced filtering using the query parser
+      const { whereClause, orderClauses, limit, offset, selectedFields } = 
+        applyQueryOptions(adUsers, query);
+      
+      // Apply where conditions if any
+      if (whereClause) {
+        baseQuery = baseQuery.where(whereClause);
+      }
+      
+      // Apply ordering if any
+      if (orderClauses.length > 0) {
+        baseQuery = baseQuery.orderBy(...orderClauses);
+      }
+      
+      // Apply pagination if specified
+      if (limit !== undefined) {
+        baseQuery = baseQuery.limit(limit);
+      }
+      
+      if (offset !== undefined) {
+        baseQuery = baseQuery.offset(offset);
+      }
+      
+      // Execute the query
+      const users = await baseQuery;
+      
+      // Handle field selection if specified
+      if (selectedFields.length > 0) {
+        const result = users.map(user => {
+          const filtered: Partial<AdUser> = { id: user.id };
+          selectedFields.forEach(field => {
+            if (field in user) {
+              filtered[field as keyof AdUser] = user[field as keyof AdUser];
+            }
+          });
+          return filtered as AdUser;
+        });
+        
+        // Cache the result
+        await setCached(cacheKey, result, CACHE_TTL.MEDIUM);
+        return result;
+      }
+      
+      // Cache the result
+      await setCached(cacheKey, users, CACHE_TTL.MEDIUM);
+      return users;
+    }
+    
+    // No query params, just return all results
+    const users = await baseQuery;
+    await setCached(cacheKey, users, CACHE_TTL.MEDIUM);
+    return users;
   }
 
   // AD Groups
@@ -259,26 +308,72 @@ export class DatabaseStorage implements IStorage {
     return result.length > 0;
   }
 
-  async listAdGroups(connectionId: number, query?: any): Promise<AdGroup[]> {
-    let adGroupsQuery = db.select().from(adGroups).where(eq(adGroups.connectionId, connectionId));
+  async listAdGroups(connectionId: number, query?: ApiQuery): Promise<AdGroup[]> {
+    const cacheKey = `adGroups:${connectionId}:${JSON.stringify(query || {})}`;
     
-    // Handle filtering logic (similar to listAdUsers)
-    if (query && query.select) {
-      const groups = await adGroupsQuery;
-      const properties = query.select.split(',');
-      
-      return groups.map(group => {
-        const result: any = { id: group.id };
-        properties.forEach((prop: string) => {
-          if ((group as any)[prop] !== undefined) {
-            result[prop] = (group as any)[prop];
-          }
-        });
-        return result as AdGroup;
-      });
+    // Try to get from cache first
+    const cachedData = await getCached<AdGroup[]>(cacheKey);
+    if (cachedData) {
+      debug(`Cache hit for ${cacheKey}`);
+      return cachedData;
     }
     
-    return adGroupsQuery;
+    let baseQuery = db.select().from(adGroups)
+      .where(eq(adGroups.connectionId, connectionId));
+    
+    if (query) {
+      // Apply advanced filtering using the query parser
+      const { whereClause, orderClauses, limit, offset, selectedFields } = 
+        applyQueryOptions(adGroups, query);
+      
+      // Apply where conditions if any
+      if (whereClause) {
+        baseQuery = baseQuery.where(whereClause);
+      }
+      
+      // Apply ordering if any
+      if (orderClauses.length > 0) {
+        baseQuery = baseQuery.orderBy(...orderClauses);
+      }
+      
+      // Apply pagination if specified
+      if (limit !== undefined) {
+        baseQuery = baseQuery.limit(limit);
+      }
+      
+      if (offset !== undefined) {
+        baseQuery = baseQuery.offset(offset);
+      }
+      
+      // Execute the query
+      const groups = await baseQuery;
+      
+      // Handle field selection if specified
+      if (selectedFields.length > 0) {
+        const result = groups.map(group => {
+          const filtered: Partial<AdGroup> = { id: group.id };
+          selectedFields.forEach(field => {
+            if (field in group) {
+              filtered[field as keyof AdGroup] = group[field as keyof AdGroup];
+            }
+          });
+          return filtered as AdGroup;
+        });
+        
+        // Cache the result
+        await setCached(cacheKey, result, CACHE_TTL.MEDIUM);
+        return result;
+      }
+      
+      // Cache the result
+      await setCached(cacheKey, groups, CACHE_TTL.MEDIUM);
+      return groups;
+    }
+    
+    // No query params, just return all results
+    const groups = await baseQuery;
+    await setCached(cacheKey, groups, CACHE_TTL.MEDIUM);
+    return groups;
   }
 
   // AD Organizational Units
