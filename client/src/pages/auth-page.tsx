@@ -140,6 +140,7 @@ export default function AuthPage() {
       email: "",
       fullName: "",
       acceptTerms: false,
+      role: "user",
     },
   });
 
@@ -298,6 +299,7 @@ export default function AuthPage() {
                               <Input 
                                 placeholder="Enter your full name" 
                                 {...field} 
+                                value={field.value || ""}
                                 disabled={registerMutation.isPending}
                               />
                             </FormControl>
@@ -317,6 +319,7 @@ export default function AuthPage() {
                                 type="email" 
                                 placeholder="Enter your email" 
                                 {...field} 
+                                value={field.value || ""}
                                 disabled={registerMutation.isPending}
                               />
                             </FormControl>

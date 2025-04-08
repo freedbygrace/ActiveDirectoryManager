@@ -3,14 +3,26 @@ import {
   LdapConnection, InsertLdapConnection, 
   AdUser, InsertAdUser, AdGroup, InsertAdGroup, 
   AdOrgUnit, InsertAdOrgUnit, AdComputer, InsertAdComputer, 
-  AdDomain, InsertAdDomain 
+  AdDomain, InsertAdDomain,
+  users, apiTokens, ldapConnections, adUsers, adGroups, adOrgUnits, adComputers, adDomains
 } from "@shared/schema";
 import session from "express-session";
 import createMemoryStore from "memorystore";
 import crypto from "crypto";
+import { db } from "./db";
+import { eq, and } from "drizzle-orm";
+import connectPg from "connect-pg-simple";
+import { Pool } from "@neondatabase/serverless";
 
 // Memory store for sessions
 const MemoryStore = createMemoryStore(session);
+
+// PostgreSQL session store
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+});
+
+const PostgresStore = connectPg(session);
 
 export interface IStorage {
   // User management
@@ -71,417 +83,316 @@ export interface IStorage {
   listAdDomains(connectionId: number, query?: any): Promise<AdDomain[]>;
 
   // Session store
-  sessionStore: session.SessionStore;
+  sessionStore: any;
 }
 
-export class MemStorage implements IStorage {
-  private users: Map<number, User>;
-  private apiTokens: Map<number, ApiToken>;
-  private ldapConnections: Map<number, LdapConnection>;
-  private adUsers: Map<number, AdUser>;
-  private adGroups: Map<number, AdGroup>;
-  private adOrgUnits: Map<number, AdOrgUnit>;
-  private adComputers: Map<number, AdComputer>;
-  private adDomains: Map<number, AdDomain>;
-  sessionStore: session.SessionStore;
-  
-  private userCurrentId: number;
-  private tokenCurrentId: number;
-  private connectionCurrentId: number;
-  private adUserCurrentId: number;
-  private adGroupCurrentId: number;
-  private adOrgUnitCurrentId: number;
-  private adComputerCurrentId: number;
-  private adDomainCurrentId: number;
+// Database Storage implementation
+export class DatabaseStorage implements IStorage {
+  sessionStore: any;
 
   constructor() {
-    this.users = new Map();
-    this.apiTokens = new Map();
-    this.ldapConnections = new Map();
-    this.adUsers = new Map();
-    this.adGroups = new Map();
-    this.adOrgUnits = new Map();
-    this.adComputers = new Map();
-    this.adDomains = new Map();
-    
-    this.userCurrentId = 1;
-    this.tokenCurrentId = 1;
-    this.connectionCurrentId = 1;
-    this.adUserCurrentId = 1;
-    this.adGroupCurrentId = 1;
-    this.adOrgUnitCurrentId = 1;
-    this.adComputerCurrentId = 1;
-    this.adDomainCurrentId = 1;
-
-    this.sessionStore = new MemoryStore({
-      checkPeriod: 86400000 // 24h
+    this.sessionStore = new PostgresStore({
+      pool,
+      createTableIfMissing: true
     });
   }
 
   // User management
   async getUser(id: number): Promise<User | undefined> {
-    return this.users.get(id);
+    const result = await db.select().from(users).where(eq(users.id, id));
+    return result.length > 0 ? result[0] : undefined;
   }
 
   async getUserByUsername(username: string): Promise<User | undefined> {
-    return Array.from(this.users.values()).find(
-      (user) => user.username.toLowerCase() === username.toLowerCase(),
-    );
+    const result = await db.select().from(users).where(eq(users.username, username));
+    return result.length > 0 ? result[0] : undefined;
   }
 
   async createUser(insertUser: InsertUser): Promise<User> {
-    const id = this.userCurrentId++;
-    const now = new Date();
-    const user: User = { 
-      ...insertUser, 
-      id, 
-      createdAt: now,
-      role: insertUser.role || "user"
-    };
-    this.users.set(id, user);
-    return user;
+    const result = await db.insert(users).values(insertUser).returning();
+    return result[0];
   }
 
   async updateUser(id: number, userData: Partial<User>): Promise<User | undefined> {
-    const user = await this.getUser(id);
-    if (!user) return undefined;
-    
-    const updatedUser = { ...user, ...userData };
-    this.users.set(id, updatedUser);
-    return updatedUser;
+    const result = await db.update(users).set(userData).where(eq(users.id, id)).returning();
+    return result.length > 0 ? result[0] : undefined;
   }
 
   async deleteUser(id: number): Promise<boolean> {
-    return this.users.delete(id);
+    const result = await db.delete(users).where(eq(users.id, id)).returning({ id: users.id });
+    return result.length > 0;
   }
 
   async listUsers(): Promise<User[]> {
-    return Array.from(this.users.values());
+    return db.select().from(users);
   }
 
   // API Token management
   async getApiToken(id: number): Promise<ApiToken | undefined> {
-    return this.apiTokens.get(id);
+    const result = await db.select().from(apiTokens).where(eq(apiTokens.id, id));
+    return result.length > 0 ? result[0] : undefined;
   }
 
   async getApiTokenByToken(token: string): Promise<ApiToken | undefined> {
-    return Array.from(this.apiTokens.values()).find(
-      (apiToken) => apiToken.token === token,
-    );
+    const result = await db.select().from(apiTokens).where(eq(apiTokens.token, token));
+    return result.length > 0 ? result[0] : undefined;
   }
 
   async createApiToken(insertToken: InsertApiToken): Promise<ApiToken> {
-    const id = this.tokenCurrentId++;
-    const now = new Date();
-    const token: ApiToken = { ...insertToken, id, createdAt: now };
-    this.apiTokens.set(id, token);
-    return token;
+    const result = await db.insert(apiTokens).values(insertToken).returning();
+    return result[0];
   }
 
   async deleteApiToken(id: number): Promise<boolean> {
-    return this.apiTokens.delete(id);
+    const result = await db.delete(apiTokens).where(eq(apiTokens.id, id)).returning({ id: apiTokens.id });
+    return result.length > 0;
   }
 
   async listApiTokensByUserId(userId: number): Promise<ApiToken[]> {
-    return Array.from(this.apiTokens.values()).filter(
-      (token) => token.userId === userId,
-    );
+    return db.select().from(apiTokens).where(eq(apiTokens.userId, userId));
   }
 
   // LDAP Connection management
   async getLdapConnection(id: number): Promise<LdapConnection | undefined> {
-    return this.ldapConnections.get(id);
+    const result = await db.select().from(ldapConnections).where(eq(ldapConnections.id, id));
+    return result.length > 0 ? result[0] : undefined;
   }
 
   async createLdapConnection(insertConnection: InsertLdapConnection): Promise<LdapConnection> {
-    const id = this.connectionCurrentId++;
-    const now = new Date();
-    const connection: LdapConnection = { 
-      ...insertConnection, 
-      id, 
-      createdAt: now,
-      lastConnected: null,
-      status: "disconnected"
-    };
-    this.ldapConnections.set(id, connection);
-    return connection;
+    const result = await db.insert(ldapConnections).values(insertConnection).returning();
+    return result[0];
   }
 
   async updateLdapConnection(id: number, connectionData: Partial<LdapConnection>): Promise<LdapConnection | undefined> {
-    const connection = await this.getLdapConnection(id);
-    if (!connection) return undefined;
-    
-    const updatedConnection = { ...connection, ...connectionData };
-    this.ldapConnections.set(id, updatedConnection);
-    return updatedConnection;
+    const result = await db.update(ldapConnections).set(connectionData).where(eq(ldapConnections.id, id)).returning();
+    return result.length > 0 ? result[0] : undefined;
   }
 
   async deleteLdapConnection(id: number): Promise<boolean> {
-    return this.ldapConnections.delete(id);
+    const result = await db.delete(ldapConnections).where(eq(ldapConnections.id, id)).returning({ id: ldapConnections.id });
+    return result.length > 0;
   }
 
   async listLdapConnections(): Promise<LdapConnection[]> {
-    return Array.from(this.ldapConnections.values());
+    return db.select().from(ldapConnections);
   }
 
   // AD Users
   async getAdUser(id: number): Promise<AdUser | undefined> {
-    return this.adUsers.get(id);
+    const result = await db.select().from(adUsers).where(eq(adUsers.id, id));
+    return result.length > 0 ? result[0] : undefined;
   }
 
   async createAdUser(user: InsertAdUser): Promise<AdUser> {
-    const id = this.adUserCurrentId++;
-    const adUser: AdUser = { ...user, id };
-    this.adUsers.set(id, adUser);
-    return adUser;
+    const result = await db.insert(adUsers).values(user).returning();
+    return result[0];
   }
 
   async updateAdUser(id: number, userData: Partial<AdUser>): Promise<AdUser | undefined> {
-    const user = await this.getAdUser(id);
-    if (!user) return undefined;
-    
-    const updatedUser = { ...user, ...userData };
-    this.adUsers.set(id, updatedUser);
-    return updatedUser;
+    const result = await db.update(adUsers).set(userData).where(eq(adUsers.id, id)).returning();
+    return result.length > 0 ? result[0] : undefined;
   }
 
   async deleteAdUser(id: number): Promise<boolean> {
-    return this.adUsers.delete(id);
+    const result = await db.delete(adUsers).where(eq(adUsers.id, id)).returning({ id: adUsers.id });
+    return result.length > 0;
   }
 
   async listAdUsers(connectionId: number, query?: any): Promise<AdUser[]> {
-    let users = Array.from(this.adUsers.values()).filter(
-      (user) => user.connectionId === connectionId,
-    );
+    let adUsersQuery = db.select().from(adUsers).where(eq(adUsers.connectionId, connectionId));
     
-    // Apply filtering logic based on query
-    if (query) {
-      if (query.filter) {
-        // Simple filter implementation - can be expanded
-        const filterParts = query.filter.split(' ');
-        if (filterParts.length === 3) {
-          const [property, operator, value] = filterParts;
-          const unquotedValue = value.replace(/^'|'$/g, '');
-          
-          if (operator === 'eq') {
-            users = users.filter(user => (user as any)[property] === unquotedValue);
-          }
-        }
-      }
+    // Handle filtering logic
+    if (query && query.select) {
+      // Note: This is a simplified implementation
+      // For production, you would need a more robust property selection mechanism
+      const users = await adUsersQuery;
+      const properties = query.select.split(',');
       
-      // Apply property selection
-      if (query.select) {
-        const properties = query.select.split(',');
-        users = users.map(user => {
-          const result: any = { id: user.id };
-          properties.forEach(prop => {
-            if ((user as any)[prop] !== undefined) {
-              result[prop] = (user as any)[prop];
-            }
-          });
-          return result as AdUser;
+      return users.map(user => {
+        const result: any = { id: user.id };
+        properties.forEach(prop => {
+          if ((user as any)[prop] !== undefined) {
+            result[prop] = (user as any)[prop];
+          }
         });
-      }
+        return result as AdUser;
+      });
     }
     
-    return users;
+    return adUsersQuery;
   }
 
   // AD Groups
   async getAdGroup(id: number): Promise<AdGroup | undefined> {
-    return this.adGroups.get(id);
+    const result = await db.select().from(adGroups).where(eq(adGroups.id, id));
+    return result.length > 0 ? result[0] : undefined;
   }
 
   async createAdGroup(group: InsertAdGroup): Promise<AdGroup> {
-    const id = this.adGroupCurrentId++;
-    const adGroup: AdGroup = { ...group, id };
-    this.adGroups.set(id, adGroup);
-    return adGroup;
+    const result = await db.insert(adGroups).values(group).returning();
+    return result[0];
   }
 
   async updateAdGroup(id: number, groupData: Partial<AdGroup>): Promise<AdGroup | undefined> {
-    const group = await this.getAdGroup(id);
-    if (!group) return undefined;
-    
-    const updatedGroup = { ...group, ...groupData };
-    this.adGroups.set(id, updatedGroup);
-    return updatedGroup;
+    const result = await db.update(adGroups).set(groupData).where(eq(adGroups.id, id)).returning();
+    return result.length > 0 ? result[0] : undefined;
   }
 
   async deleteAdGroup(id: number): Promise<boolean> {
-    return this.adGroups.delete(id);
+    const result = await db.delete(adGroups).where(eq(adGroups.id, id)).returning({ id: adGroups.id });
+    return result.length > 0;
   }
 
   async listAdGroups(connectionId: number, query?: any): Promise<AdGroup[]> {
-    let groups = Array.from(this.adGroups.values()).filter(
-      (group) => group.connectionId === connectionId,
-    );
+    let adGroupsQuery = db.select().from(adGroups).where(eq(adGroups.connectionId, connectionId));
     
-    // Apply filtering logic
-    if (query) {
-      if (query.select) {
-        const properties = query.select.split(',');
-        groups = groups.map(group => {
-          const result: any = { id: group.id };
-          properties.forEach(prop => {
-            if ((group as any)[prop] !== undefined) {
-              result[prop] = (group as any)[prop];
-            }
-          });
-          return result as AdGroup;
+    // Handle filtering logic (similar to listAdUsers)
+    if (query && query.select) {
+      const groups = await adGroupsQuery;
+      const properties = query.select.split(',');
+      
+      return groups.map(group => {
+        const result: any = { id: group.id };
+        properties.forEach(prop => {
+          if ((group as any)[prop] !== undefined) {
+            result[prop] = (group as any)[prop];
+          }
         });
-      }
+        return result as AdGroup;
+      });
     }
     
-    return groups;
+    return adGroupsQuery;
   }
 
   // AD Organizational Units
   async getAdOrgUnit(id: number): Promise<AdOrgUnit | undefined> {
-    return this.adOrgUnits.get(id);
+    const result = await db.select().from(adOrgUnits).where(eq(adOrgUnits.id, id));
+    return result.length > 0 ? result[0] : undefined;
   }
 
   async createAdOrgUnit(ou: InsertAdOrgUnit): Promise<AdOrgUnit> {
-    const id = this.adOrgUnitCurrentId++;
-    const adOrgUnit: AdOrgUnit = { ...ou, id };
-    this.adOrgUnits.set(id, adOrgUnit);
-    return adOrgUnit;
+    const result = await db.insert(adOrgUnits).values(ou).returning();
+    return result[0];
   }
 
   async updateAdOrgUnit(id: number, ouData: Partial<AdOrgUnit>): Promise<AdOrgUnit | undefined> {
-    const ou = await this.getAdOrgUnit(id);
-    if (!ou) return undefined;
-    
-    const updatedOu = { ...ou, ...ouData };
-    this.adOrgUnits.set(id, updatedOu);
-    return updatedOu;
+    const result = await db.update(adOrgUnits).set(ouData).where(eq(adOrgUnits.id, id)).returning();
+    return result.length > 0 ? result[0] : undefined;
   }
 
   async deleteAdOrgUnit(id: number): Promise<boolean> {
-    return this.adOrgUnits.delete(id);
+    const result = await db.delete(adOrgUnits).where(eq(adOrgUnits.id, id)).returning({ id: adOrgUnits.id });
+    return result.length > 0;
   }
 
   async listAdOrgUnits(connectionId: number, query?: any): Promise<AdOrgUnit[]> {
-    let orgUnits = Array.from(this.adOrgUnits.values()).filter(
-      (ou) => ou.connectionId === connectionId,
-    );
+    let adOrgUnitsQuery = db.select().from(adOrgUnits).where(eq(adOrgUnits.connectionId, connectionId));
     
-    // Apply filtering logic
-    if (query) {
-      if (query.select) {
-        const properties = query.select.split(',');
-        orgUnits = orgUnits.map(ou => {
-          const result: any = { id: ou.id };
-          properties.forEach(prop => {
-            if ((ou as any)[prop] !== undefined) {
-              result[prop] = (ou as any)[prop];
-            }
-          });
-          return result as AdOrgUnit;
+    // Handle filtering logic (similar to listAdUsers)
+    if (query && query.select) {
+      const orgUnits = await adOrgUnitsQuery;
+      const properties = query.select.split(',');
+      
+      return orgUnits.map(ou => {
+        const result: any = { id: ou.id };
+        properties.forEach(prop => {
+          if ((ou as any)[prop] !== undefined) {
+            result[prop] = (ou as any)[prop];
+          }
         });
-      }
+        return result as AdOrgUnit;
+      });
     }
     
-    return orgUnits;
+    return adOrgUnitsQuery;
   }
 
   // AD Computers
   async getAdComputer(id: number): Promise<AdComputer | undefined> {
-    return this.adComputers.get(id);
+    const result = await db.select().from(adComputers).where(eq(adComputers.id, id));
+    return result.length > 0 ? result[0] : undefined;
   }
 
   async createAdComputer(computer: InsertAdComputer): Promise<AdComputer> {
-    const id = this.adComputerCurrentId++;
-    const adComputer: AdComputer = { ...computer, id };
-    this.adComputers.set(id, adComputer);
-    return adComputer;
+    const result = await db.insert(adComputers).values(computer).returning();
+    return result[0];
   }
 
   async updateAdComputer(id: number, computerData: Partial<AdComputer>): Promise<AdComputer | undefined> {
-    const computer = await this.getAdComputer(id);
-    if (!computer) return undefined;
-    
-    const updatedComputer = { ...computer, ...computerData };
-    this.adComputers.set(id, updatedComputer);
-    return updatedComputer;
+    const result = await db.update(adComputers).set(computerData).where(eq(adComputers.id, id)).returning();
+    return result.length > 0 ? result[0] : undefined;
   }
 
   async deleteAdComputer(id: number): Promise<boolean> {
-    return this.adComputers.delete(id);
+    const result = await db.delete(adComputers).where(eq(adComputers.id, id)).returning({ id: adComputers.id });
+    return result.length > 0;
   }
 
   async listAdComputers(connectionId: number, query?: any): Promise<AdComputer[]> {
-    let computers = Array.from(this.adComputers.values()).filter(
-      (computer) => computer.connectionId === connectionId,
-    );
+    let adComputersQuery = db.select().from(adComputers).where(eq(adComputers.connectionId, connectionId));
     
-    // Apply filtering logic
-    if (query) {
-      if (query.select) {
-        const properties = query.select.split(',');
-        computers = computers.map(computer => {
-          const result: any = { id: computer.id };
-          properties.forEach(prop => {
-            if ((computer as any)[prop] !== undefined) {
-              result[prop] = (computer as any)[prop];
-            }
-          });
-          return result as AdComputer;
+    // Handle filtering logic (similar to listAdUsers)
+    if (query && query.select) {
+      const computers = await adComputersQuery;
+      const properties = query.select.split(',');
+      
+      return computers.map(computer => {
+        const result: any = { id: computer.id };
+        properties.forEach(prop => {
+          if ((computer as any)[prop] !== undefined) {
+            result[prop] = (computer as any)[prop];
+          }
         });
-      }
+        return result as AdComputer;
+      });
     }
     
-    return computers;
+    return adComputersQuery;
   }
 
   // AD Domains
   async getAdDomain(id: number): Promise<AdDomain | undefined> {
-    return this.adDomains.get(id);
+    const result = await db.select().from(adDomains).where(eq(adDomains.id, id));
+    return result.length > 0 ? result[0] : undefined;
   }
 
   async createAdDomain(domain: InsertAdDomain): Promise<AdDomain> {
-    const id = this.adDomainCurrentId++;
-    const adDomain: AdDomain = { ...domain, id };
-    this.adDomains.set(id, adDomain);
-    return adDomain;
+    const result = await db.insert(adDomains).values(domain).returning();
+    return result[0];
   }
 
   async updateAdDomain(id: number, domainData: Partial<AdDomain>): Promise<AdDomain | undefined> {
-    const domain = await this.getAdDomain(id);
-    if (!domain) return undefined;
-    
-    const updatedDomain = { ...domain, ...domainData };
-    this.adDomains.set(id, updatedDomain);
-    return updatedDomain;
+    const result = await db.update(adDomains).set(domainData).where(eq(adDomains.id, id)).returning();
+    return result.length > 0 ? result[0] : undefined;
   }
 
   async deleteAdDomain(id: number): Promise<boolean> {
-    return this.adDomains.delete(id);
+    const result = await db.delete(adDomains).where(eq(adDomains.id, id)).returning({ id: adDomains.id });
+    return result.length > 0;
   }
 
   async listAdDomains(connectionId: number, query?: any): Promise<AdDomain[]> {
-    let domains = Array.from(this.adDomains.values()).filter(
-      (domain) => domain.connectionId === connectionId,
-    );
+    let adDomainsQuery = db.select().from(adDomains).where(eq(adDomains.connectionId, connectionId));
     
-    // Apply filtering logic
-    if (query) {
-      if (query.select) {
-        const properties = query.select.split(',');
-        domains = domains.map(domain => {
-          const result: any = { id: domain.id };
-          properties.forEach(prop => {
-            if ((domain as any)[prop] !== undefined) {
-              result[prop] = (domain as any)[prop];
-            }
-          });
-          return result as AdDomain;
+    // Handle filtering logic (similar to listAdUsers)
+    if (query && query.select) {
+      const domains = await adDomainsQuery;
+      const properties = query.select.split(',');
+      
+      return domains.map(domain => {
+        const result: any = { id: domain.id };
+        properties.forEach(prop => {
+          if ((domain as any)[prop] !== undefined) {
+            result[prop] = (domain as any)[prop];
+          }
         });
-      }
+        return result as AdDomain;
+      });
     }
     
-    return domains;
+    return adDomainsQuery;
   }
 }
 
-export const storage = new MemStorage();
+export const storage = new DatabaseStorage();
