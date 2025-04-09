@@ -590,12 +590,12 @@ export class DatabaseStorage implements IStorage {
       
       // Apply where conditions if any
       if (whereClause) {
-        baseQuery = baseQuery.where(whereClause);
+        baseQuery = baseQuery.where(whereClause as any);
       }
       
       // Apply ordering if any
-      if (orderClauses.length > 0) {
-        baseQuery = baseQuery.orderBy(...orderClauses);
+      if (orderClauses && orderClauses.length > 0) {
+        baseQuery = baseQuery.orderBy(...(orderClauses as any[]));
       }
       
       // Apply pagination if specified
@@ -611,7 +611,7 @@ export class DatabaseStorage implements IStorage {
       const users = await baseQuery;
       
       // Handle field selection if specified
-      if (selectedFields.length > 0) {
+      if (selectedFields && selectedFields.length > 0) {
         const result = users.map(user => {
           const filtered: Partial<AdUser> = { id: user.id };
           selectedFields.forEach(field => {
@@ -679,12 +679,12 @@ export class DatabaseStorage implements IStorage {
       
       // Apply where conditions if any
       if (whereClause) {
-        baseQuery = baseQuery.where(whereClause);
+        baseQuery = baseQuery.where(whereClause as any);
       }
       
       // Apply ordering if any
-      if (orderClauses.length > 0) {
-        baseQuery = baseQuery.orderBy(...orderClauses);
+      if (orderClauses && orderClauses.length > 0) {
+        baseQuery = baseQuery.orderBy(...(orderClauses as any[]));
       }
       
       // Apply pagination if specified
@@ -700,7 +700,7 @@ export class DatabaseStorage implements IStorage {
       const groups = await baseQuery;
       
       // Handle field selection if specified
-      if (selectedFields.length > 0) {
+      if (selectedFields && selectedFields.length > 0) {
         const result = groups.map(group => {
           const filtered: Partial<AdGroup> = { id: group.id };
           selectedFields.forEach(field => {

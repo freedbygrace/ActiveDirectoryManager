@@ -80,28 +80,28 @@ const LdapQueryBuilderPage = () => {
 
   // Query to get LDAP connections
   const { 
-    data: connections,
+    data: connections = [],
     isLoading: connectionsLoading 
-  } = useQuery({
+  } = useQuery<LdapConnection[]>({
     queryKey: ["/api/ldap-connections"],
     enabled: !!user
   });
 
   // Query to get LDAP filters for the selected connection
   const { 
-    data: filters,
+    data: filters = [],
     isLoading: filtersLoading 
-  } = useQuery({
+  } = useQuery<LdapFilter[]>({
     queryKey: ["/api/connections", selectedConnectionId, "ldap-filters"],
     enabled: !!selectedConnectionId,
   });
 
   // Query to get LDAP filter revisions
   const { 
-    data: revisions,
+    data: revisions = [],
     isLoading: revisionsLoading,
     refetch: refetchRevisions
-  } = useQuery({
+  } = useQuery<LdapFilterRevision[]>({
     queryKey: ["/api/ldap-filters", selectedFilter?.id, "revisions"],
     enabled: !!selectedFilter?.id && showRevisionsDialog,
   });
