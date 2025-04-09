@@ -152,6 +152,94 @@ class LdapClient extends EventEmitter {
     return this.searchUsers(connectionId, filter, attributes || defaultAttributes);
   }
   
+  async searchSites(connectionId: number, filter = '(objectClass=site)', attributes?: string[]): Promise<any[]> {
+    const defaultAttributes = ['cn', 'distinguishedName', 'description', 'location', 'managedBy'];
+    // Sites are typically stored in the Configuration naming context
+    const client = this.getClient(connectionId);
+    if (!client) throw new Error('LDAP connection not established');
+    
+    const connection = await storage.getLdapConnection(connectionId);
+    if (!connection) throw new Error('LDAP connection not found');
+    
+    // Sites are located in the Configuration container
+    const baseDN = 'CN=Sites,CN=Configuration,' + this.getDomainDN(connection);
+    const searchAttributes = attributes?.length ? attributes : defaultAttributes;
+    
+    return new Promise((resolve, reject) => {
+      const results: any[] = [];
+      
+      client.search(baseDN, {
+        filter,
+        scope: 'sub',
+        attributes: searchAttributes
+      }, (err, res) => {
+        if (err) {
+          reject(err);
+          return;
+        }
+        
+        res.on('searchEntry', (entry) => {
+          results.push(entry.object);
+        });
+        
+        res.on('error', (err) => {
+          reject(err);
+        });
+        
+        res.on('end', (result) => {
+          resolve(results);
+        });
+      });
+    });
+  }
+  
+  async searchSubnets(connectionId: number, filter = '(objectClass=subnet)', attributes?: string[]): Promise<any[]> {
+    const defaultAttributes = ['cn', 'distinguishedName', 'description', 'location', 'siteObject', 'managedBy'];
+    // Subnets are typically stored in the Configuration naming context
+    const client = this.getClient(connectionId);
+    if (!client) throw new Error('LDAP connection not established');
+    
+    const connection = await storage.getLdapConnection(connectionId);
+    if (!connection) throw new Error('LDAP connection not found');
+    
+    // Subnets are located in the Configuration container
+    const baseDN = 'CN=Subnets,CN=Sites,CN=Configuration,' + this.getDomainDN(connection);
+    const searchAttributes = attributes?.length ? attributes : defaultAttributes;
+    
+    return new Promise((resolve, reject) => {
+      const results: any[] = [];
+      
+      client.search(baseDN, {
+        filter,
+        scope: 'sub',
+        attributes: searchAttributes
+      }, (err, res) => {
+        if (err) {
+          reject(err);
+          return;
+        }
+        
+        res.on('searchEntry', (entry) => {
+          results.push(entry.object);
+        });
+        
+        res.on('error', (err) => {
+          reject(err);
+        });
+        
+        res.on('end', (result) => {
+          resolve(results);
+        });
+      });
+    });
+  }
+  
+  // Helper function to extract domain DN from connection
+  getDomainDN(connection: LdapConnection): string {
+    const domainParts = connection.domain.split('.');
+    return domainParts.map(part => `DC=${part}`).join(',');
+  }
+  
   async createEntry(connectionId: number, dn: string, attributes: any): Promise<boolean> {
     const client = this.getClient(connectionId);
     if (!client) throw new Error('LDAP connection not established');
