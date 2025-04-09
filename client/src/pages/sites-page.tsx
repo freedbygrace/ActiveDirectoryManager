@@ -4,7 +4,7 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient } from "@/lib/queryClient";
 import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
-import { Plus, Edit, Trash2, RefreshCw, HardDrive, Network } from "lucide-react";
+import { Plus, Edit, Trash2, RefreshCw, HardDrive, Network, ChevronLeft } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -171,8 +171,9 @@ export default function SitesPage() {
     data: sitesData,
     isLoading: isLoadingSites,
     refetch: refetchSites,
+    error: sitesError
   } = useQuery<ApiResponse<AdSite>>({
-    queryKey: [`/api/connections/${selectedConnection}/ad-sites?top=${MAX_ITEMS_PER_PAGE}&skip=${(currentSitePage - 1) * MAX_ITEMS_PER_PAGE}`],
+    queryKey: selectedConnection ? [`/api/connections/${selectedConnection}/ad-sites`, { top: MAX_ITEMS_PER_PAGE, skip: (currentSitePage - 1) * MAX_ITEMS_PER_PAGE }] : [],
     enabled: !!selectedConnection,
   });
   
@@ -181,13 +182,20 @@ export default function SitesPage() {
     data: subnetsData,
     isLoading: isLoadingSubnets,
     refetch: refetchSubnets,
+    error: subnetsError
   } = useQuery<ApiResponse<AdSubnet>>({
-    queryKey: [`/api/connections/${selectedConnection}/ad-subnets?top=${MAX_ITEMS_PER_PAGE}&skip=${(currentSubnetPage - 1) * MAX_ITEMS_PER_PAGE}`],
+    queryKey: selectedConnection ? [`/api/connections/${selectedConnection}/ad-subnets`, { top: MAX_ITEMS_PER_PAGE, skip: (currentSubnetPage - 1) * MAX_ITEMS_PER_PAGE }] : [],
     enabled: !!selectedConnection,
   });
   
   // Update pagination information when data changes
   useEffect(() => {
+    // Debug logging
+    console.log("Sites Data:", sitesData);
+    console.log("Sites Error:", sitesError);
+    console.log("Subnets Data:", subnetsData);
+    console.log("Subnets Error:", subnetsError);
+    
     if (sitesData?.metadata) {
       setTotalSitePages(sitesData.metadata.totalPages || 1);
     }
@@ -195,7 +203,7 @@ export default function SitesPage() {
     if (subnetsData?.metadata) {
       setTotalSubnetPages(subnetsData.metadata.totalPages || 1);
     }
-  }, [sitesData, subnetsData]);
+  }, [sitesData, subnetsData, sitesError, subnetsError]);
   
   // Site form setup
   const siteForm = useForm<SiteFormValues>({
@@ -481,7 +489,18 @@ export default function SitesPage() {
   return (
     <div className="container mx-auto py-6">
       <div className="flex justify-between items-center mb-6">
-        <h1 className="text-3xl font-bold">AD Sites and Subnets</h1>
+        <div className="flex items-center gap-4">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setLocation("/")}
+            className="flex items-center gap-2"
+          >
+            <ChevronLeft className="h-4 w-4" />
+            Back to Dashboard
+          </Button>
+          <h1 className="text-3xl font-bold">AD Sites and Subnets</h1>
+        </div>
         <div className="flex items-center gap-4">
           <Select
             value={selectedConnection?.toString() || ""}
@@ -567,6 +586,11 @@ export default function SitesPage() {
                       <Skeleton className="h-12 w-full" />
                     </div>
                   ))}
+                </div>
+              ) : sitesError ? (
+                <div className="text-center py-10">
+                  <p className="text-destructive font-medium">Error loading sites</p>
+                  <p className="text-muted-foreground">{sitesError.message || "Unknown error occurred"}</p>
                 </div>
               ) : sitesData?.data && sitesData.data.length > 0 ? (
                 <Table>
@@ -815,6 +839,11 @@ export default function SitesPage() {
                       <Skeleton className="h-12 w-full" />
                     </div>
                   ))}
+                </div>
+              ) : subnetsError ? (
+                <div className="text-center py-10">
+                  <p className="text-destructive font-medium">Error loading subnets</p>
+                  <p className="text-muted-foreground">{subnetsError.message || "Unknown error occurred"}</p>
                 </div>
               ) : subnetsData?.data && subnetsData.data.length > 0 ? (
                 <Table>
