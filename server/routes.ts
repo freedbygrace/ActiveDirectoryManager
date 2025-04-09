@@ -4246,6 +4246,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
    *               siteObject:
    *                 type: string
    *                 description: The distinguishedName of the site this subnet belongs to
+   *               cidr:
+   *                 type: string
+   *                 description: The subnet CIDR notation (e.g., 192.168.1.0/24)
    *     responses:
    *       201:
    *         description: Successfully created AD subnet
