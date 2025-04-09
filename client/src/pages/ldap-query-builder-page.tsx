@@ -236,6 +236,11 @@ const LdapQueryBuilderPage = () => {
     setFilterDescription("");
     setFilterQuery("");
     setIsActive(true);
+    // Reset filter builder to default state
+    setFilterBuilder({
+      operator: "and",
+      conditions: [{ attribute: "", operator: "equals", value: "" }]
+    });
   };
 
   // Select filter
@@ -245,6 +250,24 @@ const LdapQueryBuilderPage = () => {
     setFilterDescription(filter.description || "");
     setFilterQuery(filter.ldapFilter);
     setIsActive(filter.isActive);
+    
+    // Load filter builder data if available
+    if (filter.filter) {
+      try {
+        const filterData = typeof filter.filter === 'string' 
+          ? JSON.parse(filter.filter) 
+          : filter.filter;
+          
+        // Make sure it has valid structure
+        if (filterData && 
+            filterData.operator && 
+            Array.isArray(filterData.conditions)) {
+          setFilterBuilder(filterData);
+        }
+      } catch (err) {
+        console.error("Failed to parse filter builder data", err);
+      }
+    }
   };
 
   // Save filter
@@ -580,8 +603,8 @@ const LdapQueryBuilderPage = () => {
                   <Tabs defaultValue="manual" className="w-full">
                     <TabsList className="grid w-full grid-cols-2">
                       <TabsTrigger value="manual">Manual LDAP Query</TabsTrigger>
-                      <TabsTrigger value="builder" disabled>
-                        Visual Query Builder (Coming Soon)
+                      <TabsTrigger value="builder">
+                        Visual Query Builder
                       </TabsTrigger>
                     </TabsList>
                     <TabsContent value="manual" className="py-4">
@@ -596,9 +619,165 @@ const LdapQueryBuilderPage = () => {
                         />
                       </div>
                     </TabsContent>
-                    <TabsContent value="builder">
-                      <div className="py-8 text-center text-muted-foreground">
-                        <p>Visual query builder will be available in a future update</p>
+                    <TabsContent value="builder" className="py-4">
+                      <div className="space-y-4">
+                        <div className="flex justify-between items-center">
+                          <Label>Query Conditions</Label>
+                          <div className="space-x-2">
+                            <Select 
+                              value={filterBuilder.operator} 
+                              onValueChange={(value) => setFilterBuilder({
+                                ...filterBuilder,
+                                operator: value
+                              })}
+                            >
+                              <SelectTrigger className="w-32">
+                                <SelectValue placeholder="Operator" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="and">AND</SelectItem>
+                                <SelectItem value="or">OR</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        </div>
+
+                        <div className="border rounded-md p-4 space-y-4 bg-background">
+                          {filterBuilder.conditions.map((condition: any, index: number) => (
+                            <div key={index} className="grid grid-cols-12 gap-2 items-center">
+                              <div className="col-span-4">
+                                <Input
+                                  placeholder="Attribute"
+                                  value={condition.attribute}
+                                  onChange={(e) => {
+                                    const updatedConditions = [...filterBuilder.conditions];
+                                    updatedConditions[index].attribute = e.target.value;
+                                    setFilterBuilder({
+                                      ...filterBuilder,
+                                      conditions: updatedConditions
+                                    });
+                                  }}
+                                />
+                              </div>
+                              <div className="col-span-3">
+                                <Select
+                                  value={condition.operator}
+                                  onValueChange={(value) => {
+                                    const updatedConditions = [...filterBuilder.conditions];
+                                    updatedConditions[index].operator = value;
+                                    setFilterBuilder({
+                                      ...filterBuilder,
+                                      conditions: updatedConditions
+                                    });
+                                  }}
+                                >
+                                  <SelectTrigger>
+                                    <SelectValue placeholder="Operator" />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="equals">Equals</SelectItem>
+                                    <SelectItem value="contains">Contains</SelectItem>
+                                    <SelectItem value="startsWith">Starts With</SelectItem>
+                                    <SelectItem value="endsWith">Ends With</SelectItem>
+                                    <SelectItem value="present">Is Present</SelectItem>
+                                    <SelectItem value="notEquals">Not Equals</SelectItem>
+                                  </SelectContent>
+                                </Select>
+                              </div>
+                              <div className="col-span-4">
+                                <Input
+                                  placeholder="Value"
+                                  value={condition.value}
+                                  disabled={condition.operator === 'present'}
+                                  onChange={(e) => {
+                                    const updatedConditions = [...filterBuilder.conditions];
+                                    updatedConditions[index].value = e.target.value;
+                                    setFilterBuilder({
+                                      ...filterBuilder,
+                                      conditions: updatedConditions
+                                    });
+                                  }}
+                                />
+                              </div>
+                              <div className="col-span-1 flex justify-end">
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={() => {
+                                    const updatedConditions = [...filterBuilder.conditions];
+                                    updatedConditions.splice(index, 1);
+                                    setFilterBuilder({
+                                      ...filterBuilder,
+                                      conditions: updatedConditions
+                                    });
+                                  }}
+                                  disabled={filterBuilder.conditions.length <= 1}
+                                >
+                                  <Trash className="h-4 w-4" />
+                                </Button>
+                              </div>
+                            </div>
+                          ))}
+                          
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                              setFilterBuilder({
+                                ...filterBuilder,
+                                conditions: [
+                                  ...filterBuilder.conditions,
+                                  { attribute: "", operator: "equals", value: "" }
+                                ]
+                              });
+                            }}
+                          >
+                            Add Condition
+                          </Button>
+                        </div>
+
+                        <div className="mt-4">
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            onClick={() => {
+                              // Generate LDAP filter from visual builder
+                              const operatorSymbol = filterBuilder.operator === 'and' ? '&' : '|';
+                              
+                              const conditions = filterBuilder.conditions
+                                .filter((c: any) => c.attribute.trim() !== '')
+                                .map((c: any) => {
+                                  switch (c.operator) {
+                                    case 'equals':
+                                      return `(${c.attribute}=${c.value})`;
+                                    case 'contains':
+                                      return `(${c.attribute}=*${c.value}*)`;
+                                    case 'startsWith':
+                                      return `(${c.attribute}=${c.value}*)`;
+                                    case 'endsWith':
+                                      return `(${c.attribute}=*${c.value})`;
+                                    case 'present':
+                                      return `(${c.attribute}=*)`;
+                                    case 'notEquals':
+                                      return `(!(${c.attribute}=${c.value}))`;
+                                    default:
+                                      return `(${c.attribute}=${c.value})`;
+                                  }
+                                });
+                              
+                              if (conditions.length === 0) {
+                                setFilterQuery('');
+                              } else if (conditions.length === 1) {
+                                setFilterQuery(conditions[0]);
+                              } else {
+                                setFilterQuery(`(${operatorSymbol}${conditions.join('')})`);
+                              }
+                            }}
+                          >
+                            <ArrowLeftRight className="h-4 w-4 mr-2" />
+                            Generate LDAP Filter
+                          </Button>
+                        </div>
                       </div>
                     </TabsContent>
                   </Tabs>
