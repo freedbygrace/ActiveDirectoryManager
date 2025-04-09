@@ -495,13 +495,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
    *       - $ref: '#/components/parameters/skipParam'
    *     responses:
    *       200:
-   *         description: A list of AD users
+   *         description: A list of AD users with pagination metadata
    *         content:
    *           application/json:
    *             schema:
-   *               type: array
-   *               items:
-   *                 $ref: '#/components/schemas/AdUser'
+   *               type: object
+   *               properties:
+   *                 data:
+   *                   type: array
+   *                   items:
+   *                     $ref: '#/components/schemas/AdUser'
+   *                 metadata:
+   *                   $ref: '#/components/responses/PaginatedResponse/content/application~1json/schema/properties/metadata'
    *       401:
    *         $ref: '#/components/responses/UnauthorizedError'
    */
@@ -1024,9 +1029,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
    *         content:
    *           application/json:
    *             schema:
-   *               type: array
-   *               items:
-   *                 $ref: '#/components/schemas/AdGroup'
+   *               type: object
+   *               properties:
+   *                 data:
+   *                   type: array
+   *                   items:
+   *                     $ref: '#/components/schemas/AdGroup'
+   *                 metadata:
+   *                   $ref: '#/components/responses/PaginatedResponse/content/application~1json/schema/properties/metadata'
    *       401:
    *         $ref: '#/components/responses/UnauthorizedError'
    *       404:
@@ -1373,9 +1383,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
    *         content:
    *           application/json:
    *             schema:
-   *               type: array
-   *               items:
-   *                 $ref: '#/components/schemas/AdOrgUnit'
+   *               type: object
+   *               properties:
+   *                 data:
+   *                   type: array
+   *                   items:
+   *                     $ref: '#/components/schemas/AdOrgUnit'
+   *                 metadata:
+   *                   $ref: '#/components/responses/PaginatedResponse/content/application~1json/schema/properties/metadata'
    *       401:
    *         $ref: '#/components/responses/UnauthorizedError'
    *       404:
@@ -1586,9 +1601,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
    *         content:
    *           application/json:
    *             schema:
-   *               type: array
-   *               items:
-   *                 $ref: '#/components/schemas/AdComputer'
+   *               type: object
+   *               properties:
+   *                 data:
+   *                   type: array
+   *                   items:
+   *                     $ref: '#/components/schemas/AdComputer'
+   *                 metadata:
+   *                   $ref: '#/components/responses/PaginatedResponse/content/application~1json/schema/properties/metadata'
    *       401:
    *         $ref: '#/components/responses/UnauthorizedError'
    *       404:
@@ -1975,9 +1995,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
    *         content:
    *           application/json:
    *             schema:
-   *               type: array
-   *               items:
-   *                 $ref: '#/components/schemas/AdDomain'
+   *               type: object
+   *               properties:
+   *                 data:
+   *                   type: array
+   *                   items:
+   *                     $ref: '#/components/schemas/AdDomain'
+   *                 metadata:
+   *                   $ref: '#/components/responses/PaginatedResponse/content/application~1json/schema/properties/metadata'
    *       401:
    *         $ref: '#/components/responses/UnauthorizedError'
    *       404:
