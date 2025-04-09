@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useContext } from "react";
 import { Link, useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -33,6 +33,7 @@ import {
 } from "lucide-react";
 import { useMobile } from "@/hooks/use-mobile";
 import { useToast } from "@/hooks/use-toast";
+import { AuthContext } from "@/hooks/use-auth";
 import { ThemeToggle } from "@/components/theme-toggle";
 
 type MenuItem = {
@@ -44,14 +45,6 @@ type MenuItem = {
 type MenuSection = {
   title: string;
   items: MenuItem[];
-};
-
-type UserType = {
-  id: number;
-  username: string;
-  fullName?: string;
-  email?: string;
-  role?: string;
 };
 
 const menuSections: MenuSection[] = [
@@ -88,57 +81,20 @@ export function DashboardLayout({ children, title, description }: DashboardLayou
   const [location, navigate] = useLocation();
   const isMobile = useMobile();
   const [sidebarOpen, setSidebarOpen] = useState(!isMobile);
-  const [user, setUser] = useState<UserType | null>(null);
+  const auth = useContext(AuthContext);
+  if (!auth) {
+    console.error("Auth context not available");
+    return <div>Authentication error. Please refresh the page.</div>;
+  }
+  const { user, logoutMutation } = auth;
   const { toast } = useToast();
 
-  // Fetch user data on component mount
-  useEffect(() => {
-    const fetchUserData = async () => {
-      try {
-        const response = await fetch('/api/user', {
-          credentials: 'include'
-        });
-        
-        if (response.ok) {
-          const userData = await response.json();
-          setUser(userData);
-        }
-      } catch (error) {
-        console.error('Error fetching user data:', error);
-      }
-    };
-    
-    fetchUserData();
-  }, []);
-
   const handleLogout = async () => {
-    try {
-      const response = await fetch('/api/logout', {
-        method: 'POST',
-        credentials: 'include'
-      });
-      
-      if (response.ok) {
-        toast({
-          title: "Logged out",
-          description: "You have been successfully logged out.",
-        });
+    logoutMutation.mutate(undefined, {
+      onSuccess: () => {
         navigate('/auth');
-      } else {
-        toast({
-          title: "Logout failed",
-          description: "An error occurred during logout.",
-          variant: "destructive",
-        });
       }
-    } catch (error) {
-      console.error('Error during logout:', error);
-      toast({
-        title: "Logout failed",
-        description: "An error occurred during logout.",
-        variant: "destructive",
-      });
-    }
+    });
   };
 
   // Get user initials for avatar

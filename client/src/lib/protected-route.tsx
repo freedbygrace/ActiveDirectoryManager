@@ -1,6 +1,6 @@
-import { useState, useEffect } from "react";
-import { Loader2 } from "lucide-react";
 import { Redirect, Route } from "wouter";
+import { useAuth } from "@/hooks/use-auth";
+import { Loader2 } from "lucide-react";
 
 export function ProtectedRoute({
   path,
@@ -9,30 +9,10 @@ export function ProtectedRoute({
   path: string;
   component: () => React.JSX.Element;
 }) {
-  const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
-  
-  useEffect(() => {
-    const checkAuth = async () => {
-      try {
-        const response = await fetch('/api/user', {
-          credentials: 'include'
-        });
-        
-        if (response.ok) {
-          setIsAuthenticated(true);
-        } else {
-          setIsAuthenticated(false);
-        }
-      } catch (error) {
-        console.error('Error checking auth status:', error);
-        setIsAuthenticated(false);
-      }
-    };
-    
-    checkAuth();
-  }, []);
+  const { user, isLoading } = useAuth();
 
-  if (isAuthenticated === null) {
+  // Show a loading indicator while authentication state is being determined
+  if (isLoading) {
     return (
       <Route path={path}>
         <div className="flex items-center justify-center min-h-screen">
@@ -42,7 +22,8 @@ export function ProtectedRoute({
     );
   }
 
-  if (!isAuthenticated) {
+  // Redirect to auth page if user is not authenticated
+  if (!user) {
     return (
       <Route path={path}>
         <Redirect to="/auth" />
@@ -50,6 +31,7 @@ export function ProtectedRoute({
     );
   }
 
+  // Render the component if the user is authenticated
   return (
     <Route path={path}>
       <Component />
