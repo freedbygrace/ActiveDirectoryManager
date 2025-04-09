@@ -75,6 +75,8 @@ const LdapQueryBuilderPage = () => {
   const [testResults, setTestResults] = useState<any[]>([]);
   const [isActive, setIsActive] = useState(true);
   const [autoUpdateEnabled, setAutoUpdateEnabled] = useState(false);
+  const [ldapAttributes, setLdapAttributes] = useState<string[]>([]);
+  const [isLoadingAttributes, setIsLoadingAttributes] = useState(false);
   const [filterBuilder, setFilterBuilder] = useState<any>({
     operator: "and",
     groups: []
@@ -327,6 +329,45 @@ const LdapQueryBuilderPage = () => {
       generateLdapFilter();
     }
   }, [filterBuilder, autoUpdateEnabled]);
+  
+  // Load LDAP attributes from the selected connection
+  const loadLdapAttributes = async () => {
+    if (!selectedConnectionId) return;
+    
+    try {
+      setIsLoadingAttributes(true);
+      const res = await apiRequest("GET", `/api/connections/${selectedConnectionId}/schema-attributes?objectClass=${objectClass}`);
+      const data = await res.json();
+      
+      // Set default attributes if none are returned
+      if (!data || !data.length) {
+        setLdapAttributes([
+          'cn', 'sAMAccountName', 'givenName', 'sn', 'mail', 'userPrincipalName', 
+          'displayName', 'memberOf', 'objectSid', 'objectGUID', 'distinguishedName',
+          'whenCreated', 'whenChanged', 'accountExpires', 'userAccountControl'
+        ]);
+      } else {
+        setLdapAttributes(data);
+      }
+    } catch (error) {
+      console.error("Failed to load LDAP attributes:", error);
+      // Set default attributes on error
+      setLdapAttributes([
+        'cn', 'sAMAccountName', 'givenName', 'sn', 'mail', 'userPrincipalName', 
+        'displayName', 'memberOf', 'objectSid', 'objectGUID', 'distinguishedName',
+        'whenCreated', 'whenChanged', 'accountExpires', 'userAccountControl'
+      ]);
+    } finally {
+      setIsLoadingAttributes(false);
+    }
+  };
+  
+  // Load attributes when connection or object class changes
+  useEffect(() => {
+    if (selectedConnectionId) {
+      loadLdapAttributes();
+    }
+  }, [selectedConnectionId, objectClass]);
 
   // Save filter
   const handleSaveFilter = () => {
@@ -773,18 +814,57 @@ const LdapQueryBuilderPage = () => {
                                   {group.conditions.map((condition: any, condIndex: number) => (
                                     <div key={condIndex} className="grid grid-cols-12 gap-2 items-center">
                                       <div className="col-span-4">
-                                        <Input
-                                          placeholder="Attribute"
-                                          value={condition.attribute}
-                                          onChange={(e) => {
-                                            const updatedGroups = [...filterBuilder.groups];
-                                            updatedGroups[groupIndex].conditions[condIndex].attribute = e.target.value;
-                                            setFilterBuilder({
-                                              ...filterBuilder,
-                                              groups: updatedGroups
-                                            });
-                                          }}
-                                        />
+                                        {ldapAttributes.length > 0 ? (
+                                          <Select
+                                            value={condition.attribute}
+                                            onValueChange={(value) => {
+                                              const updatedGroups = [...filterBuilder.groups];
+                                              updatedGroups[groupIndex].conditions[condIndex].attribute = value;
+                                              setFilterBuilder({
+                                                ...filterBuilder,
+                                                groups: updatedGroups
+                                              });
+                                            }}
+                                          >
+                                            <SelectTrigger>
+                                              <SelectValue placeholder={isLoadingAttributes ? "Loading attributes..." : "Select attribute"} />
+                                            </SelectTrigger>
+                                            <SelectContent className="max-h-[280px]">
+                                              {ldapAttributes.map((attr) => (
+                                                <SelectItem key={attr} value={attr}>{attr}</SelectItem>
+                                              ))}
+                                              <SelectItem value="custom">Custom attribute...</SelectItem>
+                                            </SelectContent>
+                                          </Select>
+                                        ) : (
+                                          <Input
+                                            placeholder={isLoadingAttributes ? "Loading attributes..." : "Attribute name"}
+                                            value={condition.attribute}
+                                            onChange={(e) => {
+                                              const updatedGroups = [...filterBuilder.groups];
+                                              updatedGroups[groupIndex].conditions[condIndex].attribute = e.target.value;
+                                              setFilterBuilder({
+                                                ...filterBuilder,
+                                                groups: updatedGroups
+                                              });
+                                            }}
+                                          />
+                                        )}
+                                        {condition.attribute === "custom" && (
+                                          <Input
+                                            placeholder="Custom attribute name"
+                                            className="mt-1"
+                                            value=""
+                                            onChange={(e) => {
+                                              const updatedGroups = [...filterBuilder.groups];
+                                              updatedGroups[groupIndex].conditions[condIndex].attribute = e.target.value;
+                                              setFilterBuilder({
+                                                ...filterBuilder,
+                                                groups: updatedGroups
+                                              });
+                                            }}
+                                          />
+                                        )}
                                       </div>
                                       <div className="col-span-3">
                                         <Select
