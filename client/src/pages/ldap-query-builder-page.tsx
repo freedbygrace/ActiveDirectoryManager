@@ -10,8 +10,27 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Save, Trash, History, ArrowLeftRight, RefreshCw, Play, Plus, FolderPlus, X } from "lucide-react";
+import { Loader2, Save, Trash, History, ArrowLeftRight, RefreshCw, Play, Plus, FolderPlus, X, Copy, GripVertical } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
+
+// Drag and drop imports
+import {
+  DndContext, 
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragEndEvent
+} from '@dnd-kit/core';
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 import { 
   Dialog, 
   DialogContent, 
@@ -61,6 +80,238 @@ type LdapFilterRevision = {
   modifiedAt: string;
 };
 
+// Sortable Group component for drag-and-drop
+interface SortableGroupProps {
+  id: string;
+  group: any;
+  groupIndex: number;
+  filterBuilder: any;
+  setFilterBuilder: (value: any) => void;
+  ldapAttributes: string[];
+  isLoadingAttributes: boolean;
+}
+
+const SortableGroup = ({
+  id,
+  group,
+  groupIndex,
+  filterBuilder,
+  setFilterBuilder,
+  ldapAttributes,
+  isLoadingAttributes
+}: SortableGroupProps) => {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging
+  } = useSortable({ id });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    zIndex: isDragging ? 1 : 0,
+    opacity: isDragging ? 0.5 : 1
+  };
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className="border rounded-md p-4 mb-4 bg-background"
+    >
+      <div className="flex justify-between items-center mb-3">
+        <div className="flex items-center">
+          <div 
+            className="cursor-grab mr-2 p-1 hover:bg-muted rounded" 
+            {...attributes} 
+            {...listeners}
+          >
+            <GripVertical className="h-4 w-4 text-muted-foreground" />
+          </div>
+          <Label className="mr-2">Group Operator:</Label>
+          <Select 
+            value={group.operator} 
+            onValueChange={(value) => {
+              const updatedGroups = [...filterBuilder.groups];
+              updatedGroups[groupIndex].operator = value;
+              setFilterBuilder({
+                ...filterBuilder,
+                groups: updatedGroups
+              });
+            }}
+          >
+            <SelectTrigger className="w-24">
+              <SelectValue placeholder="Operator" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="and">AND</SelectItem>
+              <SelectItem value="or">OR</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={() => {
+            const updatedGroups = [...filterBuilder.groups];
+            updatedGroups.splice(groupIndex, 1);
+            setFilterBuilder({
+              ...filterBuilder,
+              groups: updatedGroups
+            });
+          }}
+        >
+          <X className="h-4 w-4" />
+        </Button>
+      </div>
+
+      <div className="space-y-3">
+        {group.conditions.map((condition: any, condIndex: number) => (
+          <div key={condIndex} className="grid grid-cols-12 gap-2 items-center">
+            <div className="col-span-4">
+              {ldapAttributes.length > 0 ? (
+                <Select
+                  value={condition.attribute}
+                  onValueChange={(value) => {
+                    const updatedGroups = [...filterBuilder.groups];
+                    updatedGroups[groupIndex].conditions[condIndex].attribute = value;
+                    setFilterBuilder({
+                      ...filterBuilder,
+                      groups: updatedGroups
+                    });
+                  }}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder={isLoadingAttributes ? "Loading attributes..." : "Select attribute"} />
+                  </SelectTrigger>
+                  <SelectContent className="max-h-[280px]">
+                    {ldapAttributes.map((attr) => (
+                      <SelectItem key={attr} value={attr}>{attr}</SelectItem>
+                    ))}
+                    <SelectItem value="custom">Custom attribute...</SelectItem>
+                  </SelectContent>
+                </Select>
+              ) : (
+                <Input
+                  placeholder={isLoadingAttributes ? "Loading attributes..." : "Attribute name"}
+                  value={condition.attribute}
+                  onChange={(e) => {
+                    const updatedGroups = [...filterBuilder.groups];
+                    updatedGroups[groupIndex].conditions[condIndex].attribute = e.target.value;
+                    setFilterBuilder({
+                      ...filterBuilder,
+                      groups: updatedGroups
+                    });
+                  }}
+                />
+              )}
+              {condition.attribute === "custom" && (
+                <Input
+                  placeholder="Custom attribute name"
+                  className="mt-1"
+                  value=""
+                  onChange={(e) => {
+                    const updatedGroups = [...filterBuilder.groups];
+                    updatedGroups[groupIndex].conditions[condIndex].attribute = e.target.value;
+                    setFilterBuilder({
+                      ...filterBuilder,
+                      groups: updatedGroups
+                    });
+                  }}
+                />
+              )}
+            </div>
+            <div className="col-span-3">
+              <Select
+                value={condition.operator}
+                onValueChange={(value) => {
+                  const updatedGroups = [...filterBuilder.groups];
+                  updatedGroups[groupIndex].conditions[condIndex].operator = value;
+                  setFilterBuilder({
+                    ...filterBuilder,
+                    groups: updatedGroups
+                  });
+                }}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Operator" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="equals">Equals</SelectItem>
+                  <SelectItem value="contains">Contains</SelectItem>
+                  <SelectItem value="startsWith">Starts With</SelectItem>
+                  <SelectItem value="endsWith">Ends With</SelectItem>
+                  <SelectItem value="present">Is Present</SelectItem>
+                  <SelectItem value="notEquals">Not Equals</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="col-span-4">
+              <Input
+                placeholder="Value"
+                value={condition.value}
+                disabled={condition.operator === 'present'}
+                onChange={(e) => {
+                  const updatedGroups = [...filterBuilder.groups];
+                  updatedGroups[groupIndex].conditions[condIndex].value = e.target.value;
+                  setFilterBuilder({
+                    ...filterBuilder,
+                    groups: updatedGroups
+                  });
+                }}
+              />
+            </div>
+            <div className="col-span-1 flex justify-end">
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => {
+                  const updatedGroups = [...filterBuilder.groups];
+                  updatedGroups[groupIndex].conditions.splice(condIndex, 1);
+                  if (updatedGroups[groupIndex].conditions.length === 0) {
+                    updatedGroups.splice(groupIndex, 1);
+                  }
+                  setFilterBuilder({
+                    ...filterBuilder,
+                    groups: updatedGroups
+                  });
+                }}
+                disabled={group.conditions.length <= 1}
+              >
+                <Trash className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+        ))}
+
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => {
+            const updatedGroups = [...filterBuilder.groups];
+            updatedGroups[groupIndex].conditions.push({ 
+              attribute: "", 
+              operator: "equals", 
+              value: "" 
+            });
+            setFilterBuilder({
+              ...filterBuilder,
+              groups: updatedGroups
+            });
+          }}
+        >
+          <Plus className="h-4 w-4 mr-2" />
+          Add Condition
+        </Button>
+      </div>
+    </div>
+  );
+};
+
 const LdapQueryBuilderPage = () => {
   const { user } = useAuth();
   const { toast } = useToast();
@@ -81,6 +332,48 @@ const LdapQueryBuilderPage = () => {
     operator: "and",
     groups: []
   });
+  
+  // Set up sensors for drag and drop
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 8,
+      },
+    }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  );
+
+  // Handle drag end event for group reordering
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    
+    if (over && active.id !== over.id) {
+      const activeId = active.id.toString();
+      const overId = over.id.toString();
+      
+      const activeIndex = filterBuilder.groups.findIndex(
+        (_: any, i: number) => `group-${i}` === activeId
+      );
+      const overIndex = filterBuilder.groups.findIndex(
+        (_: any, i: number) => `group-${i}` === overId
+      );
+      
+      if (activeIndex !== -1 && overIndex !== -1) {
+        const newGroups = arrayMove(
+          filterBuilder.groups,
+          activeIndex,
+          overIndex
+        );
+        
+        setFilterBuilder({
+          ...filterBuilder,
+          groups: newGroups
+        });
+      }
+    }
+  };
 
   // Query to get LDAP connections
   const { 
@@ -263,9 +556,7 @@ const LdapQueryBuilderPage = () => {
           : filter.filter;
           
         // Make sure it has valid structure
-        if (filterData && 
-            filterData.operator && 
-            Array.isArray(filterData.conditions)) {
+        if (filterData && filterData.operator) {
           setFilterBuilder(filterData);
         }
       } catch (err) {
@@ -483,59 +774,42 @@ const LdapQueryBuilderPage = () => {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Date</TableHead>
+                    <TableHead>Version</TableHead>
                     <TableHead>Modified By</TableHead>
+                    <TableHead>Date</TableHead>
                     <TableHead>LDAP Filter</TableHead>
-                    <TableHead className="text-right">Actions</TableHead>
+                    <TableHead></TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {revisions && revisions.length > 0 ? (
-                    revisions.map((rev: LdapFilterRevision) => (
-                      <TableRow key={rev.id}>
-                        <TableCell>
-                          {new Date(rev.modifiedAt).toLocaleString()}
-                        </TableCell>
-                        <TableCell>User ID: {rev.modifiedBy}</TableCell>
-                        <TableCell>
-                          <code className="text-xs max-w-[300px] block overflow-hidden text-ellipsis">
-                            {rev.ldapFilter}
-                          </code>
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <Button 
-                            variant="outline" 
-                            size="sm"
-                            onClick={() => revertToRevisionMutation.mutate(rev.id)}
-                            disabled={revertToRevisionMutation.isPending}
-                          >
-                            {revertToRevisionMutation.isPending ? (
-                              <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                            ) : (
-                              <RefreshCw className="h-4 w-4 mr-2" />
-                            )}
-                            Revert
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    ))
-                  ) : (
-                    <TableRow>
-                      <TableCell colSpan={4} className="text-center">
-                        No revision history found
+                  {revisions.map((rev: LdapFilterRevision) => (
+                    <TableRow key={rev.id}>
+                      <TableCell>v{rev.id}</TableCell>
+                      <TableCell>User #{rev.modifiedBy}</TableCell>
+                      <TableCell>{new Date(rev.modifiedAt).toLocaleString()}</TableCell>
+                      <TableCell className="max-w-[300px] truncate">{rev.ldapFilter}</TableCell>
+                      <TableCell>
+                        <Button 
+                          variant="outline" 
+                          size="sm"
+                          onClick={() => revertToRevisionMutation.mutate(rev.id)}
+                          disabled={revertToRevisionMutation.isPending}
+                        >
+                          {revertToRevisionMutation.isPending ? 
+                            <Loader2 className="h-4 w-4 animate-spin" /> : 
+                            'Restore'
+                          }
+                        </Button>
                       </TableCell>
                     </TableRow>
-                  )}
+                  ))}
                 </TableBody>
               </Table>
             </div>
           )}
-          
+
           <DialogFooter>
-            <Button 
-              variant="outline" 
-              onClick={() => setShowRevisionsDialog(false)}
-            >
+            <Button variant="outline" onClick={() => setShowRevisionsDialog(false)}>
               Close
             </Button>
           </DialogFooter>
@@ -548,49 +822,44 @@ const LdapQueryBuilderPage = () => {
   const renderTestResultsDialog = () => {
     return (
       <Dialog open={showTestResultsDialog} onOpenChange={setShowTestResultsDialog}>
-        <DialogContent className="max-w-4xl">
+        <DialogContent className="max-w-3xl">
           <DialogHeader>
             <DialogTitle>Test Results</DialogTitle>
             <DialogDescription>
-              Results for LDAP filter: <code>{filterQuery}</code>
+              LDAP filter test results for "{filterQuery}"
             </DialogDescription>
           </DialogHeader>
 
           <div className="max-h-[60vh] overflow-y-auto">
             {testResults.length > 0 ? (
-              <Table>
-                <TableCaption>Found {testResults.length} results</TableCaption>
-                <TableHeader>
-                  <TableRow>
-                    {Object.keys(testResults[0]).map((key) => (
-                      <TableHead key={key}>{key}</TableHead>
-                    ))}
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {testResults.map((result, index) => (
-                    <TableRow key={index}>
-                      {Object.entries(result).map(([key, value]) => (
-                        <TableCell key={key}>
-                          {typeof value === 'object' 
-                            ? JSON.stringify(value) 
-                            : String(value)}
-                        </TableCell>
-                      ))}
+              <div>
+                <p className="mb-2 text-muted-foreground">Found {testResults.length} results:</p>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Distinguished Name</TableHead>
+                      <TableHead>Name</TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+                  </TableHeader>
+                  <TableBody>
+                    {testResults.map((result: any, index: number) => (
+                      <TableRow key={index}>
+                        <TableCell className="font-mono text-xs break-all">{result.dn}</TableCell>
+                        <TableCell>{result.cn || result.name || result.displayName || result.sAMAccountName}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
             ) : (
-              <p className="text-center py-8">No results found for this filter</p>
+              <div className="p-8 text-center">
+                <p>No results found matching this filter.</p>
+              </div>
             )}
           </div>
-          
+
           <DialogFooter>
-            <Button 
-              variant="outline" 
-              onClick={() => setShowTestResultsDialog(false)}
-            >
+            <Button variant="outline" onClick={() => setShowTestResultsDialog(false)}>
               Close
             </Button>
           </DialogFooter>
@@ -600,151 +869,194 @@ const LdapQueryBuilderPage = () => {
   };
 
   return (
-    <DashboardLayout title="LDAP Query Builder">
+    <DashboardLayout>
       <div className="container mx-auto py-6">
-        <div className="flex justify-between items-center mb-6">
-          <div>
-            <h1 className="text-3xl font-bold tracking-tight">LDAP Query Builder</h1>
-            <p className="text-muted-foreground">
-              Create, test and manage LDAP queries for Active Directory
-            </p>
-          </div>
-        </div>
-
-        <div className="grid md:grid-cols-3 gap-6">
-          {/* Left Side - Filters List */}
-          <div className="md:col-span-1">
-            <Card>
-              <CardHeader>
-                <CardTitle>LDAP Filters</CardTitle>
-                <CardDescription>Select a connection to view filters</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  <div>
-                    <Label htmlFor="connection">LDAP Connection</Label>
-                    <div className="mt-1">
-                      {renderConnectionsDropdown()}
-                    </div>
-                  </div>
-                  
-                  <div>
-                    <div className="flex justify-between items-center">
-                      <h3 className="font-medium">Saved Filters</h3>
-                      <Button 
-                        variant="ghost" 
-                        size="sm"
-                        className="h-7 px-2"
-                        onClick={resetForm}
-                      >
-                        New Filter
-                      </Button>
-                    </div>
-                    {renderFiltersList()}
-                  </div>
+        <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
+          {/* Sidebar */}
+          <Card className="lg:col-span-1">
+            <CardHeader>
+              <CardTitle>LDAP Filters</CardTitle>
+              <CardDescription>Saved LDAP query filters</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                <div>
+                  <Label className="mb-2 block">Connection</Label>
+                  {renderConnectionsDropdown()}
                 </div>
-              </CardContent>
-            </Card>
-          </div>
-          
-          {/* Right Side - Filter Editor */}
-          <div className="md:col-span-2">
-            <Card>
-              <CardHeader>
-                <CardTitle>
-                  {selectedFilter ? `Edit Filter: ${selectedFilter.name}` : 'Create New Filter'}
-                </CardTitle>
-                <CardDescription>
-                  {selectedFilter 
-                    ? 'Update your LDAP filter and test it against your Active Directory'
-                    : 'Create a new LDAP filter and test it against your Active Directory'}
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  <div className="grid grid-cols-4 gap-4">
-                    <div className="col-span-3">
-                      <Label htmlFor="filterName">Filter Name</Label>
-                      <Input 
-                        id="filterName" 
-                        value={filterName} 
-                        onChange={(e) => setFilterName(e.target.value)}
-                        placeholder="Enter a name for your filter"
-                      />
-                    </div>
-                    <div>
-                      <Label htmlFor="objectClass">Object Class</Label>
-                      <Select value={objectClass} onValueChange={setObjectClass}>
-                        <SelectTrigger id="objectClass">
-                          <SelectValue placeholder="Select object type" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="user">User</SelectItem>
-                          <SelectItem value="group">Group</SelectItem>
-                          <SelectItem value="organizationalUnit">OU</SelectItem>
-                          <SelectItem value="computer">Computer</SelectItem>
-                          <SelectItem value="domain">Domain</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </div>
-                  
+                
+                {renderFiltersList()}
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Main content */}
+          <Card className="lg:col-span-4">
+            <CardHeader>
+              <CardTitle>
+                {selectedFilter ? `Edit: ${selectedFilter.name}` : "Create New LDAP Filter"}
+              </CardTitle>
+              <CardDescription>
+                Build and test LDAP filters for your Active Directory queries
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
-                    <Label htmlFor="filterDescription">Description (Optional)</Label>
-                    <Input 
-                      id="filterDescription" 
-                      value={filterDescription} 
-                      onChange={(e) => setFilterDescription(e.target.value)}
-                      placeholder="Enter a description"
+                    <Label htmlFor="filterName">Filter Name</Label>
+                    <Input
+                      id="filterName"
+                      value={filterName}
+                      onChange={(e) => setFilterName(e.target.value)}
+                      placeholder="My LDAP Filter"
                     />
                   </div>
+                  <div>
+                    <Label htmlFor="objectClass">Object Class</Label>
+                    <Select value={objectClass} onValueChange={setObjectClass}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select object class" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="user">User</SelectItem>
+                        <SelectItem value="group">Group</SelectItem>
+                        <SelectItem value="computer">Computer</SelectItem>
+                        <SelectItem value="organizationalUnit">Organizational Unit</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                <div>
+                  <Label htmlFor="filterDescription">Description</Label>
+                  <Textarea
+                    id="filterDescription"
+                    value={filterDescription}
+                    onChange={(e) => setFilterDescription(e.target.value)}
+                    placeholder="What does this filter do?"
+                    rows={2}
+                  />
+                </div>
+
+                <Tabs defaultValue="builder">
+                  <TabsList>
+                    <TabsTrigger value="builder">Visual Builder</TabsTrigger>
+                    <TabsTrigger value="raw">Manual LDAP Query</TabsTrigger>
+                  </TabsList>
                   
-                  <Tabs defaultValue="manual" className="w-full">
-                    <TabsList className="grid w-full grid-cols-2">
-                      <TabsTrigger value="manual">Manual LDAP Query</TabsTrigger>
-                      <TabsTrigger value="builder">
-                        Visual Query Builder
-                      </TabsTrigger>
-                    </TabsList>
-                    <TabsContent value="manual" className="py-4">
-                      <div className="space-y-2">
-                        <Label htmlFor="ldapQuery">LDAP Query</Label>
-                        <Textarea 
-                          id="ldapQuery"
+                  <TabsContent value="raw">
+                    <div className="space-y-4">
+                      <div>
+                        <Label htmlFor="ldapFilter">LDAP Filter Query</Label>
+                        <Textarea
+                          id="ldapFilter"
                           value={filterQuery}
                           onChange={(e) => setFilterQuery(e.target.value)}
-                          placeholder="Enter your LDAP query string (e.g. (objectClass=user)(sAMAccountName=*))"
-                          className="font-mono h-32"
+                          placeholder="(&(objectClass=user)(memberOf=CN=MyGroup,OU=Groups,DC=example,DC=com))"
+                          rows={5}
+                          className="font-mono"
                         />
                       </div>
-                    </TabsContent>
-                    <TabsContent value="builder" className="py-4">
-                      <div className="space-y-4">
-                        <div className="flex justify-between items-center">
-                          <Label>Query Conditions</Label>
-                          <div className="space-x-2">
-                            <Select 
-                              value={filterBuilder.operator} 
-                              onValueChange={(value) => setFilterBuilder({
+                      
+                      <div className="flex space-x-2">
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          onClick={() => testFilterMutation.mutate()}
+                          disabled={!filterQuery || testFilterMutation.isPending}
+                        >
+                          {testFilterMutation.isPending ? (
+                            <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                          ) : (
+                            <Play className="h-4 w-4 mr-2" />
+                          )}
+                          Test Query
+                        </Button>
+                      </div>
+                    </div>
+                  </TabsContent>
+                  
+                  <TabsContent value="builder">
+                    <div className="space-y-4">
+                      {/* Main operator selection */}
+                      <div>
+                        <Label className="mb-2">Main Operator</Label>
+                        <div className="flex items-center">
+                          <Select
+                            value={filterBuilder.operator}
+                            onValueChange={(value) => {
+                              setFilterBuilder({
                                 ...filterBuilder,
                                 operator: value
-                              })}
-                            >
-                              <SelectTrigger className="w-32">
-                                <SelectValue placeholder="Operator" />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="and">AND</SelectItem>
-                                <SelectItem value="or">OR</SelectItem>
-                              </SelectContent>
-                            </Select>
-                          </div>
+                              });
+                            }}
+                          >
+                            <SelectTrigger className="w-32">
+                              <SelectValue placeholder="Operator" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="and">AND</SelectItem>
+                              <SelectItem value="or">OR</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+
+                      {/* Condition groups section */}
+                      <div className="mt-4">
+                        <div className="flex justify-between items-center mb-2">
+                          <Label>Condition Groups</Label>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                              setFilterBuilder({
+                                ...filterBuilder,
+                                groups: [
+                                  ...filterBuilder.groups,
+                                  {
+                                    operator: "and",
+                                    conditions: [
+                                      { attribute: "", operator: "equals", value: "" }
+                                    ]
+                                  }
+                                ]
+                              });
+                            }}
+                          >
+                            <FolderPlus className="h-4 w-4 mr-2" />
+                            Add Group
+                          </Button>
                         </div>
 
-                        {/* Condition groups section */}
-                        <div className="mt-4">
-                          <div className="flex justify-between items-center mb-2">
-                            <Label>Condition Groups</Label>
+                        {filterBuilder.groups && filterBuilder.groups.length > 0 ? (
+                          <DndContext
+                            sensors={sensors}
+                            collisionDetection={closestCenter}
+                            onDragEnd={handleDragEnd}
+                          >
+                            <SortableContext 
+                              items={filterBuilder.groups.map((_: any, index: number) => `group-${index}`)}
+                              strategy={verticalListSortingStrategy}
+                            >
+                              {filterBuilder.groups.map((group: any, index: number) => (
+                                <SortableGroup
+                                  key={index}
+                                  id={`group-${index}`}
+                                  group={group}
+                                  groupIndex={index}
+                                  filterBuilder={filterBuilder}
+                                  setFilterBuilder={setFilterBuilder}
+                                  ldapAttributes={ldapAttributes}
+                                  isLoadingAttributes={isLoadingAttributes}
+                                />
+                              ))}
+                            </SortableContext>
+                          </DndContext>
+                        ) : (
+                          <div className="p-8 text-center border rounded-md bg-background">
+                            <p className="text-muted-foreground mb-4">No condition groups added yet</p>
                             <Button
                               variant="outline"
                               size="sm"
@@ -764,344 +1076,145 @@ const LdapQueryBuilderPage = () => {
                               }}
                             >
                               <FolderPlus className="h-4 w-4 mr-2" />
-                              Add Group
+                              Add First Group
                             </Button>
-                          </div>
-
-                          {filterBuilder.groups && filterBuilder.groups.length > 0 ? (
-                            filterBuilder.groups.map((group: any, groupIndex: number) => (
-                              <div key={groupIndex} className="border rounded-md p-4 mb-4 bg-background">
-                                <div className="flex justify-between items-center mb-3">
-                                  <div className="flex items-center">
-                                    <Label className="mr-2">Group Operator:</Label>
-                                    <Select 
-                                      value={group.operator} 
-                                      onValueChange={(value) => {
-                                        const updatedGroups = [...filterBuilder.groups];
-                                        updatedGroups[groupIndex].operator = value;
-                                        setFilterBuilder({
-                                          ...filterBuilder,
-                                          groups: updatedGroups
-                                        });
-                                      }}
-                                    >
-                                      <SelectTrigger className="w-24">
-                                        <SelectValue placeholder="Operator" />
-                                      </SelectTrigger>
-                                      <SelectContent>
-                                        <SelectItem value="and">AND</SelectItem>
-                                        <SelectItem value="or">OR</SelectItem>
-                                      </SelectContent>
-                                    </Select>
-                                  </div>
-                                  <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    onClick={() => {
-                                      const updatedGroups = [...filterBuilder.groups];
-                                      updatedGroups.splice(groupIndex, 1);
-                                      setFilterBuilder({
-                                        ...filterBuilder,
-                                        groups: updatedGroups
-                                      });
-                                    }}
-                                  >
-                                    <X className="h-4 w-4" />
-                                  </Button>
-                                </div>
-
-                                <div className="space-y-3">
-                                  {group.conditions.map((condition: any, condIndex: number) => (
-                                    <div key={condIndex} className="grid grid-cols-12 gap-2 items-center">
-                                      <div className="col-span-4">
-                                        {ldapAttributes.length > 0 ? (
-                                          <Select
-                                            value={condition.attribute}
-                                            onValueChange={(value) => {
-                                              const updatedGroups = [...filterBuilder.groups];
-                                              updatedGroups[groupIndex].conditions[condIndex].attribute = value;
-                                              setFilterBuilder({
-                                                ...filterBuilder,
-                                                groups: updatedGroups
-                                              });
-                                            }}
-                                          >
-                                            <SelectTrigger>
-                                              <SelectValue placeholder={isLoadingAttributes ? "Loading attributes..." : "Select attribute"} />
-                                            </SelectTrigger>
-                                            <SelectContent className="max-h-[280px]">
-                                              {ldapAttributes.map((attr) => (
-                                                <SelectItem key={attr} value={attr}>{attr}</SelectItem>
-                                              ))}
-                                              <SelectItem value="custom">Custom attribute...</SelectItem>
-                                            </SelectContent>
-                                          </Select>
-                                        ) : (
-                                          <Input
-                                            placeholder={isLoadingAttributes ? "Loading attributes..." : "Attribute name"}
-                                            value={condition.attribute}
-                                            onChange={(e) => {
-                                              const updatedGroups = [...filterBuilder.groups];
-                                              updatedGroups[groupIndex].conditions[condIndex].attribute = e.target.value;
-                                              setFilterBuilder({
-                                                ...filterBuilder,
-                                                groups: updatedGroups
-                                              });
-                                            }}
-                                          />
-                                        )}
-                                        {condition.attribute === "custom" && (
-                                          <Input
-                                            placeholder="Custom attribute name"
-                                            className="mt-1"
-                                            value=""
-                                            onChange={(e) => {
-                                              const updatedGroups = [...filterBuilder.groups];
-                                              updatedGroups[groupIndex].conditions[condIndex].attribute = e.target.value;
-                                              setFilterBuilder({
-                                                ...filterBuilder,
-                                                groups: updatedGroups
-                                              });
-                                            }}
-                                          />
-                                        )}
-                                      </div>
-                                      <div className="col-span-3">
-                                        <Select
-                                          value={condition.operator}
-                                          onValueChange={(value) => {
-                                            const updatedGroups = [...filterBuilder.groups];
-                                            updatedGroups[groupIndex].conditions[condIndex].operator = value;
-                                            setFilterBuilder({
-                                              ...filterBuilder,
-                                              groups: updatedGroups
-                                            });
-                                          }}
-                                        >
-                                          <SelectTrigger>
-                                            <SelectValue placeholder="Operator" />
-                                          </SelectTrigger>
-                                          <SelectContent>
-                                            <SelectItem value="equals">Equals</SelectItem>
-                                            <SelectItem value="contains">Contains</SelectItem>
-                                            <SelectItem value="startsWith">Starts With</SelectItem>
-                                            <SelectItem value="endsWith">Ends With</SelectItem>
-                                            <SelectItem value="present">Is Present</SelectItem>
-                                            <SelectItem value="notEquals">Not Equals</SelectItem>
-                                          </SelectContent>
-                                        </Select>
-                                      </div>
-                                      <div className="col-span-4">
-                                        <Input
-                                          placeholder="Value"
-                                          value={condition.value}
-                                          disabled={condition.operator === 'present'}
-                                          onChange={(e) => {
-                                            const updatedGroups = [...filterBuilder.groups];
-                                            updatedGroups[groupIndex].conditions[condIndex].value = e.target.value;
-                                            setFilterBuilder({
-                                              ...filterBuilder,
-                                              groups: updatedGroups
-                                            });
-                                          }}
-                                        />
-                                      </div>
-                                      <div className="col-span-1 flex justify-end">
-                                        <Button
-                                          variant="ghost"
-                                          size="icon"
-                                          onClick={() => {
-                                            const updatedGroups = [...filterBuilder.groups];
-                                            updatedGroups[groupIndex].conditions.splice(condIndex, 1);
-                                            if (updatedGroups[groupIndex].conditions.length === 0) {
-                                              updatedGroups.splice(groupIndex, 1);
-                                            }
-                                            setFilterBuilder({
-                                              ...filterBuilder,
-                                              groups: updatedGroups
-                                            });
-                                          }}
-                                          disabled={group.conditions.length <= 1}
-                                        >
-                                          <Trash className="h-4 w-4" />
-                                        </Button>
-                                      </div>
-                                    </div>
-                                  ))}
-
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() => {
-                                      const updatedGroups = [...filterBuilder.groups];
-                                      updatedGroups[groupIndex].conditions.push(
-                                        { attribute: "", operator: "equals", value: "" }
-                                      );
-                                      setFilterBuilder({
-                                        ...filterBuilder,
-                                        groups: updatedGroups
-                                      });
-                                    }}
-                                  >
-                                    <Plus className="h-4 w-4 mr-2" />
-                                    Add Condition to Group
-                                  </Button>
-                                </div>
-                              </div>
-                            ))
-                          ) : (
-                            <div className="p-8 text-center border rounded-md bg-background">
-                              <p className="text-muted-foreground mb-4">No condition groups added yet</p>
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => {
-                                  setFilterBuilder({
-                                    ...filterBuilder,
-                                    groups: [
-                                      ...filterBuilder.groups,
-                                      {
-                                        operator: "and",
-                                        conditions: [
-                                          { attribute: "", operator: "equals", value: "" }
-                                        ]
-                                      }
-                                    ]
-                                  });
-                                }}
-                              >
-                                <FolderPlus className="h-4 w-4 mr-2" />
-                                Add First Group
-                              </Button>
-                            </div>
-                          )}
-                        </div>
-
-                        {/* Additional feature 1: Auto-generate filter on changes */}
-                        <div className="mt-4 flex items-center space-x-2">
-                          <Switch 
-                            id="autoUpdate" 
-                            checked={autoUpdateEnabled}
-                            onCheckedChange={setAutoUpdateEnabled}
-                          />
-                          <Label htmlFor="autoUpdate">Auto-generate LDAP filter on changes</Label>
-                        </div>
-
-                        {/* Generate button (if not auto-update) */}
-                        {!autoUpdateEnabled && (
-                          <div className="mt-4">
-                            <Button
-                              variant="secondary"
-                              size="sm"
-                              onClick={generateLdapFilter}
-                            >
-                              <ArrowLeftRight className="h-4 w-4 mr-2" />
-                              Generate LDAP Filter
-                            </Button>
-                          </div>
-                        )}
-                        
-                        {/* Display LDAP Filter */}
-                        {filterQuery && (
-                          <div className="mt-4 p-3 border rounded-md bg-muted">
-                            <Label className="text-xs mb-1 block">Generated LDAP Filter:</Label>
-                            <code className="text-xs break-all">{filterQuery}</code>
                           </div>
                         )}
                       </div>
-                    </TabsContent>
-                  </Tabs>
-                  
-                  <div className="flex items-center space-x-2">
-                    <Label htmlFor="isActive" className="flex items-center cursor-pointer space-x-2">
-                      <input
-                        id="isActive"
-                        type="checkbox"
-                        checked={isActive}
-                        onChange={(e) => setIsActive(e.target.checked)}
-                        className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
-                      />
-                      <span>Active</span>
-                    </Label>
-                  </div>
-                  
-                  <div className="flex justify-between pt-4">
-                    <div className="space-x-2">
-                      {selectedFilter && (
-                        <>
+
+                      {/* Additional feature 1: Auto-generate filter on changes */}
+                      <div className="mt-4 flex items-center space-x-2">
+                        <Switch 
+                          id="autoUpdate" 
+                          checked={autoUpdateEnabled}
+                          onCheckedChange={setAutoUpdateEnabled}
+                        />
+                        <Label htmlFor="autoUpdate">Auto-generate LDAP filter on changes</Label>
+                      </div>
+
+                      {/* Generate button (if not auto-update) */}
+                      {!autoUpdateEnabled && (
+                        <div className="mt-4">
                           <Button
-                            variant="outline"
-                            onClick={() => {
-                              if (confirm("Are you sure you want to delete this filter?")) {
-                                deleteFilterMutation.mutate();
-                              }
-                            }}
-                            disabled={deleteFilterMutation.isPending}
+                            variant="secondary"
+                            size="sm"
+                            onClick={generateLdapFilter}
                           >
-                            {deleteFilterMutation.isPending ? (
-                              <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                            ) : (
-                              <Trash className="h-4 w-4 mr-2" />
-                            )}
-                            Delete
+                            <ArrowLeftRight className="h-4 w-4 mr-2" />
+                            Generate LDAP Filter
                           </Button>
-                          <Button
-                            variant="outline"
-                            onClick={() => {
-                              refetchRevisions();
-                              setShowRevisionsDialog(true);
-                            }}
-                          >
-                            <History className="h-4 w-4 mr-2" />
-                            History
-                          </Button>
-                        </>
+                        </div>
+                      )}
+                      
+                      {/* Display LDAP Filter with copy functionality */}
+                      {filterQuery && (
+                        <div className="mt-4 p-3 border rounded-md bg-muted">
+                          <div className="flex justify-between items-center mb-1">
+                            <Label className="text-xs">Generated LDAP Filter:</Label>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-6 px-2 py-0"
+                              onClick={() => {
+                                navigator.clipboard.writeText(filterQuery);
+                                toast({
+                                  title: "Copied to clipboard",
+                                  description: "LDAP query has been copied to your clipboard",
+                                  duration: 2000,
+                                });
+                              }}
+                            >
+                              <Copy className="h-3.5 w-3.5 mr-1" />
+                              <span className="text-xs">Copy</span>
+                            </Button>
+                          </div>
+                          <code className="text-xs break-all block p-2 bg-background rounded border">{filterQuery}</code>
+                        </div>
                       )}
                     </div>
-                    <div className="space-x-2">
-                      <Button
-                        variant="outline"
-                        onClick={() => testFilterMutation.mutate()}
-                        disabled={!selectedConnectionId || !filterQuery || testFilterMutation.isPending}
-                      >
-                        {testFilterMutation.isPending ? (
-                          <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                        ) : (
-                          <Play className="h-4 w-4 mr-2" />
-                        )}
-                        Test Query
-                      </Button>
-                      <Button
-                        onClick={handleSaveFilter}
-                        disabled={
-                          !selectedConnectionId || 
-                          !filterName || 
-                          !filterQuery || 
-                          createFilterMutation.isPending || 
-                          updateFilterMutation.isPending
-                        }
-                      >
-                        {(createFilterMutation.isPending || updateFilterMutation.isPending) ? (
-                          <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                        ) : (
-                          <Save className="h-4 w-4 mr-2" />
-                        )}
-                        Save Filter
-                      </Button>
-                    </div>
+                  </TabsContent>
+                </Tabs>
+                
+                <div className="flex items-center space-x-2">
+                  <Label htmlFor="isActive" className="flex items-center cursor-pointer space-x-2">
+                    <input
+                      id="isActive"
+                      type="checkbox"
+                      checked={isActive}
+                      onChange={(e) => setIsActive(e.target.checked)}
+                      className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
+                    />
+                    <span>Active</span>
+                  </Label>
+                </div>
+                
+                <div className="flex justify-between pt-4">
+                  <div className="space-x-2">
+                    {selectedFilter && (
+                      <>
+                        <Button
+                          variant="outline"
+                          onClick={() => {
+                            if (confirm("Are you sure you want to delete this filter?")) {
+                              deleteFilterMutation.mutate();
+                            }
+                          }}
+                          disabled={deleteFilterMutation.isPending}
+                        >
+                          {deleteFilterMutation.isPending ? (
+                            <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                          ) : (
+                            <Trash className="h-4 w-4 mr-2" />
+                          )}
+                          Delete
+                        </Button>
+                        
+                        <Button
+                          variant="outline"
+                          onClick={() => {
+                            setShowRevisionsDialog(true);
+                            refetchRevisions();
+                          }}
+                        >
+                          <History className="h-4 w-4 mr-2" />
+                          History
+                        </Button>
+                      </>
+                    )}
+                  </div>
+                  
+                  <div className="space-x-2">
+                    <Button
+                      variant="outline"
+                      onClick={resetForm}
+                    >
+                      New Filter
+                    </Button>
+                    
+                    <Button
+                      variant="default"
+                      onClick={handleSaveFilter}
+                      disabled={createFilterMutation.isPending || updateFilterMutation.isPending}
+                    >
+                      {(createFilterMutation.isPending || updateFilterMutation.isPending) ? (
+                        <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                      ) : (
+                        <Save className="h-4 w-4 mr-2" />
+                      )}
+                      Save Filter
+                    </Button>
                   </div>
                 </div>
-              </CardContent>
-            </Card>
-          </div>
+              </div>
+            </CardContent>
+          </Card>
         </div>
       </div>
       
-      {/* Dialogs */}
       {renderRevisionsDialog()}
       {renderTestResultsDialog()}
     </DashboardLayout>
   );
-}
+};
 
 export default LdapQueryBuilderPage;
