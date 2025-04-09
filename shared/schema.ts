@@ -198,6 +198,7 @@ export const adComputers = pgTable("ad_computers", {
   canonicalName: text("canonical_name"),
   cn: text("cn"),
   name: text("name").notNull(),
+  sAMAccountName: text("sam_account_name"),
   dnsHostName: text("dns_host_name"),
   operatingSystem: text("operating_system"),
   operatingSystemVersion: text("operating_system_version"),
