@@ -19,6 +19,7 @@ import {
   requireAdmin, 
   initializeRBAC
 } from "./authorization";
+import { ldapClient } from "./ldap";
 
 // Extend Express Request to include user property
 interface Request extends ExpressRequest {
@@ -1003,6 +1004,148 @@ export async function registerRoutes(app: Express): Promise<Server> {
       next(error);
     }
   });
+  
+  /**
+   * @swagger
+   * /api/connections/{connectionId}/ad-groups:
+   *   post:
+   *     summary: Create a new Active Directory group
+   *     tags: [AD Groups]
+   *     security:
+   *       - cookieAuth: []
+   *       - bearerAuth: []
+   *     parameters:
+   *       - in: path
+   *         name: connectionId
+   *         required: true
+   *         schema:
+   *           type: integer
+   *         description: LDAP connection ID
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             required:
+   *               - name
+   *               - parentDN
+   *             properties:
+   *               name:
+   *                 type: string
+   *                 description: The name of the group (will be used for cn and sAMAccountName)
+   *               parentDN:
+   *                 type: string
+   *                 description: The distinguished name of the parent container (OU or domain)
+   *               description:
+   *                 type: string
+   *                 description: Group description
+   *               groupType:
+   *                 type: string
+   *                 enum: ['Global', 'DomainLocal', 'Universal']
+   *                 default: 'Global'
+   *                 description: Group scope type
+   *               groupCategory:
+   *                 type: string
+   *                 enum: ['Security', 'Distribution']
+   *                 default: 'Security'
+   *                 description: Group category type
+   *     responses:
+   *       201:
+   *         description: Group created successfully
+   *       400:
+   *         description: Invalid input
+   *       401:
+   *         description: Unauthorized
+   *       403:
+   *         description: Forbidden
+   *       500:
+   *         description: Server error
+   */
+  app.post("/api/connections/:connectionId/ad-groups", authenticateApiToken, requirePermission(PERMISSIONS.CREATE_AD_GROUPS), async (req: Request, res, next) => {
+    try {
+      const connectionId = parseInt(req.params.connectionId);
+      const { name, parentDN, description, groupType = 'Global', groupCategory = 'Security' } = req.body;
+      
+      // Basic validation
+      if (!name || !parentDN) {
+        return res.status(400).json({ message: "Group name and parent DN are required" });
+      }
+
+      // Get connection
+      const connection = await storage.getLdapConnection(connectionId);
+      if (!connection) {
+        return res.status(404).json({ message: "LDAP connection not found" });
+      }
+      
+      // Create the DN for the new group
+      const groupDN = `CN=${name},${parentDN}`;
+      
+      // Set the group type value based on type and category
+      const groupTypeValue = 
+        (groupCategory === 'Security' ? 0x80000000 : 0) | 
+        (groupType === 'Global' ? 0x2 : groupType === 'Universal' ? 0x8 : 0x4);
+      
+      // Attributes for the new group
+      const groupAttributes = {
+        objectClass: ['top', 'group'],
+        cn: name,
+        sAMAccountName: name,
+        description: description || '',
+        groupType: groupTypeValue.toString()
+      };
+      
+      // Create the group in AD
+      await ldapClient.createEntry(connectionId, groupDN, groupAttributes);
+      
+      // Search for the newly created group to get its attributes
+      const searchResults = await ldapClient.searchGroups(connectionId, `(&(objectClass=group)(cn=${name}))`, [
+        'objectGUID', 'distinguishedName', 'canonicalName', 'cn', 'sAMAccountName', 'description', 'groupType'
+      ]);
+      
+      if (!searchResults || searchResults.length === 0) {
+        return res.status(500).json({ message: "Group created but could not retrieve details" });
+      }
+      
+      const adGroup = searchResults[0];
+      
+      // Store in database
+      const storedGroup = await storage.createAdGroup({
+        connectionId,
+        objectGUID: adGroup.objectGUID,
+        distinguishedName: adGroup.distinguishedName,
+        canonicalName: adGroup.canonicalName,
+        cn: adGroup.cn,
+        sAMAccountName: adGroup.sAMAccountName,
+        groupType: groupCategory + ' ' + groupType,
+        description: adGroup.description,
+        members: [], // No members initially
+        adProperties: adGroup // Store all attributes
+      });
+      
+      // Add audit log
+      await storage.createAuditLogEntry({
+        userId: req.user.id,
+        connectionId,
+        action: 'create',
+        targetId: storedGroup.id.toString(),
+        details: {
+          objectType: 'group',
+          objectName: name,
+          distinguishedName: groupDN,
+          groupType: groupCategory + ' ' + groupType
+        }
+      });
+      
+      res.status(201).json(storedGroup);
+    } catch (err) {
+      console.error("Error creating AD group:", err);
+      if (err.message && err.message.includes('Entry Already Exists')) {
+        return res.status(409).json({ message: "Group already exists" });
+      }
+      next(err);
+    }
+  });
 
   /**
    * @swagger
@@ -1351,6 +1494,186 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(computers);
     } catch (error) {
       next(error);
+    }
+  });
+  
+  /**
+   * @swagger
+   * /api/connections/{connectionId}/ad-computers:
+   *   post:
+   *     summary: Create a new Active Directory computer
+   *     tags: [AD Computers]
+   *     security:
+   *       - cookieAuth: []
+   *       - bearerAuth: []
+   *     parameters:
+   *       - in: path
+   *         name: connectionId
+   *         required: true
+   *         schema:
+   *           type: integer
+   *         description: LDAP connection ID
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             required:
+   *               - name
+   *               - parentDN
+   *             properties:
+   *               name:
+   *                 type: string
+   *                 description: The name of the computer (will be used for cn and sAMAccountName)
+   *               parentDN:
+   *                 type: string
+   *                 description: The distinguished name of the parent container (OU or domain)
+   *               description:
+   *                 type: string
+   *                 description: Computer description
+   *               dnsHostName:
+   *                 type: string
+   *                 description: DNS host name of the computer
+   *               operatingSystem:
+   *                 type: string
+   *                 description: Operating system of the computer
+   *               operatingSystemVersion:
+   *                 type: string
+   *                 description: Operating system version
+   *               enabled:
+   *                 type: boolean
+   *                 default: true
+   *                 description: Whether the computer account is enabled
+   *     responses:
+   *       201:
+   *         description: Computer created successfully
+   *       400:
+   *         description: Invalid input
+   *       401:
+   *         description: Unauthorized
+   *       403:
+   *         description: Forbidden
+   *       500:
+   *         description: Server error
+   */
+  app.post("/api/connections/:connectionId/ad-computers", authenticateApiToken, requirePermission(PERMISSIONS.CREATE_AD_COMPUTERS), async (req: Request, res, next) => {
+    try {
+      const connectionId = parseInt(req.params.connectionId);
+      const { 
+        name, 
+        parentDN, 
+        description, 
+        dnsHostName, 
+        operatingSystem, 
+        operatingSystemVersion, 
+        enabled = true 
+      } = req.body;
+      
+      // Basic validation
+      if (!name || !parentDN) {
+        return res.status(400).json({ message: "Computer name and parent DN are required" });
+      }
+
+      // Get connection
+      const connection = await storage.getLdapConnection(connectionId);
+      if (!connection) {
+        return res.status(404).json({ message: "LDAP connection not found" });
+      }
+      
+      // Create the DN for the new computer
+      const computerDN = `CN=${name},${parentDN}`;
+      
+      // The sAMAccountName needs to end with $
+      const sAMAccountName = name.endsWith('$') ? name : `${name}$`;
+      
+      // Create the userAccountControl value
+      // 4096 = WORKSTATION_TRUST_ACCOUNT
+      // 2 = ACCOUNTDISABLE (if not enabled)
+      const userAccountControl = enabled ? 4096 : 4098;
+      
+      // Set the dnsHostName if not provided
+      const actualDnsHostName = dnsHostName || `${name}.${connection.domain}`;
+      
+      // Attributes for the new computer
+      const computerAttributes: {
+        objectClass: string[];
+        cn: string;
+        sAMAccountName: string;
+        userAccountControl: string;
+        description: string;
+        dNSHostName: string;
+        operatingSystem?: string;
+        operatingSystemVersion?: string;
+      } = {
+        objectClass: ['top', 'computer'],
+        cn: name,
+        sAMAccountName: sAMAccountName,
+        userAccountControl: userAccountControl.toString(),
+        description: description || '',
+        dNSHostName: actualDnsHostName
+      };
+      
+      // Add operating system information if provided
+      if (operatingSystem) {
+        computerAttributes.operatingSystem = operatingSystem;
+      }
+      
+      if (operatingSystemVersion) {
+        computerAttributes.operatingSystemVersion = operatingSystemVersion;
+      }
+      
+      // Create the computer in AD
+      await ldapClient.createEntry(connectionId, computerDN, computerAttributes);
+      
+      // Search for the newly created computer to get its attributes
+      const searchResults = await ldapClient.searchComputers(connectionId, `(&(objectClass=computer)(cn=${name}))`, [
+        'objectGUID', 'distinguishedName', 'canonicalName', 'cn', 'sAMAccountName', 'description',
+        'dNSHostName', 'operatingSystem', 'operatingSystemVersion', 'userAccountControl'
+      ]);
+      
+      if (!searchResults || searchResults.length === 0) {
+        return res.status(500).json({ message: "Computer created but could not retrieve details" });
+      }
+      
+      const adComputer = searchResults[0];
+      
+      // Store in database
+      const storedComputer = await storage.createAdComputer({
+        connectionId,
+        objectGUID: adComputer.objectGUID,
+        distinguishedName: adComputer.distinguishedName,
+        canonicalName: adComputer.canonicalName,
+        cn: adComputer.cn,
+        name: adComputer.cn,
+        sAMAccountName: adComputer.sAMAccountName,
+        dnsHostName: adComputer.dNSHostName,
+        operatingSystem: adComputer.operatingSystem,
+        operatingSystemVersion: adComputer.operatingSystemVersion,
+        enabled: (parseInt(adComputer.userAccountControl) & 2) === 0, // Check if ACCOUNTDISABLE flag is not set
+        adProperties: adComputer // Store all attributes
+      });
+      
+      // Add audit log
+      await storage.createAuditLogEntry({
+        userId: req.user.id,
+        connectionId,
+        action: 'create',
+        targetId: storedComputer.id.toString(),
+        details: {
+          distinguishedName: computerDN,
+          enabled: enabled,
+          name: name
+        }
+      });
+      
+      res.status(201).json(storedComputer);
+    } catch (err) {
+      console.error("Error creating AD computer:", err);
+      if (err.message && err.message.includes('Entry Already Exists')) {
+        return res.status(409).json({ message: "Computer already exists" });
+      }
+      next(err);
     }
   });
 
