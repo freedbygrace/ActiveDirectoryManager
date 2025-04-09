@@ -211,6 +211,7 @@ const swaggerOptions = {
             location: { type: "string" },
             networkAddress: { type: "string" },
             networkMask: { type: "string" },
+            cidr: { type: "string", description: "CIDR notation for the subnet (e.g., 192.168.1.0/24)" },
             managedBy: { type: "string", description: "Distinguished name of the user or group managing this subnet" },
             adProperties: { type: "object" },
             objectType: { type: "string", enum: ["subnet"] },
