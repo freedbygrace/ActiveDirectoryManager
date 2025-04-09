@@ -1,970 +1,698 @@
 import { useState, useEffect } from "react";
-import { useQuery, useMutation } from "@tanstack/react-query";
 import { DashboardLayout } from "@/layouts/dashboard-layout";
-import { DataTable } from "@/components/ui/data-table";
-import { Button } from "@/components/ui/button";
-import {
-  Tabs,
-  TabsContent,
-  TabsList,
-  TabsTrigger,
-} from "@/components/ui/tabs";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { Plus, Pencil, Trash2, Save, History, RotateCcw, Play, Filter } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useQuery, useMutation } from "@tanstack/react-query";
+import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { apiRequest, queryClient } from "@/lib/queryClient";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
-import { format } from "date-fns";
+import { Loader2, Save, Trash, History, ArrowLeftRight, RefreshCw, Play } from "lucide-react";
+import { useAuth } from "@/hooks/use-auth";
+import { 
+  Dialog, 
+  DialogContent, 
+  DialogDescription, 
+  DialogFooter, 
+  DialogHeader, 
+  DialogTitle 
+} from "@/components/ui/dialog";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { 
+  Table, 
+  TableBody, 
+  TableCaption, 
+  TableCell, 
+  TableHead, 
+  TableHeader, 
+  TableRow 
+} from "@/components/ui/table";
 
-// Types for LDAP objects
-interface LdapAttribute {
-  id: number;
-  connectionId: number;
-  name: string;
-  displayName: string;
-  description: string;
-  type: string;
-  multiValued: boolean;
-  objectClass: string;
-  isIndexed: boolean;
-}
-
-interface LdapFilter {
-  id: number;
-  connectionId: number;
-  name: string;
-  description: string;
-  objectClass: string;
-  filter: any;
-  ldapFilter: string;
-  createdAt: string;
-  createdBy: number;
-  modifiedAt: string;
-  modifiedBy: number;
-  currentVersion: number;
-  isActive: boolean;
-}
-
-interface LdapFilterRevision {
-  id: number;
-  filterId: number;
-  version: number;
-  filter: any;
-  ldapFilter: string;
-  createdAt: string;
-  createdBy: number;
-  comment: string;
-}
-
-interface LdapConnection {
+type LdapConnection = {
   id: number;
   name: string;
   server: string;
   domain: string;
-  port: number;
-  useSSL: boolean;
-  status: string;
-}
+};
 
-interface FilterCondition {
-  attribute: string;
-  operator: string;
-  value: string;
-}
+type LdapFilter = {
+  id: number;
+  name: string;
+  description: string | null;
+  filter: any;
+  ldapFilter: string;
+  connectionId: number;
+  createdBy: number;
+  createdAt: string;
+  modifiedBy: number | null;
+  modifiedAt: string | null;
+  isActive: boolean;
+};
 
-interface FilterGroup {
-  type: "AND" | "OR";
-  conditions: (FilterCondition | FilterGroup)[];
-}
+type LdapFilterRevision = {
+  id: number;
+  filterId: number;
+  filter: any;
+  ldapFilter: string;
+  modifiedBy: number;
+  modifiedAt: string;
+};
 
-export default function LdapQueryBuilderPage() {
+const LdapQueryBuilderPage = () => {
+  const { user } = useAuth();
   const { toast } = useToast();
-  const [selectedConnection, setSelectedConnection] = useState<number | null>(null);
-  const [selectedObjectClass, setSelectedObjectClass] = useState<string>("user");
-  const [filterToEdit, setFilterToEdit] = useState<LdapFilter | null>(null);
-  const [filterToDelete, setFilterToDelete] = useState<LdapFilter | null>(null);
+  const [selectedConnectionId, setSelectedConnectionId] = useState<string | undefined>();
+  const [selectedFilter, setSelectedFilter] = useState<LdapFilter | null>(null);
   const [filterName, setFilterName] = useState("");
   const [filterDescription, setFilterDescription] = useState("");
-  const [ldapFilter, setLdapFilter] = useState("");
-  const [showHistory, setShowHistory] = useState(false);
-  const [currentFilter, setCurrentFilter] = useState<FilterGroup>({
-    type: "AND",
-    conditions: []
-  });
-  const [pageIndex, setPageIndex] = useState(0);
-  const [pageSize, setPageSize] = useState(10);
+  const [filterQuery, setFilterQuery] = useState("");
+  const [objectClass, setObjectClass] = useState<string>("user");
+  const [showRevisionsDialog, setShowRevisionsDialog] = useState(false);
+  const [showTestResultsDialog, setShowTestResultsDialog] = useState(false);
   const [testResults, setTestResults] = useState<any[]>([]);
-  const [revisionToRevert, setRevisionToRevert] = useState<LdapFilterRevision | null>(null);
+  const [isActive, setIsActive] = useState(true);
+  const [filterBuilder, setFilterBuilder] = useState<any>({
+    operator: "and",
+    conditions: [{ attribute: "", operator: "equals", value: "" }]
+  });
 
-  // Get all LDAP connections
-  const { data: connections = [], isLoading: isLoadingConnections } = useQuery<LdapConnection[]>({
+  // Query to get LDAP connections
+  const { 
+    data: connections,
+    isLoading: connectionsLoading 
+  } = useQuery({
     queryKey: ["/api/ldap-connections"],
+    enabled: !!user
   });
 
-  // Get attributes for the selected object class
-  const { data: attributes = [], isLoading: isLoadingAttributes } = useQuery<LdapAttribute[]>({
-    queryKey: ["/api/connections", selectedConnection, "ldap-attributes", selectedObjectClass],
-    queryFn: async () => {
-      if (!selectedConnection) return [];
-      const res = await apiRequest("GET", `/api/connections/${selectedConnection}/ldap-attributes?objectClass=${selectedObjectClass}`);
-      return await res.json();
-    },
-    enabled: !!selectedConnection,
+  // Query to get LDAP filters for the selected connection
+  const { 
+    data: filters,
+    isLoading: filtersLoading 
+  } = useQuery({
+    queryKey: ["/api/connections", selectedConnectionId, "ldap-filters"],
+    enabled: !!selectedConnectionId,
   });
 
-  // Get saved filters for the selected connection
-  const { data: savedFilters = [], isLoading: isLoadingSavedFilters } = useQuery<LdapFilter[]>({
-    queryKey: ["/api/connections", selectedConnection, "ldap-filters"],
-    queryFn: async () => {
-      if (!selectedConnection) return [];
-      const res = await apiRequest("GET", `/api/connections/${selectedConnection}/ldap-filters`);
-      return await res.json();
-    },
-    enabled: !!selectedConnection,
+  // Query to get LDAP filter revisions
+  const { 
+    data: revisions,
+    isLoading: revisionsLoading,
+    refetch: refetchRevisions
+  } = useQuery({
+    queryKey: ["/api/ldap-filters", selectedFilter?.id, "revisions"],
+    enabled: !!selectedFilter?.id && showRevisionsDialog,
   });
 
-  // Get revision history for the selected filter
-  const { data: filterRevisions = [], isLoading: isLoadingRevisions } = useQuery<LdapFilterRevision[]>({
-    queryKey: ["/api/ldap-filters", filterToEdit?.id, "revisions"],
-    queryFn: async () => {
-      if (!filterToEdit) return [];
-      const res = await apiRequest("GET", `/api/ldap-filters/${filterToEdit.id}/revisions`);
-      return await res.json();
-    },
-    enabled: !!filterToEdit && showHistory,
-  });
-
-  // Create new filter
+  // Mutation to save a new filter
   const createFilterMutation = useMutation({
-    mutationFn: async (filterData: any) => {
-      const res = await apiRequest("POST", `/api/connections/${selectedConnection}/ldap-filters`, filterData);
+    mutationFn: async (newFilter: any) => {
+      if (!selectedConnectionId) throw new Error("No connection selected");
+      const res = await apiRequest("POST", `/api/connections/${selectedConnectionId}/ldap-filters`, newFilter);
       return await res.json();
     },
     onSuccess: () => {
       toast({
-        title: "Filter created",
-        description: "The LDAP filter has been successfully created.",
+        title: "Success",
+        description: "Filter created successfully",
       });
-      queryClient.invalidateQueries({ queryKey: ["/api/connections", selectedConnection, "ldap-filters"] });
-      resetFilterForm();
+      queryClient.invalidateQueries({ queryKey: ["/api/connections", selectedConnectionId, "ldap-filters"] });
+      resetForm();
     },
-    onError: (error) => {
+    onError: (error: Error) => {
       toast({
-        title: "Error",
-        description: `Failed to create filter: ${error.message}`,
+        title: "Error creating filter",
+        description: error.message,
         variant: "destructive",
       });
-    },
+    }
   });
 
-  // Update filter
+  // Mutation to update an existing filter
   const updateFilterMutation = useMutation({
-    mutationFn: async ({ id, data }: { id: number; data: any }) => {
-      const res = await apiRequest("PUT", `/api/ldap-filters/${id}`, data);
+    mutationFn: async (updatedFilter: any) => {
+      if (!selectedFilter) throw new Error("No filter selected");
+      const res = await apiRequest("PUT", `/api/ldap-filters/${selectedFilter.id}`, updatedFilter);
       return await res.json();
     },
     onSuccess: () => {
       toast({
-        title: "Filter updated",
-        description: "The LDAP filter has been successfully updated.",
+        title: "Success",
+        description: "Filter updated successfully",
       });
-      queryClient.invalidateQueries({ queryKey: ["/api/connections", selectedConnection, "ldap-filters"] });
-      resetFilterForm();
+      queryClient.invalidateQueries({ queryKey: ["/api/connections", selectedConnectionId, "ldap-filters"] });
+      resetForm();
     },
-    onError: (error) => {
+    onError: (error: Error) => {
       toast({
-        title: "Error",
-        description: `Failed to update filter: ${error.message}`,
+        title: "Error updating filter",
+        description: error.message,
         variant: "destructive",
       });
-    },
+    }
   });
 
-  // Delete filter
+  // Mutation to delete a filter
   const deleteFilterMutation = useMutation({
-    mutationFn: async (id: number) => {
-      await apiRequest("DELETE", `/api/ldap-filters/${id}`);
+    mutationFn: async () => {
+      if (!selectedFilter) throw new Error("No filter selected");
+      return await apiRequest("DELETE", `/api/ldap-filters/${selectedFilter.id}`);
     },
     onSuccess: () => {
       toast({
-        title: "Filter deleted",
-        description: "The LDAP filter has been successfully deleted.",
+        title: "Success",
+        description: "Filter deleted successfully",
       });
-      queryClient.invalidateQueries({ queryKey: ["/api/connections", selectedConnection, "ldap-filters"] });
-      setFilterToDelete(null);
+      queryClient.invalidateQueries({ queryKey: ["/api/connections", selectedConnectionId, "ldap-filters"] });
+      resetForm();
     },
-    onError: (error) => {
+    onError: (error: Error) => {
       toast({
-        title: "Error",
-        description: `Failed to delete filter: ${error.message}`,
+        title: "Error deleting filter",
+        description: error.message,
         variant: "destructive",
       });
-    },
+    }
   });
 
-  // Test filter
+  // Mutation to revert to a previous version
+  const revertToRevisionMutation = useMutation({
+    mutationFn: async (revisionId: number) => {
+      if (!selectedFilter) throw new Error("No filter selected");
+      const res = await apiRequest("POST", `/api/ldap-filters/${selectedFilter.id}/revert/${revisionId}`, {});
+      return await res.json();
+    },
+    onSuccess: (data) => {
+      toast({
+        title: "Success",
+        description: "Filter reverted successfully",
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/connections", selectedConnectionId, "ldap-filters"] });
+      setSelectedFilter(data);
+      setFilterName(data.name);
+      setFilterDescription(data.description || "");
+      setFilterQuery(data.ldapFilter);
+      setIsActive(data.isActive);
+      setShowRevisionsDialog(false);
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error reverting filter",
+        description: error.message,
+        variant: "destructive",
+      });
+    }
+  });
+
+  // Mutation to test the LDAP filter
   const testFilterMutation = useMutation({
-    mutationFn: async (data: { ldapFilter: string; objectClass: string }) => {
-      if (!selectedConnection) throw new Error("No connection selected");
-      const res = await apiRequest("POST", `/api/connections/${selectedConnection}/test-filter`, data);
+    mutationFn: async () => {
+      if (!selectedConnectionId) throw new Error("No connection selected");
+      const res = await apiRequest("POST", `/api/connections/${selectedConnectionId}/test-ldap-filter`, {
+        ldapFilter: filterQuery,
+        objectClass
+      });
       return await res.json();
     },
     onSuccess: (data) => {
       setTestResults(data);
-      toast({
-        title: "Filter tested",
-        description: `Found ${data.length} results.`,
-      });
+      setShowTestResultsDialog(true);
     },
-    onError: (error) => {
+    onError: (error: Error) => {
       toast({
-        title: "Test failed",
-        description: `Failed to test filter: ${error.message}`,
+        title: "Error testing filter",
+        description: error.message,
         variant: "destructive",
       });
-    },
+    }
   });
 
-  // Revert to a previous revision
-  const revertToRevisionMutation = useMutation({
-    mutationFn: async ({ filterId, revisionId }: { filterId: number; revisionId: number }) => {
-      const res = await apiRequest("POST", `/api/ldap-filters/${filterId}/revert/${revisionId}`);
-      return await res.json();
-    },
-    onSuccess: (data) => {
-      toast({
-        title: "Filter reverted",
-        description: "The filter has been reverted to the selected revision.",
-      });
-      queryClient.invalidateQueries({ queryKey: ["/api/ldap-filters", filterToEdit?.id] });
-      queryClient.invalidateQueries({ queryKey: ["/api/ldap-filters", filterToEdit?.id, "revisions"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/connections", selectedConnection, "ldap-filters"] });
-      setRevisionToRevert(null);
-      
-      // Update the current filter with the reverted data
-      if (filterToEdit) {
-        setFilterToEdit(data);
-        setCurrentFilter(data.filter);
-        setLdapFilter(data.ldapFilter);
-      }
-    },
-    onError: (error) => {
-      toast({
-        title: "Revert failed",
-        description: `Failed to revert filter: ${error.message}`,
-        variant: "destructive",
-      });
-    },
-  });
+  // Reset form
+  const resetForm = () => {
+    setSelectedFilter(null);
+    setFilterName("");
+    setFilterDescription("");
+    setFilterQuery("");
+    setIsActive(true);
+  };
 
-  // Handle filter selection
+  // Select filter
   const handleSelectFilter = (filter: LdapFilter) => {
-    setFilterToEdit(filter);
+    setSelectedFilter(filter);
     setFilterName(filter.name);
     setFilterDescription(filter.description || "");
-    setCurrentFilter(filter.filter);
-    setLdapFilter(filter.ldapFilter);
-    setSelectedObjectClass(filter.objectClass);
+    setFilterQuery(filter.ldapFilter);
+    setIsActive(filter.isActive);
   };
 
-  // Convert the filter object to LDAP filter string
-  const buildLdapFilter = (filter: FilterGroup): string => {
-    if (!filter.conditions || filter.conditions.length === 0) {
-      return "(objectClass=*)";
-    }
-
-    const operator = filter.type === "AND" ? "&" : "|";
-    const conditions = filter.conditions.map(condition => {
-      if ('type' in condition) {
-        // This is a nested group
-        return buildLdapFilter(condition);
-      } else {
-        // This is a basic condition
-        let value = condition.value;
-        let attr = condition.attribute;
-        
-        switch (condition.operator) {
-          case "equals":
-            return `(${attr}=${value})`;
-          case "notEquals":
-            return `(!(${attr}=${value}))`;
-          case "contains":
-            return `(${attr}=*${value}*)`;
-          case "startsWith":
-            return `(${attr}=${value}*)`;
-          case "endsWith":
-            return `(${attr}=*${value})`;
-          case "exists":
-            return `(${attr}=*)`;
-          case "notExists":
-            return `(!(${attr}=*))`;
-          default:
-            return `(${attr}=${value})`;
-        }
-      }
-    });
-
-    if (conditions.length === 1) {
-      return conditions[0];
-    }
-
-    return `(${operator}${conditions.join('')})`;
-  };
-
-  // Add a new condition to the filter
-  const addCondition = () => {
-    // Find the first attribute for default
-    const defaultAttribute = attributes.length > 0 ? attributes[0].name : "";
-    
-    const newCondition: FilterCondition = {
-      attribute: defaultAttribute,
-      operator: "equals",
-      value: ""
-    };
-
-    setCurrentFilter({
-      ...currentFilter,
-      conditions: [...currentFilter.conditions, newCondition]
-    });
-  };
-
-  // Add a new group to the filter
-  const addGroup = () => {
-    const newGroup: FilterGroup = {
-      type: "AND",
-      conditions: []
-    };
-
-    setCurrentFilter({
-      ...currentFilter,
-      conditions: [...currentFilter.conditions, newGroup]
-    });
-  };
-
-  // Update a condition in the filter
-  const updateCondition = (index: number, field: keyof FilterCondition, value: string) => {
-    const updatedConditions = [...currentFilter.conditions];
-    const condition = updatedConditions[index] as FilterCondition;
-    
-    if ('attribute' in condition) {
-      (condition as any)[field] = value;
-      setCurrentFilter({
-        ...currentFilter,
-        conditions: updatedConditions
-      });
-    }
-  };
-
-  // Update a group in the filter
-  const updateGroup = (index: number, type: "AND" | "OR") => {
-    const updatedConditions = [...currentFilter.conditions];
-    const group = updatedConditions[index] as FilterGroup;
-    
-    if ('type' in group) {
-      group.type = type;
-      setCurrentFilter({
-        ...currentFilter,
-        conditions: updatedConditions
-      });
-    }
-  };
-
-  // Remove a condition from the filter
-  const removeCondition = (index: number) => {
-    const updatedConditions = [...currentFilter.conditions];
-    updatedConditions.splice(index, 1);
-    
-    setCurrentFilter({
-      ...currentFilter,
-      conditions: updatedConditions
-    });
-  };
-
-  // Handle saving the filter
+  // Save filter
   const handleSaveFilter = () => {
-    if (!selectedConnection) {
+    if (!filterName || !filterQuery) {
       toast({
-        title: "No connection selected",
-        description: "Please select an LDAP connection first.",
+        title: "Validation Error",
+        description: "Filter name and query are required",
         variant: "destructive",
       });
       return;
     }
 
-    if (!filterName) {
-      toast({
-        title: "Missing filter name",
-        description: "Please provide a name for the filter.",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    const generatedLdapFilter = buildLdapFilter(currentFilter);
-    
     const filterData = {
       name: filterName,
-      description: filterDescription,
-      objectClass: selectedObjectClass,
-      filter: currentFilter,
-      ldapFilter: generatedLdapFilter
+      description: filterDescription || null,
+      ldapFilter: filterQuery,
+      filter: filterBuilder,
+      isActive
     };
 
-    if (filterToEdit) {
-      updateFilterMutation.mutate({ id: filterToEdit.id, data: filterData });
+    if (selectedFilter) {
+      updateFilterMutation.mutate(filterData);
     } else {
       createFilterMutation.mutate(filterData);
     }
   };
 
-  // Handle testing the filter
-  const handleTestFilter = () => {
-    if (!selectedConnection) {
-      toast({
-        title: "No connection selected",
-        description: "Please select an LDAP connection first.",
-        variant: "destructive",
-      });
-      return;
+  // Render connections dropdown
+  const renderConnectionsDropdown = () => {
+    if (connectionsLoading) {
+      return <SelectTrigger disabled>
+        <SelectValue placeholder="Loading connections..." />
+      </SelectTrigger>;
     }
 
-    const generatedLdapFilter = buildLdapFilter(currentFilter);
-    
-    testFilterMutation.mutate({
-      ldapFilter: generatedLdapFilter,
-      objectClass: selectedObjectClass
-    });
+    return (
+      <Select value={selectedConnectionId} onValueChange={setSelectedConnectionId}>
+        <SelectTrigger>
+          <SelectValue placeholder="Select a connection" />
+        </SelectTrigger>
+        <SelectContent>
+          {connections?.map((conn: LdapConnection) => (
+            <SelectItem key={conn.id} value={conn.id.toString()}>
+              {conn.name} ({conn.domain})
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    );
   };
 
-  // Reset the filter form
-  const resetFilterForm = () => {
-    setFilterToEdit(null);
-    setFilterName("");
-    setFilterDescription("");
-    setCurrentFilter({
-      type: "AND",
-      conditions: []
-    });
-    setLdapFilter("");
-    setShowHistory(false);
-    setTestResults([]);
-  };
+  // Render filters list
+  const renderFiltersList = () => {
+    if (!selectedConnectionId) {
+      return <p className="text-muted-foreground text-sm">Select a connection to view filters</p>;
+    }
 
-  // Handle filter type change
-  const handleFilterTypeChange = (type: "AND" | "OR") => {
-    setCurrentFilter({
-      ...currentFilter,
-      type
-    });
-  };
+    if (filtersLoading) {
+      return <div className="flex items-center justify-center py-4">
+        <Loader2 className="h-5 w-5 animate-spin text-primary" />
+      </div>;
+    }
 
-  // Update LDAP filter when filter conditions change
-  useEffect(() => {
-    const generatedFilter = buildLdapFilter(currentFilter);
-    setLdapFilter(generatedFilter);
-  }, [currentFilter]);
+    if (!filters || filters.length === 0) {
+      return <p className="text-muted-foreground text-sm py-4">No filters found for this connection</p>;
+    }
 
-  // Columns for the saved filters table
-  const filterColumns: Array<{
-    header: string;
-    accessorKey: keyof LdapFilter | ((row: LdapFilter) => React.ReactNode);
-    cell?: (row: LdapFilter) => React.ReactNode;
-  }> = [
-    {
-      header: "Name",
-      accessorKey: "name",
-    },
-    {
-      header: "Object Class",
-      accessorKey: "objectClass",
-    },
-    {
-      header: "Description",
-      accessorKey: "description",
-    },
-    {
-      header: "Last Modified",
-      accessorKey: "modifiedAt",
-      cell: (row: LdapFilter) => format(new Date(row.modifiedAt), 'MMM dd, yyyy HH:mm'),
-    },
-    {
-      header: "Version",
-      accessorKey: "currentVersion",
-    },
-    {
-      header: "Actions",
-      accessorKey: "id", // Use a valid property but render with cell
-      cell: (row: LdapFilter) => (
-        <div className="flex space-x-2">
-          <Button 
-            variant="ghost" 
-            size="icon" 
-            onClick={(e) => { 
-              e.stopPropagation(); 
-              handleSelectFilter(row);
-            }}
+    return (
+      <div className="space-y-2 mt-4">
+        {filters.map((filter: LdapFilter) => (
+          <div 
+            key={filter.id} 
+            className={`p-3 border rounded-md cursor-pointer hover:bg-secondary/40 ${selectedFilter?.id === filter.id ? 'bg-secondary' : ''}`}
+            onClick={() => handleSelectFilter(filter)}
           >
-            <Pencil className="h-4 w-4" />
-          </Button>
-          <Button 
-            variant="ghost" 
-            size="icon" 
-            onClick={(e) => { 
-              e.stopPropagation(); 
-              setFilterToDelete(row);
-            }}
-          >
-            <Trash2 className="h-4 w-4 text-destructive" />
-          </Button>
-        </div>
-      ),
-    },
-  ];
+            <div className="flex justify-between items-start">
+              <div>
+                <h4 className="font-medium">{filter.name}</h4>
+                {filter.description && (
+                  <p className="text-sm text-muted-foreground line-clamp-2">{filter.description}</p>
+                )}
+              </div>
+              {!filter.isActive && (
+                <span className="text-xs bg-yellow-200 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200 px-2 py-1 rounded-full">
+                  Inactive
+                </span>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+    );
+  };
 
-  // Columns for the revisions table
-  const revisionColumns: Array<{
-    header: string;
-    accessorKey: keyof LdapFilterRevision | ((row: LdapFilterRevision) => React.ReactNode);
-    cell?: (row: LdapFilterRevision) => React.ReactNode;
-  }> = [
-    {
-      header: "Version",
-      accessorKey: "version",
-    },
-    {
-      header: "Created At",
-      accessorKey: "createdAt",
-      cell: (row: LdapFilterRevision) => format(new Date(row.createdAt), 'MMM dd, yyyy HH:mm'),
-    },
-    {
-      header: "Comment",
-      accessorKey: "comment",
-    },
-    {
-      header: "Actions",
-      accessorKey: "id",
-      cell: (row: LdapFilterRevision) => (
-        <Button 
-          variant="ghost" 
-          size="sm" 
-          onClick={() => setRevisionToRevert(row)}
-        >
-          <RotateCcw className="h-4 w-4 mr-2" />
-          Revert to this version
-        </Button>
-      ),
-    },
-  ];
+  // Render revisions dialog
+  const renderRevisionsDialog = () => {
+    return (
+      <Dialog open={showRevisionsDialog} onOpenChange={setShowRevisionsDialog}>
+        <DialogContent className="max-w-3xl">
+          <DialogHeader>
+            <DialogTitle>Revision History</DialogTitle>
+            <DialogDescription>
+              View and restore previous versions of "{selectedFilter?.name}"
+            </DialogDescription>
+          </DialogHeader>
 
-  // Columns for the test results table
-  const testResultColumns: Array<{
-    header: string;
-    accessorKey: string;
-    cell?: (row: any) => React.ReactNode;
-  }> = [
-    {
-      header: "Name",
-      accessorKey: "name",
-    },
-    {
-      header: "Distinguished Name",
-      accessorKey: "dn",
-    },
-  ];
+          {revisionsLoading ? (
+            <div className="flex items-center justify-center py-8">
+              <Loader2 className="h-6 w-6 animate-spin text-primary" />
+            </div>
+          ) : (
+            <div className="max-h-[60vh] overflow-y-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Date</TableHead>
+                    <TableHead>Modified By</TableHead>
+                    <TableHead>LDAP Filter</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {revisions && revisions.length > 0 ? (
+                    revisions.map((rev: LdapFilterRevision) => (
+                      <TableRow key={rev.id}>
+                        <TableCell>
+                          {new Date(rev.modifiedAt).toLocaleString()}
+                        </TableCell>
+                        <TableCell>User ID: {rev.modifiedBy}</TableCell>
+                        <TableCell>
+                          <code className="text-xs max-w-[300px] block overflow-hidden text-ellipsis">
+                            {rev.ldapFilter}
+                          </code>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <Button 
+                            variant="outline" 
+                            size="sm"
+                            onClick={() => revertToRevisionMutation.mutate(rev.id)}
+                            disabled={revertToRevisionMutation.isPending}
+                          >
+                            {revertToRevisionMutation.isPending ? (
+                              <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                            ) : (
+                              <RefreshCw className="h-4 w-4 mr-2" />
+                            )}
+                            Revert
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  ) : (
+                    <TableRow>
+                      <TableCell colSpan={4} className="text-center">
+                        No revision history found
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+          
+          <DialogFooter>
+            <Button 
+              variant="outline" 
+              onClick={() => setShowRevisionsDialog(false)}
+            >
+              Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    );
+  };
+
+  // Render test results dialog
+  const renderTestResultsDialog = () => {
+    return (
+      <Dialog open={showTestResultsDialog} onOpenChange={setShowTestResultsDialog}>
+        <DialogContent className="max-w-4xl">
+          <DialogHeader>
+            <DialogTitle>Test Results</DialogTitle>
+            <DialogDescription>
+              Results for LDAP filter: <code>{filterQuery}</code>
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="max-h-[60vh] overflow-y-auto">
+            {testResults.length > 0 ? (
+              <Table>
+                <TableCaption>Found {testResults.length} results</TableCaption>
+                <TableHeader>
+                  <TableRow>
+                    {Object.keys(testResults[0]).map((key) => (
+                      <TableHead key={key}>{key}</TableHead>
+                    ))}
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {testResults.map((result, index) => (
+                    <TableRow key={index}>
+                      {Object.entries(result).map(([key, value]) => (
+                        <TableCell key={key}>
+                          {typeof value === 'object' 
+                            ? JSON.stringify(value) 
+                            : String(value)}
+                        </TableCell>
+                      ))}
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            ) : (
+              <p className="text-center py-8">No results found for this filter</p>
+            )}
+          </div>
+          
+          <DialogFooter>
+            <Button 
+              variant="outline" 
+              onClick={() => setShowTestResultsDialog(false)}
+            >
+              Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    );
+  };
 
   return (
-    <DashboardLayout title="LDAP Query Builder" description="Create, manage, and test LDAP filters">
-      <div className="mb-6 flex items-center justify-between">
-        <div className="max-w-2xl">
-          <p className="text-sm text-muted-foreground">
-            Build complex LDAP queries with a visual interface. Save filters for later use, test them against your Active Directory, and manage filter versions.
-          </p>
+    <DashboardLayout title="LDAP Query Builder">
+      <div className="container mx-auto py-6">
+        <div className="flex justify-between items-center mb-6">
+          <div>
+            <h1 className="text-3xl font-bold tracking-tight">LDAP Query Builder</h1>
+            <p className="text-muted-foreground">
+              Create, test and manage LDAP queries for Active Directory
+            </p>
+          </div>
         </div>
-        <div className="flex space-x-2">
-          <Button onClick={resetFilterForm} variant="outline">
-            New Filter
-          </Button>
-        </div>
-      </div>
 
-      <div className="grid grid-cols-1 gap-6 md:grid-cols-12">
-        {/* Connection and Object Class Selection */}
-        <Card className="md:col-span-12">
-          <CardHeader className="pb-3">
-            <CardTitle>Connection Settings</CardTitle>
-            <CardDescription>Select a connection and object class for your filter</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-              <div>
-                <Label htmlFor="connection">LDAP Connection</Label>
-                <Select
-                  value={selectedConnection?.toString() || ""}
-                  onValueChange={(value) => setSelectedConnection(Number(value))}
-                >
-                  <SelectTrigger id="connection">
-                    <SelectValue placeholder="Select a connection" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {connections.map((connection) => (
-                      <SelectItem key={connection.id} value={connection.id.toString()}>
-                        {connection.name} ({connection.server})
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <Label htmlFor="objectClass">Object Class</Label>
-                <Select
-                  value={selectedObjectClass}
-                  onValueChange={setSelectedObjectClass}
-                >
-                  <SelectTrigger id="objectClass">
-                    <SelectValue placeholder="Select object class" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="user">User</SelectItem>
-                    <SelectItem value="group">Group</SelectItem>
-                    <SelectItem value="organizationalUnit">Organizational Unit</SelectItem>
-                    <SelectItem value="computer">Computer</SelectItem>
-                    <SelectItem value="domain">Domain</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Filter Builder */}
-        <Card className="md:col-span-8">
-          <CardHeader className="pb-3">
-            <CardTitle>Filter Builder</CardTitle>
-            <CardDescription>Build your LDAP filter by adding conditions</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="mb-4 grid grid-cols-1 gap-4 md:grid-cols-2">
-              <div>
-                <Label htmlFor="filterName">Filter Name</Label>
-                <Input
-                  id="filterName"
-                  value={filterName}
-                  onChange={(e) => setFilterName(e.target.value)}
-                  placeholder="Enter a name for this filter"
-                />
-              </div>
-              <div>
-                <Label htmlFor="filterDescription">Description (Optional)</Label>
-                <Input
-                  id="filterDescription"
-                  value={filterDescription}
-                  onChange={(e) => setFilterDescription(e.target.value)}
-                  placeholder="Enter a description"
-                />
-              </div>
-            </div>
-
-            <div className="mb-4">
-              <Label>Filter Type</Label>
-              <div className="mt-2 flex space-x-2">
-                <Button
-                  variant={currentFilter.type === "AND" ? "default" : "outline"}
-                  onClick={() => handleFilterTypeChange("AND")}
-                  size="sm"
-                >
-                  Match ALL conditions (AND)
-                </Button>
-                <Button
-                  variant={currentFilter.type === "OR" ? "default" : "outline"}
-                  onClick={() => handleFilterTypeChange("OR")}
-                  size="sm"
-                >
-                  Match ANY condition (OR)
-                </Button>
-              </div>
-            </div>
-
-            <div className="space-y-4">
-              {currentFilter.conditions.map((condition, index) => {
-                if ('type' in condition) {
-                  // This is a nested group (not implementing in this version)
-                  return (
-                    <div key={index} className="rounded-md border p-4">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center space-x-2">
-                          <Label>Group Type</Label>
-                          <Select
-                            value={condition.type}
-                            onValueChange={(value) => updateGroup(index, value as "AND" | "OR")}
-                          >
-                            <SelectTrigger className="w-32">
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="AND">AND</SelectItem>
-                              <SelectItem value="OR">OR</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </div>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => removeCondition(index)}
-                        >
-                          <Trash2 className="h-4 w-4 text-destructive" />
-                        </Button>
-                      </div>
-                      <p className="mt-2 text-sm text-muted-foreground">
-                        Nested groups are not fully implemented in this version.
-                      </p>
+        <div className="grid md:grid-cols-3 gap-6">
+          {/* Left Side - Filters List */}
+          <div className="md:col-span-1">
+            <Card>
+              <CardHeader>
+                <CardTitle>LDAP Filters</CardTitle>
+                <CardDescription>Select a connection to view filters</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  <div>
+                    <Label htmlFor="connection">LDAP Connection</Label>
+                    <div className="mt-1">
+                      {renderConnectionsDropdown()}
                     </div>
-                  );
-                }
-
-                return (
-                  <div key={index} className="grid grid-cols-1 gap-2 rounded-md border p-4 md:grid-cols-12">
-                    <div className="md:col-span-4">
-                      <Label>Attribute</Label>
-                      <Select
-                        value={condition.attribute}
-                        onValueChange={(value) => updateCondition(index, 'attribute', value)}
+                  </div>
+                  
+                  <div>
+                    <div className="flex justify-between items-center">
+                      <h3 className="font-medium">Saved Filters</h3>
+                      <Button 
+                        variant="ghost" 
+                        size="sm"
+                        className="h-7 px-2"
+                        onClick={resetForm}
                       >
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {attributes.map((attr) => (
-                            <SelectItem key={attr.id} value={attr.name}>
-                              {attr.displayName || attr.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                        New Filter
+                      </Button>
                     </div>
-                    <div className="md:col-span-3">
-                      <Label>Operator</Label>
-                      <Select
-                        value={condition.operator}
-                        onValueChange={(value) => updateCondition(index, 'operator', value)}
-                      >
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="equals">Equals</SelectItem>
-                          <SelectItem value="notEquals">Not equals</SelectItem>
-                          <SelectItem value="contains">Contains</SelectItem>
-                          <SelectItem value="startsWith">Starts with</SelectItem>
-                          <SelectItem value="endsWith">Ends with</SelectItem>
-                          <SelectItem value="exists">Exists</SelectItem>
-                          <SelectItem value="notExists">Not exists</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="md:col-span-4">
-                      <Label>Value</Label>
-                      <Input
-                        value={condition.value}
-                        onChange={(e) => updateCondition(index, 'value', e.target.value)}
-                        placeholder="Value"
-                        disabled={["exists", "notExists"].includes(condition.operator)}
+                    {renderFiltersList()}
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+          
+          {/* Right Side - Filter Editor */}
+          <div className="md:col-span-2">
+            <Card>
+              <CardHeader>
+                <CardTitle>
+                  {selectedFilter ? `Edit Filter: ${selectedFilter.name}` : 'Create New Filter'}
+                </CardTitle>
+                <CardDescription>
+                  {selectedFilter 
+                    ? 'Update your LDAP filter and test it against your Active Directory'
+                    : 'Create a new LDAP filter and test it against your Active Directory'}
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  <div className="grid grid-cols-4 gap-4">
+                    <div className="col-span-3">
+                      <Label htmlFor="filterName">Filter Name</Label>
+                      <Input 
+                        id="filterName" 
+                        value={filterName} 
+                        onChange={(e) => setFilterName(e.target.value)}
+                        placeholder="Enter a name for your filter"
                       />
                     </div>
-                    <div className="flex items-end md:col-span-1">
+                    <div>
+                      <Label htmlFor="objectClass">Object Class</Label>
+                      <Select value={objectClass} onValueChange={setObjectClass}>
+                        <SelectTrigger id="objectClass">
+                          <SelectValue placeholder="Select object type" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="user">User</SelectItem>
+                          <SelectItem value="group">Group</SelectItem>
+                          <SelectItem value="organizationalUnit">OU</SelectItem>
+                          <SelectItem value="computer">Computer</SelectItem>
+                          <SelectItem value="domain">Domain</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                  
+                  <div>
+                    <Label htmlFor="filterDescription">Description (Optional)</Label>
+                    <Input 
+                      id="filterDescription" 
+                      value={filterDescription} 
+                      onChange={(e) => setFilterDescription(e.target.value)}
+                      placeholder="Enter a description"
+                    />
+                  </div>
+                  
+                  <Tabs defaultValue="manual" className="w-full">
+                    <TabsList className="grid w-full grid-cols-2">
+                      <TabsTrigger value="manual">Manual LDAP Query</TabsTrigger>
+                      <TabsTrigger value="builder" disabled>
+                        Visual Query Builder (Coming Soon)
+                      </TabsTrigger>
+                    </TabsList>
+                    <TabsContent value="manual" className="py-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="ldapQuery">LDAP Query</Label>
+                        <Textarea 
+                          id="ldapQuery"
+                          value={filterQuery}
+                          onChange={(e) => setFilterQuery(e.target.value)}
+                          placeholder="Enter your LDAP query string (e.g. (objectClass=user)(sAMAccountName=*))"
+                          className="font-mono h-32"
+                        />
+                      </div>
+                    </TabsContent>
+                    <TabsContent value="builder">
+                      <div className="py-8 text-center text-muted-foreground">
+                        <p>Visual query builder will be available in a future update</p>
+                      </div>
+                    </TabsContent>
+                  </Tabs>
+                  
+                  <div className="flex items-center space-x-2">
+                    <Label htmlFor="isActive" className="flex items-center cursor-pointer space-x-2">
+                      <input
+                        id="isActive"
+                        type="checkbox"
+                        checked={isActive}
+                        onChange={(e) => setIsActive(e.target.checked)}
+                        className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
+                      />
+                      <span>Active</span>
+                    </Label>
+                  </div>
+                  
+                  <div className="flex justify-between pt-4">
+                    <div className="space-x-2">
+                      {selectedFilter && (
+                        <>
+                          <Button
+                            variant="outline"
+                            onClick={() => {
+                              if (confirm("Are you sure you want to delete this filter?")) {
+                                deleteFilterMutation.mutate();
+                              }
+                            }}
+                            disabled={deleteFilterMutation.isPending}
+                          >
+                            {deleteFilterMutation.isPending ? (
+                              <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                            ) : (
+                              <Trash className="h-4 w-4 mr-2" />
+                            )}
+                            Delete
+                          </Button>
+                          <Button
+                            variant="outline"
+                            onClick={() => {
+                              refetchRevisions();
+                              setShowRevisionsDialog(true);
+                            }}
+                          >
+                            <History className="h-4 w-4 mr-2" />
+                            History
+                          </Button>
+                        </>
+                      )}
+                    </div>
+                    <div className="space-x-2">
                       <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => removeCondition(index)}
-                        className="self-end"
+                        variant="outline"
+                        onClick={() => testFilterMutation.mutate()}
+                        disabled={!selectedConnectionId || !filterQuery || testFilterMutation.isPending}
                       >
-                        <Trash2 className="h-4 w-4 text-destructive" />
+                        {testFilterMutation.isPending ? (
+                          <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                        ) : (
+                          <Play className="h-4 w-4 mr-2" />
+                        )}
+                        Test Query
+                      </Button>
+                      <Button
+                        onClick={handleSaveFilter}
+                        disabled={
+                          !selectedConnectionId || 
+                          !filterName || 
+                          !filterQuery || 
+                          createFilterMutation.isPending || 
+                          updateFilterMutation.isPending
+                        }
+                      >
+                        {(createFilterMutation.isPending || updateFilterMutation.isPending) ? (
+                          <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                        ) : (
+                          <Save className="h-4 w-4 mr-2" />
+                        )}
+                        Save Filter
                       </Button>
                     </div>
                   </div>
-                );
-              })}
-
-              <div className="flex space-x-2">
-                <Button onClick={addCondition} variant="outline" size="sm">
-                  <Plus className="mr-2 h-4 w-4" />
-                  Add Condition
-                </Button>
-                <Button onClick={addGroup} variant="outline" size="sm">
-                  <Plus className="mr-2 h-4 w-4" />
-                  Add Group
-                </Button>
-              </div>
-            </div>
-
-            <div className="mt-6">
-              <Label htmlFor="ldapFilter">Generated LDAP Filter</Label>
-              <Textarea
-                id="ldapFilter"
-                value={ldapFilter}
-                onChange={(e) => setLdapFilter(e.target.value)}
-                rows={2}
-                className="font-mono text-sm"
-              />
-            </div>
-
-            <div className="mt-6 flex space-x-3">
-              <Button onClick={handleSaveFilter} disabled={!selectedConnection || !filterName}>
-                <Save className="mr-2 h-4 w-4" />
-                {filterToEdit ? "Update Filter" : "Save Filter"}
-              </Button>
-              <Button onClick={handleTestFilter} variant="secondary" disabled={!selectedConnection}>
-                <Play className="mr-2 h-4 w-4" />
-                Test Filter
-              </Button>
-              {filterToEdit && (
-                <Button 
-                  onClick={() => setShowHistory(!showHistory)} 
-                  variant="outline"
-                >
-                  <History className="mr-2 h-4 w-4" />
-                  {showHistory ? "Hide History" : "Show History"}
-                </Button>
-              )}
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Saved Filters and History */}
-        <div className="md:col-span-4">
-          <Tabs defaultValue="saved">
-            <TabsList className="w-full">
-              <TabsTrigger value="saved" className="flex-1">Saved Filters</TabsTrigger>
-              <TabsTrigger value="testResults" className="flex-1">Test Results</TabsTrigger>
-            </TabsList>
-            <TabsContent value="saved">
-              <Card>
-                <CardHeader className="pb-2">
-                  <CardTitle>Saved Filters</CardTitle>
-                  <CardDescription>Filters saved for this connection</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <DataTable
-                    data={savedFilters}
-                    columns={filterColumns}
-                    isLoading={isLoadingSavedFilters}
-                    pagination={{
-                      pageIndex,
-                      pageSize,
-                      pageCount: Math.ceil(savedFilters.length / pageSize),
-                      onPageChange: setPageIndex,
-                      onPageSizeChange: setPageSize,
-                    }}
-                  />
-                </CardContent>
-              </Card>
-              
-              {showHistory && filterToEdit && (
-                <Card className="mt-4">
-                  <CardHeader className="pb-2">
-                    <CardTitle>Revision History</CardTitle>
-                    <CardDescription>Previous versions of this filter</CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <DataTable
-                      data={filterRevisions}
-                      columns={revisionColumns}
-                      isLoading={isLoadingRevisions}
-                    />
-                  </CardContent>
-                </Card>
-              )}
-            </TabsContent>
-            <TabsContent value="testResults">
-              <Card>
-                <CardHeader className="pb-2">
-                  <CardTitle>Test Results</CardTitle>
-                  <CardDescription>
-                    {testResults.length > 0 
-                      ? `Found ${testResults.length} matching ${selectedObjectClass}s` 
-                      : "Run a test to see results"}
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <DataTable
-                    data={testResults}
-                    columns={testResultColumns}
-                    isLoading={testFilterMutation.isPending}
-                  />
-                </CardContent>
-              </Card>
-            </TabsContent>
-          </Tabs>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
         </div>
       </div>
-
-      {/* Alert Dialogs */}
-      <AlertDialog open={!!filterToDelete} onOpenChange={() => setFilterToDelete(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Delete Filter</AlertDialogTitle>
-            <AlertDialogDescription>
-              Are you sure you want to delete the filter "{filterToDelete?.name}"? 
-              This action cannot be undone.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction 
-              onClick={() => filterToDelete && deleteFilterMutation.mutate(filterToDelete.id)}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-            >
-              Delete
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-
-      <AlertDialog open={!!revisionToRevert} onOpenChange={() => setRevisionToRevert(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Revert Filter</AlertDialogTitle>
-            <AlertDialogDescription>
-              Are you sure you want to revert to version {revisionToRevert?.version}? 
-              This will create a new version with the data from the selected revision.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction 
-              onClick={() => {
-                if (filterToEdit && revisionToRevert) {
-                  revertToRevisionMutation.mutate({
-                    filterId: filterToEdit.id,
-                    revisionId: revisionToRevert.id
-                  });
-                }
-              }}
-            >
-              Revert
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      
+      {/* Dialogs */}
+      {renderRevisionsDialog()}
+      {renderTestResultsDialog()}
     </DashboardLayout>
   );
 }
+
+export default LdapQueryBuilderPage;

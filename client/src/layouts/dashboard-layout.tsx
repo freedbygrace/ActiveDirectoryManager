@@ -278,3 +278,5 @@ export function DashboardLayout({ children, title, description }: DashboardLayou
     </div>
   );
 }
+
+export default DashboardLayout;

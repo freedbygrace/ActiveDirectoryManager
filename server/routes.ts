@@ -1,4 +1,4 @@
-import type { Express, Request, Response, NextFunction } from "express";
+import type { Express, Request as ExpressRequest, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { setupAuth } from "./auth";
 import { setupSwagger } from "./swagger";
@@ -12,6 +12,16 @@ import {
   requireAdmin, 
   initializeRBAC
 } from "./authorization";
+
+// Extend Express Request to include user property
+interface Request extends ExpressRequest {
+  user: {
+    id: number;
+    username: string;
+    roleId?: number;
+    [key: string]: any;
+  };
+}
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Setup authentication
@@ -1167,7 +1177,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/connections/:connectionId/ldap-filters", requireAuth, async (req, res, next) => {
+  app.get("/api/connections/:connectionId/ldap-filters", requireAuth, async (req: Request, res: Response, next: NextFunction) => {
     try {
       const connectionId = parseInt(req.params.connectionId);
       
@@ -1233,7 +1243,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
    *       401:
    *         $ref: '#/components/responses/UnauthorizedError'
    */
-  app.post("/api/connections/:connectionId/ldap-filters", requireAuth, async (req, res, next) => {
+  app.post("/api/connections/:connectionId/ldap-filters", requireAuth, async (req: Request, res: Response, next: NextFunction) => {
     try {
       const connectionId = parseInt(req.params.connectionId);
       
@@ -1282,7 +1292,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
    *       404:
    *         $ref: '#/components/responses/NotFoundError'
    */
-  app.get("/api/ldap-filters/:id", requireAuth, async (req, res, next) => {
+  app.get("/api/ldap-filters/:id", requireAuth, async (req: Request, res: Response, next: NextFunction) => {
     try {
       const id = parseInt(req.params.id);
       const filter = await storage.getLdapFilter(id);
@@ -1342,7 +1352,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
    *       404:
    *         $ref: '#/components/responses/NotFoundError'
    */
-  app.put("/api/ldap-filters/:id", requireAuth, async (req, res, next) => {
+  app.put("/api/ldap-filters/:id", requireAuth, async (req: Request, res: Response, next: NextFunction) => {
     try {
       const id = parseInt(req.params.id);
       
@@ -1386,7 +1396,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
    *       404:
    *         $ref: '#/components/responses/NotFoundError'
    */
-  app.delete("/api/ldap-filters/:id", requireAuth, async (req, res, next) => {
+  app.delete("/api/ldap-filters/:id", requireAuth, async (req: Request, res: Response, next: NextFunction) => {
     try {
       const id = parseInt(req.params.id);
       
@@ -1439,7 +1449,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
    *       404:
    *         $ref: '#/components/responses/NotFoundError'
    */
-  app.get("/api/ldap-filters/:filterId/revisions", requireAuth, async (req, res, next) => {
+  app.get("/api/ldap-filters/:filterId/revisions", requireAuth, async (req: Request, res: Response, next: NextFunction) => {
     try {
       const filterId = parseInt(req.params.filterId);
       
@@ -1487,7 +1497,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
    *       404:
    *         $ref: '#/components/responses/NotFoundError'
    */
-  app.post("/api/ldap-filters/:filterId/revert/:revisionId", requireAuth, async (req, res, next) => {
+  app.post("/api/ldap-filters/:filterId/revert/:revisionId", requireAuth, async (req: Request, res: Response, next: NextFunction) => {
     try {
       const filterId = parseInt(req.params.filterId);
       const revisionId = parseInt(req.params.revisionId);
@@ -1565,7 +1575,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
    *       401:
    *         $ref: '#/components/responses/UnauthorizedError'
    */
-  app.post("/api/connections/:connectionId/test-ldap-filter", requireAuth, async (req, res, next) => {
+  app.post("/api/connections/:connectionId/test-ldap-filter", requireAuth, async (req: Request, res: Response, next: NextFunction) => {
     try {
       const connectionId = parseInt(req.params.connectionId);
       const { ldapFilter, objectClass } = req.body;
