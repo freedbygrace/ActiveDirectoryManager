@@ -256,6 +256,21 @@ const swaggerOptions = {
           description: "Number of records to skip",
           schema: { type: "integer" },
         },
+        AuditLog: {
+          type: "object",
+          properties: {
+            id: { type: "integer" },
+            action: { type: "string" },
+            targetId: { type: "string" },
+            details: { 
+              type: "object",
+              additionalProperties: true
+            },
+            userId: { type: "integer" },
+            timestamp: { type: "string", format: "date-time" },
+            connectionId: { type: "integer" }
+          },
+        },
       },
       responses: {
         UnauthorizedError: {
