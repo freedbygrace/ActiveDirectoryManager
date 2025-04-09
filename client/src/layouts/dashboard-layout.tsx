@@ -32,6 +32,7 @@ import {
 } from "lucide-react";
 import { useMobile } from "@/hooks/use-mobile";
 import { useToast } from "@/hooks/use-toast";
+import { ThemeToggle } from "@/components/theme-toggle";
 
 type MenuItem = {
   title: string;
@@ -157,7 +158,7 @@ export function DashboardLayout({ children, title, description }: DashboardLayou
     <div className="flex h-screen overflow-hidden bg-background">
       {/* Sidebar */}
       <div
-        className={`w-64 h-full bg-white shadow-md z-10 flex-shrink-0 transition-all duration-300 ease-in-out ${
+        className={`w-64 h-full dark:bg-sidebar bg-white shadow-md z-10 flex-shrink-0 transition-all duration-300 ease-in-out ${
           sidebarOpen ? "" : "-ml-64"
         } ${isMobile ? "absolute" : "relative"}`}
       >
@@ -206,7 +207,7 @@ export function DashboardLayout({ children, title, description }: DashboardLayou
       {/* Main Content */}
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Top App Bar */}
-        <header className="h-16 bg-white shadow-sm flex items-center justify-between px-4 z-10">
+        <header className="h-16 bg-white dark:bg-sidebar shadow-sm flex items-center justify-between px-4 z-10">
           <div className="flex items-center">
             <Button
               variant="ghost"
@@ -219,6 +220,8 @@ export function DashboardLayout({ children, title, description }: DashboardLayou
           </div>
 
           <div className="flex items-center space-x-4">
+            <ThemeToggle />
+            
             <Button variant="ghost" size="icon">
               <HelpCircle className="h-5 w-5" />
             </Button>
@@ -265,8 +268,8 @@ export function DashboardLayout({ children, title, description }: DashboardLayou
         {/* Main Content Area */}
         <main className="flex-1 overflow-y-auto p-6 bg-background">
           <div className="mb-6">
-            <h1 className="text-2xl font-medium text-gray-800">{title}</h1>
-            {description && <p className="text-gray-600">{description}</p>}
+            <h1 className="text-2xl font-medium text-gray-800 dark:text-gray-100">{title}</h1>
+            {description && <p className="text-gray-600 dark:text-gray-400">{description}</p>}
           </div>
 
           {children}
