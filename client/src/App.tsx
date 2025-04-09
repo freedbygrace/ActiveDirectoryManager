@@ -14,6 +14,7 @@ import LdapConnectionsPage from "@/pages/ldap-connections-page";
 import LdapQueryBuilderPage from "@/pages/ldap-query-builder-page";
 import SettingsPage from "@/pages/settings-page";
 import UserManagementPage from "@/pages/user-management-page";
+import AuditLogsPage from "@/pages/audit-logs-page";
 import { ProtectedRoute } from "./lib/protected-route";
 import { Loader2 } from "lucide-react";
 
@@ -32,6 +33,7 @@ function Router() {
       <ProtectedRoute path="/api-tokens" component={ApiTokensPage} />
       <ProtectedRoute path="/ldap-connections" component={LdapConnectionsPage} />
       <ProtectedRoute path="/ldap-query-builder" component={LdapQueryBuilderPage} />
+      <ProtectedRoute path="/audit-logs" component={AuditLogsPage} />
       <ProtectedRoute path="/settings" component={SettingsPage} />
       <ProtectedRoute path="/user-management" component={UserManagementPage} />
       <Route component={NotFound} />

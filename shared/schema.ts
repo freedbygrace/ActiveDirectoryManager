@@ -31,11 +31,13 @@ export const PERMISSIONS = {
   CREATE_AD_USERS: "create:ad_users",
   UPDATE_AD_USERS: "update:ad_users",
   DELETE_AD_USERS: "delete:ad_users",
+  MOVE_AD_USERS: "move:ad_users",
   
   VIEW_AD_GROUPS: "view:ad_groups",
   CREATE_AD_GROUPS: "create:ad_groups",
   UPDATE_AD_GROUPS: "update:ad_groups",
   DELETE_AD_GROUPS: "delete:ad_groups",
+  MANAGE_GROUP_MEMBERSHIP: "manage:group_membership",
   
   VIEW_AD_OUS: "view:ad_ous",
   CREATE_AD_OUS: "create:ad_ous",
@@ -46,6 +48,7 @@ export const PERMISSIONS = {
   CREATE_AD_COMPUTERS: "create:ad_computers",
   UPDATE_AD_COMPUTERS: "update:ad_computers",
   DELETE_AD_COMPUTERS: "delete:ad_computers",
+  MOVE_AD_COMPUTERS: "move:ad_computers",
   
   VIEW_AD_DOMAINS: "view:ad_domains",
 
@@ -71,10 +74,12 @@ export const permissionsSchema = z.enum([
   "create:ad_users",
   "update:ad_users",
   "delete:ad_users",
+  "move:ad_users",
   "view:ad_groups",
   "create:ad_groups",
   "update:ad_groups",
   "delete:ad_groups",
+  "manage:group_membership",
   "view:ad_ous",
   "create:ad_ous",
   "update:ad_ous",
@@ -83,6 +88,7 @@ export const permissionsSchema = z.enum([
   "create:ad_computers",
   "update:ad_computers",
   "delete:ad_computers",
+  "move:ad_computers",
   "view:ad_domains",
   "manage:api_tokens",
   "manage:roles",
@@ -142,7 +148,10 @@ export const ldapConnections = pgTable("ldap_connections", {
 export const adUsers = pgTable("ad_users", {
   id: serial("id").primaryKey(),
   connectionId: integer("connection_id").notNull(),
+  objectGUID: text("object_guid").notNull(),
   distinguishedName: text("distinguished_name").notNull(),
+  canonicalName: text("canonical_name"),
+  cn: text("cn"),
   sAMAccountName: text("sam_account_name").notNull(),
   userPrincipalName: text("user_principal_name"),
   givenName: text("given_name"),
@@ -158,7 +167,10 @@ export const adUsers = pgTable("ad_users", {
 export const adGroups = pgTable("ad_groups", {
   id: serial("id").primaryKey(),
   connectionId: integer("connection_id").notNull(),
+  objectGUID: text("object_guid").notNull(),
   distinguishedName: text("distinguished_name").notNull(),
+  canonicalName: text("canonical_name"),
+  cn: text("cn"),
   sAMAccountName: text("sam_account_name").notNull(),
   groupType: text("group_type"),
   description: text("description"),
@@ -169,7 +181,10 @@ export const adGroups = pgTable("ad_groups", {
 export const adOrgUnits = pgTable("ad_org_units", {
   id: serial("id").primaryKey(),
   connectionId: integer("connection_id").notNull(),
+  objectGUID: text("object_guid").notNull(),
   distinguishedName: text("distinguished_name").notNull(),
+  canonicalName: text("canonical_name"),
+  cn: text("cn"),
   name: text("name").notNull(),
   description: text("description"),
   adProperties: jsonb("ad_properties"),
@@ -178,20 +193,27 @@ export const adOrgUnits = pgTable("ad_org_units", {
 export const adComputers = pgTable("ad_computers", {
   id: serial("id").primaryKey(),
   connectionId: integer("connection_id").notNull(),
+  objectGUID: text("object_guid").notNull(),
   distinguishedName: text("distinguished_name").notNull(),
+  canonicalName: text("canonical_name"),
+  cn: text("cn"),
   name: text("name").notNull(),
   dnsHostName: text("dns_host_name"),
   operatingSystem: text("operating_system"),
   operatingSystemVersion: text("operating_system_version"),
   lastLogon: timestamp("last_logon"),
   enabled: boolean("enabled").default(true),
+  memberOf: jsonb("member_of"),
   adProperties: jsonb("ad_properties"),
 });
 
 export const adDomains = pgTable("ad_domains", {
   id: serial("id").primaryKey(),
   connectionId: integer("connection_id").notNull(),
+  objectGUID: text("object_guid").notNull(),
   distinguishedName: text("distinguished_name").notNull(),
+  canonicalName: text("canonical_name"),
+  cn: text("cn"),
   name: text("name").notNull(),
   netBIOSName: text("net_bios_name"),
   forestName: text("forest_name"),
@@ -260,6 +282,30 @@ export const apiQuerySchema = z.object({
   skip: z.string().optional(),
 });
 
+// Move operation schemas
+export const moveComputerSchema = z.object({
+  computerObjectGUID: z.string().min(1, "Computer ObjectGUID is required"),
+  targetOUDistinguishedName: z.string().min(1, "Target OU DN is required"),
+});
+
+export const moveUserSchema = z.object({
+  userObjectGUID: z.string().min(1, "User ObjectGUID is required"),
+  targetOUDistinguishedName: z.string().min(1, "Target OU DN is required"),
+});
+
+// Group membership schemas
+export const addToGroupSchema = z.object({
+  objectGUID: z.string().min(1, "Object GUID is required"),
+  groupObjectGUID: z.string().min(1, "Group ObjectGUID is required"),
+  objectType: z.enum(["user", "computer"]),
+});
+
+export const removeFromGroupSchema = z.object({
+  objectGUID: z.string().min(1, "Object GUID is required"),
+  groupObjectGUID: z.string().min(1, "Group ObjectGUID is required"),
+  objectType: z.enum(["user", "computer"]),
+});
+
 // Export types
 export type Role = typeof roles.$inferSelect;
 export type InsertRole = z.infer<typeof insertRoleSchema>;
@@ -288,6 +334,10 @@ export type AdDomain = typeof adDomains.$inferSelect;
 export type InsertAdDomain = z.infer<typeof insertAdDomainSchema>;
 export type Login = z.infer<typeof loginSchema>;
 export type ApiQuery = z.infer<typeof apiQuerySchema>;
+export type MoveComputer = z.infer<typeof moveComputerSchema>;
+export type MoveUser = z.infer<typeof moveUserSchema>;
+export type AddToGroup = z.infer<typeof addToGroupSchema>;
+export type RemoveFromGroup = z.infer<typeof removeFromGroupSchema>;
 
 // LDAP Query Builder schemas
 export const ldapFilterObjectClasses = ["user", "group", "organizationalUnit", "computer", "domain"] as const;
@@ -320,6 +370,28 @@ export const ldapFilterRevisions = pgTable("ldap_filter_revisions", {
   createdBy: integer("created_by").references(() => users.id),
   comment: text("comment"),
 });
+
+// Audit logs for tracking actions
+export const auditLogs = pgTable("audit_logs", {
+  id: serial("id").primaryKey(),
+  action: text("action").notNull(),
+  targetId: text("target_id").notNull(),
+  details: jsonb("details").notNull().default({}),
+  userId: integer("user_id"),
+  timestamp: timestamp("timestamp").notNull().defaultNow(),
+  connectionId: integer("connection_id"),
+});
+
+export const auditLogsRelations = relations(auditLogs, ({ one }) => ({
+  user: one(users, {
+    fields: [auditLogs.userId],
+    references: [users.id],
+  }),
+  connection: one(ldapConnections, {
+    fields: [auditLogs.connectionId],
+    references: [ldapConnections.id],
+  }),
+}));
 
 // LDAP Attribute schema - stores known attributes for connections
 export const ldapAttributes = pgTable("ldap_attributes", {
@@ -397,3 +469,11 @@ export type LdapFilterRevision = typeof ldapFilterRevisions.$inferSelect;
 export type InsertLdapFilterRevision = z.infer<typeof insertLdapFilterRevisionSchema>;
 export type LdapAttribute = typeof ldapAttributes.$inferSelect;
 export type InsertLdapAttribute = z.infer<typeof insertLdapAttributeSchema>;
+
+// Audit log schema and types
+export const insertAuditLogSchema = createInsertSchema(auditLogs).omit({ 
+  id: true, 
+  timestamp: true
+});
+export type AuditLog = typeof auditLogs.$inferSelect;
+export type InsertAuditLog = z.infer<typeof insertAuditLogSchema>;

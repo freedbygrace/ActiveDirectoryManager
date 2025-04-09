@@ -5,15 +5,15 @@ import {
   AdOrgUnit, InsertAdOrgUnit, AdComputer, InsertAdComputer, 
   AdDomain, InsertAdDomain, Role, ApiQuery,
   LdapFilter, InsertLdapFilter, LdapFilterRevision, InsertLdapFilterRevision,
-  LdapAttribute, InsertLdapAttribute,
+  LdapAttribute, InsertLdapAttribute, AuditLog, InsertAuditLog,
   users, apiTokens, ldapConnections, adUsers, adGroups, adOrgUnits, adComputers, adDomains,
-  roles, ldapFilters, ldapFilterRevisions, ldapAttributes
+  roles, ldapFilters, ldapFilterRevisions, ldapAttributes, auditLogs
 } from "@shared/schema";
 import session from "express-session";
 import createMemoryStore from "memorystore";
 import crypto from "crypto";
 import { db } from "./db";
-import { eq, and, type SQL } from "drizzle-orm";
+import { eq, and, type SQL, desc } from "drizzle-orm";
 import connectPg from "connect-pg-simple";
 import { Pool } from "@neondatabase/serverless";
 import { applyQueryOptions } from "./query-parser";
@@ -112,6 +112,10 @@ export interface IStorage {
   updateAdDomain(id: number, domain: Partial<AdDomain>): Promise<AdDomain | undefined>;
   deleteAdDomain(id: number): Promise<boolean>;
   listAdDomains(connectionId: number, query?: any): Promise<AdDomain[]>;
+  
+  // Audit logging
+  createAuditLogEntry(entry: InsertAuditLog): Promise<AuditLog>;
+  getAuditLogs(connectionId?: number, userId?: number): Promise<AuditLog[]>;
 
   // Session store
   sessionStore: any;
@@ -854,6 +858,40 @@ export class DatabaseStorage implements IStorage {
     }
     
     return adDomainsQuery;
+  }
+  
+  // Audit logging
+  async createAuditLogEntry(entry: InsertAuditLog): Promise<AuditLog> {
+    debug(`Creating audit log entry: ${JSON.stringify(entry)}`);
+    const result = await db.insert(auditLogs).values({
+      ...entry,
+      timestamp: new Date() // Ensure timestamp is set
+    }).returning();
+    return result[0];
+  }
+  
+  async getAuditLogs(connectionId?: number, userId?: number): Promise<AuditLog[]> {
+    debug(`Getting audit logs: connectionId=${connectionId}, userId=${userId}`);
+    
+    // Define the base query
+    let query = db.select().from(auditLogs);
+    
+    // Apply filters if provided
+    if (connectionId !== undefined && userId !== undefined) {
+      query = query.where(
+        and(
+          eq(auditLogs.connectionId, connectionId),
+          eq(auditLogs.userId, userId)
+        )
+      );
+    } else if (connectionId !== undefined) {
+      query = query.where(eq(auditLogs.connectionId, connectionId));
+    } else if (userId !== undefined) {
+      query = query.where(eq(auditLogs.userId, userId));
+    }
+    
+    // Sort by most recent first
+    return await query.orderBy(desc(auditLogs.timestamp));
   }
 }
 
