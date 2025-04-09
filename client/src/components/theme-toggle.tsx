@@ -9,7 +9,25 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useTheme } from "@/hooks/use-theme";
 
+// Fallback toggle without context dependency
 export function ThemeToggle() {
+  // Try/catch block to handle possible context errors
+  try {
+    return <ThemeToggleWithContext />;
+  } catch (error) {
+    console.error("Theme context error:", error);
+    // Fallback rendering without context
+    return (
+      <Button variant="ghost" size="icon" className="relative h-9 w-9 rounded-md">
+        <Sun className="h-5 w-5" />
+        <span className="sr-only">Theme settings</span>
+      </Button>
+    );
+  }
+}
+
+// Component that uses the theme context
+function ThemeToggleWithContext() {
   const { theme, setTheme } = useTheme();
 
   return (

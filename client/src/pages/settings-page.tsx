@@ -1,3 +1,4 @@
+import { useState, useEffect } from "react";
 import { DashboardLayout } from "@/layouts/dashboard-layout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
@@ -14,6 +15,64 @@ import {
   SelectValue
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
+import { Moon, Sun, Laptop } from "lucide-react";
+
+// Safe theme selector that doesn't throw errors if ThemeProvider is missing
+function ThemeSelector() {
+  const [currentTheme, setCurrentTheme] = useState<string>(() => {
+    // Read from localStorage or default to system
+    return localStorage.getItem("ad-management-theme") || "system";
+  });
+  
+  const handleThemeChange = (value: string) => {
+    setCurrentTheme(value);
+    
+    try {
+      // Handle theme change manually if context is missing
+      localStorage.setItem("ad-management-theme", value);
+      
+      const root = window.document.documentElement;
+      root.classList.remove("light", "dark");
+      
+      if (value === "system") {
+        const systemTheme = window.matchMedia("(prefers-color-scheme: dark)").matches
+          ? "dark"
+          : "light";
+        root.classList.add(systemTheme);
+      } else {
+        root.classList.add(value);
+      }
+    } catch (error) {
+      console.error("Error changing theme:", error);
+    }
+  };
+  
+  return (
+    <RadioGroup value={currentTheme} onValueChange={handleThemeChange}>
+      <div className="flex items-center space-x-2">
+        <RadioGroupItem value="light" id="light-theme" />
+        <Label htmlFor="light-theme" className="flex items-center">
+          <Sun className="mr-2 h-4 w-4" />
+          Light
+        </Label>
+      </div>
+      <div className="flex items-center space-x-2">
+        <RadioGroupItem value="dark" id="dark-theme" />
+        <Label htmlFor="dark-theme" className="flex items-center">
+          <Moon className="mr-2 h-4 w-4" />
+          Dark
+        </Label>
+      </div>
+      <div className="flex items-center space-x-2">
+        <RadioGroupItem value="system" id="system-theme" />
+        <Label htmlFor="system-theme" className="flex items-center">
+          <Laptop className="mr-2 h-4 w-4" />
+          System
+        </Label>
+      </div>
+    </RadioGroup>
+  );
+}
 
 export default function SettingsPage() {
   return (
@@ -43,20 +102,7 @@ export default function SettingsPage() {
                 
                 <div className="space-y-2">
                   <Label>Theme</Label>
-                  <RadioGroup defaultValue="light">
-                    <div className="flex items-center space-x-2">
-                      <RadioGroupItem value="light" id="light" />
-                      <Label htmlFor="light">Light</Label>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <RadioGroupItem value="dark" id="dark" />
-                      <Label htmlFor="dark">Dark</Label>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <RadioGroupItem value="system" id="system" />
-                      <Label htmlFor="system">System</Label>
-                    </div>
-                  </RadioGroup>
+                  <ThemeSelector />
                 </div>
                 
                 <div className="space-y-2">
