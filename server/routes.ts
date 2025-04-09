@@ -3585,22 +3585,58 @@ export async function registerRoutes(app: Express): Promise<Server> {
    *     tags: [Audit Logs]
    *     security:
    *       - cookieAuth: []
+   *     parameters:
+   *       - name: page
+   *         in: query
+   *         required: false
+   *         schema:
+   *           type: integer
+   *           default: 1
+   *         description: Page number
+   *       - name: pageSize
+   *         in: query
+   *         required: false
+   *         schema:
+   *           type: integer
+   *           default: 10
+   *         description: Number of items per page
    *     responses:
    *       200:
-   *         description: List of all audit logs
+   *         description: Paginated list of audit logs
    *         content:
    *           application/json:
    *             schema:
-   *               type: array
-   *               items:
-   *                 $ref: '#/components/schemas/AuditLog'
+   *               type: object
+   *               properties:
+   *                 data:
+   *                   type: array
+   *                   items:
+   *                     $ref: '#/components/schemas/AuditLog'
+   *                 metadata:
+   *                   type: object
+   *                   properties:
+   *                     currentPage:
+   *                       type: integer
+   *                     totalPages:
+   *                       type: integer
+   *                     totalRecords:
+   *                       type: integer
+   *                     nextPage:
+   *                       type: integer
+   *                       nullable: true
+   *                     prevPage:
+   *                       type: integer
+   *                       nullable: true
    *       401:
    *         $ref: '#/components/responses/UnauthorizedError'
    */
-  app.get("/api/audit-logs", requireAuth, async (req: Request<any>, res: Response, next: NextFunction) => {
+  app.get("/api/audit-logs", requireAuth, async (req, res, next) => {
     try {
-      const logs = await storage.getAuditLogs();
-      res.json(logs);
+      const page = req.query.page ? parseInt(req.query.page as string) : 1;
+      const pageSize = req.query.pageSize ? parseInt(req.query.pageSize as string) : 10;
+      
+      const result = await storage.getAuditLogs(undefined, undefined, page, pageSize);
+      res.json(result);
     } catch (error) {
       next(error);
     }
@@ -3620,23 +3656,57 @@ export async function registerRoutes(app: Express): Promise<Server> {
    *         required: true
    *         schema:
    *           type: integer
+   *       - name: page
+   *         in: query
+   *         required: false
+   *         schema:
+   *           type: integer
+   *           default: 1
+   *         description: Page number
+   *       - name: pageSize
+   *         in: query
+   *         required: false
+   *         schema:
+   *           type: integer
+   *           default: 10
+   *         description: Number of items per page
    *     responses:
    *       200:
-   *         description: List of audit logs for the specified connection
+   *         description: Paginated list of audit logs for the specified connection
    *         content:
    *           application/json:
    *             schema:
-   *               type: array
-   *               items:
-   *                 $ref: '#/components/schemas/AuditLog'
+   *               type: object
+   *               properties:
+   *                 data:
+   *                   type: array
+   *                   items:
+   *                     $ref: '#/components/schemas/AuditLog'
+   *                 metadata:
+   *                   type: object
+   *                   properties:
+   *                     currentPage:
+   *                       type: integer
+   *                     totalPages:
+   *                       type: integer
+   *                     totalRecords:
+   *                       type: integer
+   *                     nextPage:
+   *                       type: integer
+   *                       nullable: true
+   *                     prevPage:
+   *                       type: integer
+   *                       nullable: true
    *       401:
    *         $ref: '#/components/responses/UnauthorizedError'
    *       404:
    *         $ref: '#/components/responses/NotFoundError'
    */
-  app.get("/api/connections/:connectionId/audit-logs", requireAuth, async (req: Request<any>, res: Response, next: NextFunction) => {
+  app.get("/api/connections/:connectionId/audit-logs", requireAuth, async (req, res, next) => {
     try {
       const connectionId = parseInt(req.params.connectionId, 10);
+      const page = req.query.page ? parseInt(req.query.page as string) : 1;
+      const pageSize = req.query.pageSize ? parseInt(req.query.pageSize as string) : 10;
       
       // Verify the connection exists
       const connection = await storage.getLdapConnection(connectionId);
@@ -3644,8 +3714,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "Connection not found" });
       }
       
-      const logs = await storage.getAuditLogs(connectionId);
-      res.json(logs);
+      const result = await storage.getAuditLogs(connectionId, undefined, page, pageSize);
+      res.json(result);
     } catch (error) {
       next(error);
     }
