@@ -982,7 +982,7 @@ export class DatabaseStorage implements IStorage {
     debug(`Getting audit logs: connectionId=${connectionId}, userId=${userId}, page=${page}, pageSize=${pageSize}`);
     
     // Define the base query for counting total records
-    let countQuery = db.select({ count: sql`count(*)` }).from(auditLogs);
+    let countQuery = db.select({ count: sql`count(*)::int` }).from(auditLogs);
     let dataQuery = db.select().from(auditLogs);
     
     // Apply filters if provided
@@ -1005,7 +1005,9 @@ export class DatabaseStorage implements IStorage {
     
     // Get total count of records
     const countResult = await countQuery;
-    const totalRecords = parseInt(countResult[0].count.toString());
+    const totalRecords = typeof countResult[0].count === 'number' 
+      ? countResult[0].count 
+      : parseInt(String(countResult[0].count), 10);
     
     // Calculate pagination values
     const totalPages = Math.ceil(totalRecords / pageSize);

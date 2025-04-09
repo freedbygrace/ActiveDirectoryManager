@@ -311,12 +311,7 @@ export const removeFromGroupSchema = z.object({
   objectType: z.enum(["user", "computer"]),
 });
 
-// ManagedBy operation schema
-export const updateManagedBySchema = z.object({
-  objectGUID: z.string().min(1, "Object GUID is required"),
-  managerDistinguishedName: z.string().nullable(),
-  objectType: z.enum(["user", "group", "computer", "organizationalUnit"]),
-});
+// ManagedBy operation schema is no longer needed as it's been replaced by object-specific PATCH endpoints
 
 // Export types
 export type Role = typeof roles.$inferSelect;
@@ -350,7 +345,7 @@ export type MoveComputer = z.infer<typeof moveComputerSchema>;
 export type MoveUser = z.infer<typeof moveUserSchema>;
 export type AddToGroup = z.infer<typeof addToGroupSchema>;
 export type RemoveFromGroup = z.infer<typeof removeFromGroupSchema>;
-export type UpdateManagedBy = z.infer<typeof updateManagedBySchema>;
+
 
 // LDAP Query Builder schemas
 export const ldapFilterObjectClasses = ["user", "group", "organizationalUnit", "computer", "domain"] as const;
