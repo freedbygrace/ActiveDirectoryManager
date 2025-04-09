@@ -172,7 +172,7 @@ export default function SitesPage() {
     isLoading: isLoadingSites,
     refetch: refetchSites,
   } = useQuery<ApiResponse<AdSite>>({
-    queryKey: ['/api/connections', selectedConnection, '/ad-sites', { page: currentSitePage, top: MAX_ITEMS_PER_PAGE }],
+    queryKey: [`/api/connections/${selectedConnection}/ad-sites?top=${MAX_ITEMS_PER_PAGE}&skip=${(currentSitePage - 1) * MAX_ITEMS_PER_PAGE}`],
     enabled: !!selectedConnection,
   });
   
@@ -182,7 +182,7 @@ export default function SitesPage() {
     isLoading: isLoadingSubnets,
     refetch: refetchSubnets,
   } = useQuery<ApiResponse<AdSubnet>>({
-    queryKey: ['/api/connections', selectedConnection, '/ad-subnets', { page: currentSubnetPage, top: MAX_ITEMS_PER_PAGE }],
+    queryKey: [`/api/connections/${selectedConnection}/ad-subnets?top=${MAX_ITEMS_PER_PAGE}&skip=${(currentSubnetPage - 1) * MAX_ITEMS_PER_PAGE}`],
     enabled: !!selectedConnection,
   });
   
@@ -282,7 +282,7 @@ export default function SitesPage() {
         description: "The site has been created successfully.",
       });
       setIsSiteFormOpen(false);
-      queryClient.invalidateQueries({ queryKey: ['/api/connections', selectedConnection, '/ad-sites'] });
+      queryClient.invalidateQueries({ queryKey: [`/api/connections/${selectedConnection}/ad-sites`] });
     },
     onError: (error) => {
       toast({
@@ -318,7 +318,7 @@ export default function SitesPage() {
       });
       setEditingSite(null);
       setIsSiteFormOpen(false);
-      queryClient.invalidateQueries({ queryKey: ['/api/connections', selectedConnection, '/ad-sites'] });
+      queryClient.invalidateQueries({ queryKey: [`/api/connections/${selectedConnection}/ad-sites`] });
     },
     onError: (error) => {
       toast({
@@ -348,7 +348,7 @@ export default function SitesPage() {
         title: "Site deleted",
         description: "The site has been deleted successfully.",
       });
-      queryClient.invalidateQueries({ queryKey: ['/api/connections', selectedConnection, '/ad-sites'] });
+      queryClient.invalidateQueries({ queryKey: [`/api/connections/${selectedConnection}/ad-sites`] });
     },
     onError: (error) => {
       toast({
@@ -383,7 +383,7 @@ export default function SitesPage() {
         description: "The subnet has been created successfully.",
       });
       setIsSubnetFormOpen(false);
-      queryClient.invalidateQueries({ queryKey: ['/api/connections', selectedConnection, '/ad-subnets'] });
+      queryClient.invalidateQueries({ queryKey: [`/api/connections/${selectedConnection}/ad-subnets`] });
     },
     onError: (error) => {
       toast({
@@ -419,7 +419,7 @@ export default function SitesPage() {
       });
       setEditingSubnet(null);
       setIsSubnetFormOpen(false);
-      queryClient.invalidateQueries({ queryKey: ['/api/connections', selectedConnection, '/ad-subnets'] });
+      queryClient.invalidateQueries({ queryKey: [`/api/connections/${selectedConnection}/ad-subnets`] });
     },
     onError: (error) => {
       toast({
@@ -449,7 +449,7 @@ export default function SitesPage() {
         title: "Subnet deleted",
         description: "The subnet has been deleted successfully.",
       });
-      queryClient.invalidateQueries({ queryKey: ['/api/connections', selectedConnection, '/ad-subnets'] });
+      queryClient.invalidateQueries({ queryKey: [`/api/connections/${selectedConnection}/ad-subnets`] });
     },
     onError: (error) => {
       toast({
