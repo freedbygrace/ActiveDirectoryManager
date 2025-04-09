@@ -106,6 +106,7 @@ const swaggerOptions = {
             lastLogon: { type: "string", format: "date-time" },
             memberOf: { type: "array", items: { type: "string" } },
             adProperties: { type: "object" },
+            objectType: { type: "string", enum: ["user"] },
           },
         },
         AdGroup: {
@@ -122,6 +123,7 @@ const swaggerOptions = {
             description: { type: "string" },
             members: { type: "array", items: { type: "string" } },
             adProperties: { type: "object" },
+            objectType: { type: "string", enum: ["group"] },
           },
         },
         AdOrgUnit: {
@@ -136,6 +138,7 @@ const swaggerOptions = {
             name: { type: "string" },
             description: { type: "string" },
             adProperties: { type: "object" },
+            objectType: { type: "string", enum: ["organizationalUnit"] },
           },
         },
         AdComputer: {
@@ -154,6 +157,7 @@ const swaggerOptions = {
             lastLogon: { type: "string", format: "date-time" },
             enabled: { type: "boolean" },
             adProperties: { type: "object" },
+            objectType: { type: "string", enum: ["computer"] },
           },
         },
         AdDomain: {
@@ -170,6 +174,7 @@ const swaggerOptions = {
             forestName: { type: "string" },
             domainFunctionality: { type: "string" },
             adProperties: { type: "object" },
+            objectType: { type: "string", enum: ["domain"] },
           },
         },
         LdapAttribute: {
@@ -312,6 +317,34 @@ const swaggerOptions = {
             },
           },
         },
+        PaginatedResponse: {
+          description: "Successful response with pagination metadata",
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                properties: {
+                  data: {
+                    type: "array",
+                    items: {
+                      type: "object"
+                    }
+                  },
+                  metadata: {
+                    type: "object",
+                    properties: {
+                      currentPage: { type: "integer" },
+                      totalPages: { type: "integer" },
+                      totalRecords: { type: "integer" },
+                      nextPage: { type: "string", nullable: true },
+                      previousPage: { type: "string", nullable: true }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
       },
     },
     security: [
