@@ -75,7 +75,8 @@ const LdapQueryBuilderPage = () => {
   const [isActive, setIsActive] = useState(true);
   const [filterBuilder, setFilterBuilder] = useState<any>({
     operator: "and",
-    conditions: [{ attribute: "", operator: "equals", value: "" }]
+    conditions: [{ attribute: "", operator: "equals", value: "" }],
+    groups: []
   });
 
   // Query to get LDAP connections
@@ -239,7 +240,8 @@ const LdapQueryBuilderPage = () => {
     // Reset filter builder to default state
     setFilterBuilder({
       operator: "and",
-      conditions: [{ attribute: "", operator: "equals", value: "" }]
+      conditions: [{ attribute: "", operator: "equals", value: "" }],
+      groups: []
     });
   };
 
@@ -642,6 +644,7 @@ const LdapQueryBuilderPage = () => {
                           </div>
                         </div>
 
+                        {/* Main conditions section */}
                         <div className="border rounded-md p-4 space-y-4 bg-background">
                           {filterBuilder.conditions.map((condition: any, index: number) => (
                             <div key={index} className="grid grid-cols-12 gap-2 items-center">
@@ -732,8 +735,179 @@ const LdapQueryBuilderPage = () => {
                               });
                             }}
                           >
+                            <Plus className="h-4 w-4 mr-2" />
                             Add Condition
                           </Button>
+                        </div>
+
+                        {/* Condition groups section */}
+                        <div className="mt-4">
+                          <div className="flex justify-between items-center mb-2">
+                            <Label>Condition Groups</Label>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => {
+                                setFilterBuilder({
+                                  ...filterBuilder,
+                                  groups: [
+                                    ...filterBuilder.groups,
+                                    {
+                                      operator: "and",
+                                      conditions: [
+                                        { attribute: "", operator: "equals", value: "" }
+                                      ]
+                                    }
+                                  ]
+                                });
+                              }}
+                            >
+                              <FolderPlus className="h-4 w-4 mr-2" />
+                              Add Group
+                            </Button>
+                          </div>
+
+                          {filterBuilder.groups && filterBuilder.groups.map((group: any, groupIndex: number) => (
+                            <div key={groupIndex} className="border rounded-md p-4 mb-4 bg-background">
+                              <div className="flex justify-between items-center mb-3">
+                                <div className="flex items-center">
+                                  <Label className="mr-2">Group Operator:</Label>
+                                  <Select 
+                                    value={group.operator} 
+                                    onValueChange={(value) => {
+                                      const updatedGroups = [...filterBuilder.groups];
+                                      updatedGroups[groupIndex].operator = value;
+                                      setFilterBuilder({
+                                        ...filterBuilder,
+                                        groups: updatedGroups
+                                      });
+                                    }}
+                                  >
+                                    <SelectTrigger className="w-24">
+                                      <SelectValue placeholder="Operator" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      <SelectItem value="and">AND</SelectItem>
+                                      <SelectItem value="or">OR</SelectItem>
+                                    </SelectContent>
+                                  </Select>
+                                </div>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={() => {
+                                    const updatedGroups = [...filterBuilder.groups];
+                                    updatedGroups.splice(groupIndex, 1);
+                                    setFilterBuilder({
+                                      ...filterBuilder,
+                                      groups: updatedGroups
+                                    });
+                                  }}
+                                >
+                                  <X className="h-4 w-4" />
+                                </Button>
+                              </div>
+
+                              <div className="space-y-3">
+                                {group.conditions.map((condition: any, condIndex: number) => (
+                                  <div key={condIndex} className="grid grid-cols-12 gap-2 items-center">
+                                    <div className="col-span-4">
+                                      <Input
+                                        placeholder="Attribute"
+                                        value={condition.attribute}
+                                        onChange={(e) => {
+                                          const updatedGroups = [...filterBuilder.groups];
+                                          updatedGroups[groupIndex].conditions[condIndex].attribute = e.target.value;
+                                          setFilterBuilder({
+                                            ...filterBuilder,
+                                            groups: updatedGroups
+                                          });
+                                        }}
+                                      />
+                                    </div>
+                                    <div className="col-span-3">
+                                      <Select
+                                        value={condition.operator}
+                                        onValueChange={(value) => {
+                                          const updatedGroups = [...filterBuilder.groups];
+                                          updatedGroups[groupIndex].conditions[condIndex].operator = value;
+                                          setFilterBuilder({
+                                            ...filterBuilder,
+                                            groups: updatedGroups
+                                          });
+                                        }}
+                                      >
+                                        <SelectTrigger>
+                                          <SelectValue placeholder="Operator" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                          <SelectItem value="equals">Equals</SelectItem>
+                                          <SelectItem value="contains">Contains</SelectItem>
+                                          <SelectItem value="startsWith">Starts With</SelectItem>
+                                          <SelectItem value="endsWith">Ends With</SelectItem>
+                                          <SelectItem value="present">Is Present</SelectItem>
+                                          <SelectItem value="notEquals">Not Equals</SelectItem>
+                                        </SelectContent>
+                                      </Select>
+                                    </div>
+                                    <div className="col-span-4">
+                                      <Input
+                                        placeholder="Value"
+                                        value={condition.value}
+                                        disabled={condition.operator === 'present'}
+                                        onChange={(e) => {
+                                          const updatedGroups = [...filterBuilder.groups];
+                                          updatedGroups[groupIndex].conditions[condIndex].value = e.target.value;
+                                          setFilterBuilder({
+                                            ...filterBuilder,
+                                            groups: updatedGroups
+                                          });
+                                        }}
+                                      />
+                                    </div>
+                                    <div className="col-span-1 flex justify-end">
+                                      <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        onClick={() => {
+                                          const updatedGroups = [...filterBuilder.groups];
+                                          updatedGroups[groupIndex].conditions.splice(condIndex, 1);
+                                          if (updatedGroups[groupIndex].conditions.length === 0) {
+                                            updatedGroups.splice(groupIndex, 1);
+                                          }
+                                          setFilterBuilder({
+                                            ...filterBuilder,
+                                            groups: updatedGroups
+                                          });
+                                        }}
+                                        disabled={group.conditions.length <= 1}
+                                      >
+                                        <Trash className="h-4 w-4" />
+                                      </Button>
+                                    </div>
+                                  </div>
+                                ))}
+
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => {
+                                    const updatedGroups = [...filterBuilder.groups];
+                                    updatedGroups[groupIndex].conditions.push(
+                                      { attribute: "", operator: "equals", value: "" }
+                                    );
+                                    setFilterBuilder({
+                                      ...filterBuilder,
+                                      groups: updatedGroups
+                                    });
+                                  }}
+                                >
+                                  <Plus className="h-4 w-4 mr-2" />
+                                  Add Condition to Group
+                                </Button>
+                              </div>
+                            </div>
+                          ))}
                         </div>
 
                         <div className="mt-4">
@@ -742,9 +916,9 @@ const LdapQueryBuilderPage = () => {
                             size="sm"
                             onClick={() => {
                               // Generate LDAP filter from visual builder
-                              const operatorSymbol = filterBuilder.operator === 'and' ? '&' : '|';
+                              const mainOperatorSymbol = filterBuilder.operator === 'and' ? '&' : '|';
                               
-                              const conditions = filterBuilder.conditions
+                              const mainConditions = filterBuilder.conditions
                                 .filter((c: any) => c.attribute.trim() !== '')
                                 .map((c: any) => {
                                   switch (c.operator) {
@@ -764,13 +938,52 @@ const LdapQueryBuilderPage = () => {
                                       return `(${c.attribute}=${c.value})`;
                                   }
                                 });
+
+                              // Generate group conditions
+                              const groupsLdap = filterBuilder.groups
+                                .map((group: any) => {
+                                  const groupOperatorSymbol = group.operator === 'and' ? '&' : '|';
+                                  
+                                  const groupConditions = group.conditions
+                                    .filter((c: any) => c.attribute.trim() !== '')
+                                    .map((c: any) => {
+                                      switch (c.operator) {
+                                        case 'equals':
+                                          return `(${c.attribute}=${c.value})`;
+                                        case 'contains':
+                                          return `(${c.attribute}=*${c.value}*)`;
+                                        case 'startsWith':
+                                          return `(${c.attribute}=${c.value}*)`;
+                                        case 'endsWith':
+                                          return `(${c.attribute}=*${c.value})`;
+                                        case 'present':
+                                          return `(${c.attribute}=*)`;
+                                        case 'notEquals':
+                                          return `(!(${c.attribute}=${c.value}))`;
+                                        default:
+                                          return `(${c.attribute}=${c.value})`;
+                                      }
+                                    });
+                                  
+                                  if (groupConditions.length === 0) {
+                                    return '';
+                                  } else if (groupConditions.length === 1) {
+                                    return groupConditions[0];
+                                  } else {
+                                    return `(${groupOperatorSymbol}${groupConditions.join('')})`;
+                                  }
+                                })
+                                .filter((ldap: string) => ldap !== '');
                               
-                              if (conditions.length === 0) {
+                              // Combine main conditions and group conditions
+                              const allConditions = [...mainConditions, ...groupsLdap];
+                              
+                              if (allConditions.length === 0) {
                                 setFilterQuery('');
-                              } else if (conditions.length === 1) {
-                                setFilterQuery(conditions[0]);
+                              } else if (allConditions.length === 1) {
+                                setFilterQuery(allConditions[0]);
                               } else {
-                                setFilterQuery(`(${operatorSymbol}${conditions.join('')})`);
+                                setFilterQuery(`(${mainOperatorSymbol}${allConditions.join('')})`);
                               }
                             }}
                           >
@@ -778,6 +991,13 @@ const LdapQueryBuilderPage = () => {
                             Generate LDAP Filter
                           </Button>
                         </div>
+                        
+                        {filterQuery && (
+                          <div className="mt-4 p-3 border rounded-md bg-muted">
+                            <Label className="text-xs mb-1 block">Generated LDAP Filter:</Label>
+                            <code className="text-xs break-all">{filterQuery}</code>
+                          </div>
+                        )}
                       </div>
                     </TabsContent>
                   </Tabs>
