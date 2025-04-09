@@ -13,7 +13,7 @@ import session from "express-session";
 import createMemoryStore from "memorystore";
 import crypto from "crypto";
 import { db } from "./db";
-import { eq, and, type SQL, desc } from "drizzle-orm";
+import { eq, and, type SQL, desc, sql } from "drizzle-orm";
 import connectPg from "connect-pg-simple";
 import { Pool } from "@neondatabase/serverless";
 import { applyQueryOptions } from "./query-parser";
@@ -123,7 +123,7 @@ export interface IStorage {
   
   // Audit logging
   createAuditLogEntry(entry: InsertAuditLog): Promise<AuditLog>;
-  getAuditLogs(connectionId?: number, userId?: number): Promise<AuditLog[]>;
+  getAuditLogs(connectionId?: number, userId?: number, page?: number, pageSize?: number): Promise<{ data: AuditLog[], metadata: { currentPage: number, totalPages: number, totalRecords: number, nextPage: number | null, prevPage: number | null } }>;
 
   // Session store
   sessionStore: any;
@@ -978,28 +978,59 @@ export class DatabaseStorage implements IStorage {
     return result[0];
   }
   
-  async getAuditLogs(connectionId?: number, userId?: number): Promise<AuditLog[]> {
-    debug(`Getting audit logs: connectionId=${connectionId}, userId=${userId}`);
+  async getAuditLogs(connectionId?: number, userId?: number, page: number = 1, pageSize: number = 10): Promise<{ data: AuditLog[], metadata: { currentPage: number, totalPages: number, totalRecords: number, nextPage: number | null, prevPage: number | null } }> {
+    debug(`Getting audit logs: connectionId=${connectionId}, userId=${userId}, page=${page}, pageSize=${pageSize}`);
     
-    // Define the base query
-    let query = db.select().from(auditLogs);
+    // Define the base query for counting total records
+    let countQuery = db.select({ count: sql`count(*)` }).from(auditLogs);
+    let dataQuery = db.select().from(auditLogs);
     
     // Apply filters if provided
     if (connectionId !== undefined && userId !== undefined) {
-      query = query.where(
-        and(
-          eq(auditLogs.connectionId, connectionId),
-          eq(auditLogs.userId, userId)
-        )
+      const filter = and(
+        eq(auditLogs.connectionId, connectionId),
+        eq(auditLogs.userId, userId)
       );
+      countQuery = countQuery.where(filter);
+      dataQuery = dataQuery.where(filter);
     } else if (connectionId !== undefined) {
-      query = query.where(eq(auditLogs.connectionId, connectionId));
+      const filter = eq(auditLogs.connectionId, connectionId);
+      countQuery = countQuery.where(filter);
+      dataQuery = dataQuery.where(filter);
     } else if (userId !== undefined) {
-      query = query.where(eq(auditLogs.userId, userId));
+      const filter = eq(auditLogs.userId, userId);
+      countQuery = countQuery.where(filter);
+      dataQuery = dataQuery.where(filter);
     }
     
-    // Sort by most recent first
-    return await query.orderBy(desc(auditLogs.timestamp));
+    // Get total count of records
+    const countResult = await countQuery;
+    const totalRecords = parseInt(countResult[0].count.toString());
+    
+    // Calculate pagination values
+    const totalPages = Math.ceil(totalRecords / pageSize);
+    const currentPage = Math.max(1, Math.min(page, totalPages)); // Ensure page is within bounds
+    const offset = (currentPage - 1) * pageSize;
+    
+    // Apply pagination and sorting to data query
+    dataQuery = dataQuery
+      .orderBy(desc(auditLogs.timestamp))
+      .limit(pageSize)
+      .offset(offset);
+    
+    // Execute data query
+    const data = await dataQuery;
+    
+    // Create pagination metadata
+    const metadata = {
+      currentPage,
+      totalPages,
+      totalRecords,
+      nextPage: currentPage < totalPages ? currentPage + 1 : null,
+      prevPage: currentPage > 1 ? currentPage - 1 : null
+    };
+    
+    return { data, metadata };
   }
 }
 
