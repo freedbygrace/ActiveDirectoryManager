@@ -15,7 +15,9 @@ import {
   adGroups,
   adOrgUnits,
   adComputers,
-  adDomains
+  adDomains,
+  adSites,
+  adSubnets
 } from "@shared/schema";
 import { ZodError } from "zod";
 import rateLimit from "express-rate-limit";
@@ -33,6 +35,7 @@ import {
   parsePagination 
 } from "./query-parser";
 import { eq, sql } from "drizzle-orm";
+import { v4 as uuidv4 } from "uuid";
 
 // Extend Express Request to include user property
 interface Request extends ExpressRequest {
@@ -3531,6 +3534,1082 @@ export async function registerRoutes(app: Express): Promise<Server> {
    *       404:
    *         $ref: '#/components/responses/NotFoundError'
    */
+  // AD Sites endpoints
+  /**
+   * @swagger
+   * /api/connections/{connectionId}/ad-sites:
+   *   get:
+   *     summary: List AD sites from the specified LDAP connection
+   *     tags: [AD Sites]
+   *     security:
+   *       - bearerAuth: []
+   *       - cookieAuth: []
+   *     parameters:
+   *       - name: connectionId
+   *         in: path
+   *         required: true
+   *         schema:
+   *           type: integer
+   *       - $ref: '#/components/parameters/filterParam'
+   *       - $ref: '#/components/parameters/selectParam'
+   *       - $ref: '#/components/parameters/expandParam'
+   *       - $ref: '#/components/parameters/orderByParam'
+   *       - $ref: '#/components/parameters/topParam'
+   *       - $ref: '#/components/parameters/skipParam'
+   *     responses:
+   *       200:
+   *         description: A list of AD sites
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 data:
+   *                   type: array
+   *                   items:
+   *                     $ref: '#/components/schemas/AdSite'
+   *                 metadata:
+   *                   $ref: '#/components/responses/PaginatedResponse/content/application~1json/schema/properties/metadata'
+   *       401:
+   *         $ref: '#/components/responses/UnauthorizedError'
+   *       404:
+   *         $ref: '#/components/responses/NotFoundError'
+   */
+  app.get("/api/connections/:connectionId/ad-sites", authenticateApiToken, async (req, res, next) => {
+    try {
+      if (!req.isAuthenticated() && !req.headers.authorization) {
+        return res.status(401).json({ message: "Authentication required" });
+      }
+      
+      const connectionId = parseInt(req.params.connectionId);
+      const connection = await storage.getLdapConnection(connectionId);
+      
+      if (!connection) {
+        return res.status(404).json({ message: "LDAP connection not found" });
+      }
+      
+      const query = parseQueryParams(req);
+      const sites = await storage.listAdSites(connectionId, query);
+      
+      // Count total records for pagination metadata
+      const countQuery = db.select({ count: sql`count(*)` }).from(adSites)
+        .where(eq(adSites.connectionId, connectionId));
+      
+      // Apply filters if present
+      if (query && query.filter) {
+        const conditions = parseFilter(query.filter);
+        const whereClause = applyFilterConditions(adSites, conditions);
+        if (whereClause) {
+          countQuery.where(whereClause);
+        }
+      }
+      
+      const [countResult] = await countQuery;
+      const totalRecords = Number(countResult?.count || 0);
+      
+      // Add objectType to each result
+      const sitesWithObjectType = sites.map(site => ({
+        ...site,
+        objectType: 'site'
+      }));
+      
+      // Generate pagination metadata
+      const { limit, offset } = parsePagination(query?.top, query?.skip);
+      const paginationMetadata = generatePaginationMetadata(
+        totalRecords,
+        limit,
+        offset,
+        `${req.protocol}://${req.get('host')}${req.originalUrl}`
+      );
+      
+      res.json({
+        data: sitesWithObjectType,
+        metadata: paginationMetadata
+      });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  /**
+   * @swagger
+   * /api/connections/{connectionId}/ad-sites/{objectGUID}:
+   *   get:
+   *     summary: Get details of a specific AD site
+   *     tags: [AD Sites]
+   *     security:
+   *       - bearerAuth: []
+   *       - cookieAuth: []
+   *     parameters:
+   *       - name: connectionId
+   *         in: path
+   *         required: true
+   *         schema:
+   *           type: integer
+   *       - name: objectGUID
+   *         in: path
+   *         required: true
+   *         schema:
+   *           type: string
+   *     responses:
+   *       200:
+   *         description: Details of the AD site
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/AdSite'
+   *       401:
+   *         $ref: '#/components/responses/UnauthorizedError'
+   *       404:
+   *         $ref: '#/components/responses/NotFoundError'
+   */
+  app.get("/api/connections/:connectionId/ad-sites/:objectGUID", authenticateApiToken, async (req, res, next) => {
+    try {
+      if (!req.isAuthenticated() && !req.headers.authorization) {
+        return res.status(401).json({ message: "Authentication required" });
+      }
+      
+      const connectionId = parseInt(req.params.connectionId);
+      const objectGUID = req.params.objectGUID;
+      
+      const site = await storage.getAdSiteByObjectGUID(connectionId, objectGUID);
+      
+      if (!site) {
+        return res.status(404).json({ message: "AD site not found" });
+      }
+      
+      // Add objectType to the result
+      const siteWithObjectType = {
+        ...site,
+        objectType: 'site'
+      };
+      
+      res.json(siteWithObjectType);
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  /**
+   * @swagger
+   * /api/connections/{connectionId}/ad-sites:
+   *   post:
+   *     summary: Create a new AD site
+   *     tags: [AD Sites]
+   *     security:
+   *       - bearerAuth: []
+   *       - cookieAuth: []
+   *     parameters:
+   *       - name: connectionId
+   *         in: path
+   *         required: true
+   *         schema:
+   *           type: integer
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             properties:
+   *               name:
+   *                 type: string
+   *               description:
+   *                 type: string
+   *               location:
+   *                 type: string
+   *     responses:
+   *       201:
+   *         description: Successfully created AD site
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/AdSite'
+   *       401:
+   *         $ref: '#/components/responses/UnauthorizedError'
+   *       404:
+   *         $ref: '#/components/responses/NotFoundError'
+   */
+  app.post("/api/connections/:connectionId/ad-sites", authenticateApiToken, async (req, res, next) => {
+    try {
+      if (!req.isAuthenticated() && !req.headers.authorization) {
+        return res.status(401).json({ message: "Authentication required" });
+      }
+      
+      const connectionId = parseInt(req.params.connectionId);
+      const connection = await storage.getLdapConnection(connectionId);
+      
+      if (!connection) {
+        return res.status(404).json({ message: "LDAP connection not found" });
+      }
+      
+      // First create the site in AD
+      const siteName = req.body.name;
+      const description = req.body.description || '';
+      const location = req.body.location || '';
+      
+      // Create site in AD using LDAP
+      const client = ldapClient.getClient(connectionId);
+      
+      if (!client) {
+        const connected = await ldapClient.connect(connection);
+        if (!connected) {
+          return res.status(500).json({ message: "Failed to connect to LDAP server" });
+        }
+      }
+      
+      // Create a CN for the new site
+      const siteDN = `CN=${siteName},CN=Sites,CN=Configuration,${ldapClient.getDomainDN(connection)}`;
+      
+      // Attributes for the new site
+      const siteAttributes = {
+        objectClass: ['site'],
+        cn: siteName,
+        description: description,
+        location: location
+      };
+      
+      try {
+        const success = await ldapClient.createEntry(connectionId, siteDN, siteAttributes);
+        
+        if (!success) {
+          return res.status(500).json({ message: "Failed to create AD site" });
+        }
+        
+        // Search for the site to get all its attributes
+        const siteResults = await ldapClient.searchSites(connectionId, `(cn=${siteName})`);
+        
+        if (!siteResults || siteResults.length === 0) {
+          return res.status(500).json({ message: "Site created but could not retrieve details" });
+        }
+        
+        const siteData = siteResults[0];
+        
+        // Create entry in our database
+        const newSite = await storage.createAdSite({
+          connectionId,
+          name: siteName,
+          objectGUID: siteData.objectGUID || uuidv4(),
+          objectType: 'site',
+          dn: siteDN,
+          canonicalName: `${connection.domain}/Configuration/Sites/${siteName}`,
+          description: description,
+          location: location,
+          managedBy: null,
+          adProperties: siteData
+        });
+        
+        // Create audit log entry
+        await storage.createAuditLogEntry({
+          action: 'create',
+          targetId: newSite.id.toString(),
+          details: { type: 'site', name: siteName, dn: siteDN },
+          userId: req.user?.id,
+          connectionId
+        });
+        
+        res.status(201).json(newSite);
+      } catch (err) {
+        console.error("Error creating AD site:", err);
+        return res.status(500).json({ message: `Error creating AD site: ${err.message}` });
+      }
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  /**
+   * @swagger
+   * /api/connections/{connectionId}/ad-sites/{objectGUID}:
+   *   patch:
+   *     summary: Update an AD site
+   *     tags: [AD Sites]
+   *     security:
+   *       - bearerAuth: []
+   *       - cookieAuth: []
+   *     parameters:
+   *       - name: connectionId
+   *         in: path
+   *         required: true
+   *         schema:
+   *           type: integer
+   *       - name: objectGUID
+   *         in: path
+   *         required: true
+   *         schema:
+   *           type: string
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             properties:
+   *               description:
+   *                 type: string
+   *               location:
+   *                 type: string
+   *               managedBy:
+   *                 type: string
+   *     responses:
+   *       200:
+   *         description: Successfully updated AD site
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/AdSite'
+   *       401:
+   *         $ref: '#/components/responses/UnauthorizedError'
+   *       404:
+   *         $ref: '#/components/responses/NotFoundError'
+   */
+  app.patch("/api/connections/:connectionId/ad-sites/:objectGUID", authenticateApiToken, async (req, res, next) => {
+    try {
+      if (!req.isAuthenticated() && !req.headers.authorization) {
+        return res.status(401).json({ message: "Authentication required" });
+      }
+      
+      const connectionId = parseInt(req.params.connectionId);
+      const objectGUID = req.params.objectGUID;
+      
+      const site = await storage.getAdSiteByObjectGUID(connectionId, objectGUID);
+      
+      if (!site) {
+        return res.status(404).json({ message: "AD site not found" });
+      }
+      
+      const connection = await storage.getLdapConnection(connectionId);
+      
+      if (!connection) {
+        return res.status(404).json({ message: "LDAP connection not found" });
+      }
+      
+      // Connect to LDAP if needed
+      const client = ldapClient.getClient(connectionId);
+      
+      if (!client) {
+        const connected = await ldapClient.connect(connection);
+        if (!connected) {
+          return res.status(500).json({ message: "Failed to connect to LDAP server" });
+        }
+      }
+      
+      // Prepare changes
+      const changes = [];
+      const updateData: Partial<AdSite> = {};
+      
+      if (req.body.description !== undefined) {
+        changes.push({
+          operation: 'replace',
+          modification: {
+            description: req.body.description
+          }
+        });
+        updateData.description = req.body.description;
+      }
+      
+      if (req.body.location !== undefined) {
+        changes.push({
+          operation: 'replace',
+          modification: {
+            location: req.body.location
+          }
+        });
+        updateData.location = req.body.location;
+      }
+      
+      // Handle managedBy separately
+      if (req.body.managedBy !== undefined) {
+        // Set the managedBy attribute
+        const success = await ldapClient.setManagedBy(connectionId, site.dn, req.body.managedBy);
+        
+        if (!success) {
+          return res.status(500).json({ message: "Failed to update managedBy attribute" });
+        }
+        
+        updateData.managedBy = req.body.managedBy;
+      }
+      
+      // Apply changes to LDAP if there are any attribute changes
+      if (changes.length > 0) {
+        try {
+          const success = await ldapClient.updateEntry(connectionId, site.dn, changes);
+          
+          if (!success) {
+            return res.status(500).json({ message: "Failed to update AD site" });
+          }
+        } catch (err) {
+          console.error("Error updating AD site:", err);
+          return res.status(500).json({ message: `Error updating AD site: ${err.message}` });
+        }
+      }
+      
+      // Update our database record
+      const updatedSite = await storage.updateAdSiteByObjectGUID(connectionId, objectGUID, updateData);
+      
+      // Create audit log entry
+      await storage.createAuditLogEntry({
+        action: 'update',
+        targetId: site.id.toString(),
+        details: { type: 'site', name: site.name, dn: site.dn, changes: updateData },
+        userId: req.user?.id,
+        connectionId
+      });
+      
+      res.json(updatedSite);
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  /**
+   * @swagger
+   * /api/connections/{connectionId}/ad-sites/{objectGUID}:
+   *   delete:
+   *     summary: Delete an AD site
+   *     tags: [AD Sites]
+   *     security:
+   *       - bearerAuth: []
+   *       - cookieAuth: []
+   *     parameters:
+   *       - name: connectionId
+   *         in: path
+   *         required: true
+   *         schema:
+   *           type: integer
+   *       - name: objectGUID
+   *         in: path
+   *         required: true
+   *         schema:
+   *           type: string
+   *     responses:
+   *       200:
+   *         description: Successfully deleted AD site
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 success:
+   *                   type: boolean
+   *       401:
+   *         $ref: '#/components/responses/UnauthorizedError'
+   *       404:
+   *         $ref: '#/components/responses/NotFoundError'
+   */
+  app.delete("/api/connections/:connectionId/ad-sites/:objectGUID", authenticateApiToken, async (req, res, next) => {
+    try {
+      if (!req.isAuthenticated() && !req.headers.authorization) {
+        return res.status(401).json({ message: "Authentication required" });
+      }
+      
+      const connectionId = parseInt(req.params.connectionId);
+      const objectGUID = req.params.objectGUID;
+      
+      const site = await storage.getAdSiteByObjectGUID(connectionId, objectGUID);
+      
+      if (!site) {
+        return res.status(404).json({ message: "AD site not found" });
+      }
+      
+      const connection = await storage.getLdapConnection(connectionId);
+      
+      if (!connection) {
+        return res.status(404).json({ message: "LDAP connection not found" });
+      }
+      
+      // Connect to LDAP if needed
+      const client = ldapClient.getClient(connectionId);
+      
+      if (!client) {
+        const connected = await ldapClient.connect(connection);
+        if (!connected) {
+          return res.status(500).json({ message: "Failed to connect to LDAP server" });
+        }
+      }
+      
+      // Delete from LDAP
+      try {
+        const success = await ldapClient.deleteEntry(connectionId, site.dn);
+        
+        if (!success) {
+          return res.status(500).json({ message: "Failed to delete AD site" });
+        }
+        
+        // Delete from our database
+        await storage.deleteAdSite(site.id);
+        
+        // Create audit log entry
+        await storage.createAuditLogEntry({
+          action: 'delete',
+          targetId: site.id.toString(),
+          details: { type: 'site', name: site.name, dn: site.dn },
+          userId: req.user?.id,
+          connectionId
+        });
+        
+        res.json({ success: true });
+      } catch (err) {
+        console.error("Error deleting AD site:", err);
+        return res.status(500).json({ message: `Error deleting AD site: ${err.message}` });
+      }
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  // AD Subnets endpoints
+  /**
+   * @swagger
+   * /api/connections/{connectionId}/ad-subnets:
+   *   get:
+   *     summary: List AD subnets from the specified LDAP connection
+   *     tags: [AD Subnets]
+   *     security:
+   *       - bearerAuth: []
+   *       - cookieAuth: []
+   *     parameters:
+   *       - name: connectionId
+   *         in: path
+   *         required: true
+   *         schema:
+   *           type: integer
+   *       - $ref: '#/components/parameters/filterParam'
+   *       - $ref: '#/components/parameters/selectParam'
+   *       - $ref: '#/components/parameters/expandParam'
+   *       - $ref: '#/components/parameters/orderByParam'
+   *       - $ref: '#/components/parameters/topParam'
+   *       - $ref: '#/components/parameters/skipParam'
+   *     responses:
+   *       200:
+   *         description: A list of AD subnets
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 data:
+   *                   type: array
+   *                   items:
+   *                     $ref: '#/components/schemas/AdSubnet'
+   *                 metadata:
+   *                   $ref: '#/components/responses/PaginatedResponse/content/application~1json/schema/properties/metadata'
+   *       401:
+   *         $ref: '#/components/responses/UnauthorizedError'
+   *       404:
+   *         $ref: '#/components/responses/NotFoundError'
+   */
+  app.get("/api/connections/:connectionId/ad-subnets", authenticateApiToken, async (req, res, next) => {
+    try {
+      if (!req.isAuthenticated() && !req.headers.authorization) {
+        return res.status(401).json({ message: "Authentication required" });
+      }
+      
+      const connectionId = parseInt(req.params.connectionId);
+      const connection = await storage.getLdapConnection(connectionId);
+      
+      if (!connection) {
+        return res.status(404).json({ message: "LDAP connection not found" });
+      }
+      
+      const query = parseQueryParams(req);
+      const subnets = await storage.listAdSubnets(connectionId, query);
+      
+      // Count total records for pagination metadata
+      const countQuery = db.select({ count: sql`count(*)` }).from(adSubnets)
+        .where(eq(adSubnets.connectionId, connectionId));
+      
+      // Apply filters if present
+      if (query && query.filter) {
+        const conditions = parseFilter(query.filter);
+        const whereClause = applyFilterConditions(adSubnets, conditions);
+        if (whereClause) {
+          countQuery.where(whereClause);
+        }
+      }
+      
+      const [countResult] = await countQuery;
+      const totalRecords = Number(countResult?.count || 0);
+      
+      // Add objectType to each result
+      const subnetsWithObjectType = subnets.map(subnet => ({
+        ...subnet,
+        objectType: 'subnet'
+      }));
+      
+      // Generate pagination metadata
+      const { limit, offset } = parsePagination(query?.top, query?.skip);
+      const paginationMetadata = generatePaginationMetadata(
+        totalRecords,
+        limit,
+        offset,
+        `${req.protocol}://${req.get('host')}${req.originalUrl}`
+      );
+      
+      res.json({
+        data: subnetsWithObjectType,
+        metadata: paginationMetadata
+      });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  /**
+   * @swagger
+   * /api/connections/{connectionId}/ad-subnets/{objectGUID}:
+   *   get:
+   *     summary: Get details of a specific AD subnet
+   *     tags: [AD Subnets]
+   *     security:
+   *       - bearerAuth: []
+   *       - cookieAuth: []
+   *     parameters:
+   *       - name: connectionId
+   *         in: path
+   *         required: true
+   *         schema:
+   *           type: integer
+   *       - name: objectGUID
+   *         in: path
+   *         required: true
+   *         schema:
+   *           type: string
+   *     responses:
+   *       200:
+   *         description: Details of the AD subnet
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/AdSubnet'
+   *       401:
+   *         $ref: '#/components/responses/UnauthorizedError'
+   *       404:
+   *         $ref: '#/components/responses/NotFoundError'
+   */
+  app.get("/api/connections/:connectionId/ad-subnets/:objectGUID", authenticateApiToken, async (req, res, next) => {
+    try {
+      if (!req.isAuthenticated() && !req.headers.authorization) {
+        return res.status(401).json({ message: "Authentication required" });
+      }
+      
+      const connectionId = parseInt(req.params.connectionId);
+      const objectGUID = req.params.objectGUID;
+      
+      const subnet = await storage.getAdSubnetByObjectGUID(connectionId, objectGUID);
+      
+      if (!subnet) {
+        return res.status(404).json({ message: "AD subnet not found" });
+      }
+      
+      // Add objectType to the result
+      const subnetWithObjectType = {
+        ...subnet,
+        objectType: 'subnet'
+      };
+      
+      res.json(subnetWithObjectType);
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  /**
+   * @swagger
+   * /api/connections/{connectionId}/ad-subnets:
+   *   post:
+   *     summary: Create a new AD subnet
+   *     tags: [AD Subnets]
+   *     security:
+   *       - bearerAuth: []
+   *       - cookieAuth: []
+   *     parameters:
+   *       - name: connectionId
+   *         in: path
+   *         required: true
+   *         schema:
+   *           type: integer
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             properties:
+   *               name:
+   *                 type: string
+   *                 description: The subnet name (e.g., 192.168.1.0/24)
+   *               description:
+   *                 type: string
+   *               location:
+   *                 type: string
+   *               siteObject:
+   *                 type: string
+   *                 description: The distinguishedName of the site this subnet belongs to
+   *     responses:
+   *       201:
+   *         description: Successfully created AD subnet
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/AdSubnet'
+   *       401:
+   *         $ref: '#/components/responses/UnauthorizedError'
+   *       404:
+   *         $ref: '#/components/responses/NotFoundError'
+   */
+  app.post("/api/connections/:connectionId/ad-subnets", authenticateApiToken, async (req, res, next) => {
+    try {
+      if (!req.isAuthenticated() && !req.headers.authorization) {
+        return res.status(401).json({ message: "Authentication required" });
+      }
+      
+      const connectionId = parseInt(req.params.connectionId);
+      const connection = await storage.getLdapConnection(connectionId);
+      
+      if (!connection) {
+        return res.status(404).json({ message: "LDAP connection not found" });
+      }
+      
+      // First create the subnet in AD
+      const subnetName = req.body.name;
+      const description = req.body.description || '';
+      const location = req.body.location || '';
+      const siteObject = req.body.siteObject || '';
+      
+      if (!subnetName) {
+        return res.status(400).json({ message: "Subnet name is required" });
+      }
+      
+      // Create subnet in AD using LDAP
+      const client = ldapClient.getClient(connectionId);
+      
+      if (!client) {
+        const connected = await ldapClient.connect(connection);
+        if (!connected) {
+          return res.status(500).json({ message: "Failed to connect to LDAP server" });
+        }
+      }
+      
+      // Create a CN for the new subnet
+      const subnetDN = `CN=${subnetName},CN=Subnets,CN=Sites,CN=Configuration,${ldapClient.getDomainDN(connection)}`;
+      
+      // Attributes for the new subnet
+      const subnetAttributes = {
+        objectClass: ['subnet'],
+        cn: subnetName,
+        description: description,
+        location: location
+      };
+      
+      // Add siteObject if provided
+      if (siteObject) {
+        subnetAttributes.siteObject = siteObject;
+      }
+      
+      try {
+        const success = await ldapClient.createEntry(connectionId, subnetDN, subnetAttributes);
+        
+        if (!success) {
+          return res.status(500).json({ message: "Failed to create AD subnet" });
+        }
+        
+        // Search for the subnet to get all its attributes
+        const subnetResults = await ldapClient.searchSubnets(connectionId, `(cn=${subnetName})`);
+        
+        if (!subnetResults || subnetResults.length === 0) {
+          return res.status(500).json({ message: "Subnet created but could not retrieve details" });
+        }
+        
+        const subnetData = subnetResults[0];
+        
+        // Create entry in our database
+        const newSubnet = await storage.createAdSubnet({
+          connectionId,
+          name: subnetName,
+          objectGUID: subnetData.objectGUID || uuidv4(),
+          objectType: 'subnet',
+          dn: subnetDN,
+          canonicalName: `${connection.domain}/Configuration/Sites/Subnets/${subnetName}`,
+          description: description,
+          location: location,
+          siteObject: siteObject,
+          managedBy: null,
+          adProperties: subnetData
+        });
+        
+        // Create audit log entry
+        await storage.createAuditLogEntry({
+          action: 'create',
+          targetId: newSubnet.id.toString(),
+          details: { type: 'subnet', name: subnetName, dn: subnetDN },
+          userId: req.user?.id,
+          connectionId
+        });
+        
+        res.status(201).json(newSubnet);
+      } catch (err) {
+        console.error("Error creating AD subnet:", err);
+        return res.status(500).json({ message: `Error creating AD subnet: ${err.message}` });
+      }
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  /**
+   * @swagger
+   * /api/connections/{connectionId}/ad-subnets/{objectGUID}:
+   *   patch:
+   *     summary: Update an AD subnet
+   *     tags: [AD Subnets]
+   *     security:
+   *       - bearerAuth: []
+   *       - cookieAuth: []
+   *     parameters:
+   *       - name: connectionId
+   *         in: path
+   *         required: true
+   *         schema:
+   *           type: integer
+   *       - name: objectGUID
+   *         in: path
+   *         required: true
+   *         schema:
+   *           type: string
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             properties:
+   *               description:
+   *                 type: string
+   *               location:
+   *                 type: string
+   *               siteObject:
+   *                 type: string
+   *                 description: The distinguishedName of the site this subnet belongs to
+   *               managedBy:
+   *                 type: string
+   *     responses:
+   *       200:
+   *         description: Successfully updated AD subnet
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/AdSubnet'
+   *       401:
+   *         $ref: '#/components/responses/UnauthorizedError'
+   *       404:
+   *         $ref: '#/components/responses/NotFoundError'
+   */
+  app.patch("/api/connections/:connectionId/ad-subnets/:objectGUID", authenticateApiToken, async (req, res, next) => {
+    try {
+      if (!req.isAuthenticated() && !req.headers.authorization) {
+        return res.status(401).json({ message: "Authentication required" });
+      }
+      
+      const connectionId = parseInt(req.params.connectionId);
+      const objectGUID = req.params.objectGUID;
+      
+      const subnet = await storage.getAdSubnetByObjectGUID(connectionId, objectGUID);
+      
+      if (!subnet) {
+        return res.status(404).json({ message: "AD subnet not found" });
+      }
+      
+      const connection = await storage.getLdapConnection(connectionId);
+      
+      if (!connection) {
+        return res.status(404).json({ message: "LDAP connection not found" });
+      }
+      
+      // Connect to LDAP if needed
+      const client = ldapClient.getClient(connectionId);
+      
+      if (!client) {
+        const connected = await ldapClient.connect(connection);
+        if (!connected) {
+          return res.status(500).json({ message: "Failed to connect to LDAP server" });
+        }
+      }
+      
+      // Prepare changes
+      const changes = [];
+      const updateData: Partial<AdSubnet> = {};
+      
+      if (req.body.description !== undefined) {
+        changes.push({
+          operation: 'replace',
+          modification: {
+            description: req.body.description
+          }
+        });
+        updateData.description = req.body.description;
+      }
+      
+      if (req.body.location !== undefined) {
+        changes.push({
+          operation: 'replace',
+          modification: {
+            location: req.body.location
+          }
+        });
+        updateData.location = req.body.location;
+      }
+      
+      if (req.body.siteObject !== undefined) {
+        changes.push({
+          operation: 'replace',
+          modification: {
+            siteObject: req.body.siteObject
+          }
+        });
+        updateData.siteObject = req.body.siteObject;
+      }
+      
+      // Handle managedBy separately
+      if (req.body.managedBy !== undefined) {
+        // Set the managedBy attribute
+        const success = await ldapClient.setManagedBy(connectionId, subnet.dn, req.body.managedBy);
+        
+        if (!success) {
+          return res.status(500).json({ message: "Failed to update managedBy attribute" });
+        }
+        
+        updateData.managedBy = req.body.managedBy;
+      }
+      
+      // Apply changes to LDAP if there are any attribute changes
+      if (changes.length > 0) {
+        try {
+          const success = await ldapClient.updateEntry(connectionId, subnet.dn, changes);
+          
+          if (!success) {
+            return res.status(500).json({ message: "Failed to update AD subnet" });
+          }
+        } catch (err) {
+          console.error("Error updating AD subnet:", err);
+          return res.status(500).json({ message: `Error updating AD subnet: ${err.message}` });
+        }
+      }
+      
+      // Update our database record
+      const updatedSubnet = await storage.updateAdSubnetByObjectGUID(connectionId, objectGUID, updateData);
+      
+      // Create audit log entry
+      await storage.createAuditLogEntry({
+        action: 'update',
+        targetId: subnet.id.toString(),
+        details: { type: 'subnet', name: subnet.name, dn: subnet.dn, changes: updateData },
+        userId: req.user?.id,
+        connectionId
+      });
+      
+      res.json(updatedSubnet);
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  /**
+   * @swagger
+   * /api/connections/{connectionId}/ad-subnets/{objectGUID}:
+   *   delete:
+   *     summary: Delete an AD subnet
+   *     tags: [AD Subnets]
+   *     security:
+   *       - bearerAuth: []
+   *       - cookieAuth: []
+   *     parameters:
+   *       - name: connectionId
+   *         in: path
+   *         required: true
+   *         schema:
+   *           type: integer
+   *       - name: objectGUID
+   *         in: path
+   *         required: true
+   *         schema:
+   *           type: string
+   *     responses:
+   *       200:
+   *         description: Successfully deleted AD subnet
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 success:
+   *                   type: boolean
+   *       401:
+   *         $ref: '#/components/responses/UnauthorizedError'
+   *       404:
+   *         $ref: '#/components/responses/NotFoundError'
+   */
+  app.delete("/api/connections/:connectionId/ad-subnets/:objectGUID", authenticateApiToken, async (req, res, next) => {
+    try {
+      if (!req.isAuthenticated() && !req.headers.authorization) {
+        return res.status(401).json({ message: "Authentication required" });
+      }
+      
+      const connectionId = parseInt(req.params.connectionId);
+      const objectGUID = req.params.objectGUID;
+      
+      const subnet = await storage.getAdSubnetByObjectGUID(connectionId, objectGUID);
+      
+      if (!subnet) {
+        return res.status(404).json({ message: "AD subnet not found" });
+      }
+      
+      const connection = await storage.getLdapConnection(connectionId);
+      
+      if (!connection) {
+        return res.status(404).json({ message: "LDAP connection not found" });
+      }
+      
+      // Connect to LDAP if needed
+      const client = ldapClient.getClient(connectionId);
+      
+      if (!client) {
+        const connected = await ldapClient.connect(connection);
+        if (!connected) {
+          return res.status(500).json({ message: "Failed to connect to LDAP server" });
+        }
+      }
+      
+      // Delete from LDAP
+      try {
+        const success = await ldapClient.deleteEntry(connectionId, subnet.dn);
+        
+        if (!success) {
+          return res.status(500).json({ message: "Failed to delete AD subnet" });
+        }
+        
+        // Delete from our database
+        await storage.deleteAdSubnet(subnet.id);
+        
+        // Create audit log entry
+        await storage.createAuditLogEntry({
+          action: 'delete',
+          targetId: subnet.id.toString(),
+          details: { type: 'subnet', name: subnet.name, dn: subnet.dn },
+          userId: req.user?.id,
+          connectionId
+        });
+        
+        res.json({ success: true });
+      } catch (err) {
+        console.error("Error deleting AD subnet:", err);
+        return res.status(500).json({ message: `Error deleting AD subnet: ${err.message}` });
+      }
+    } catch (error) {
+      next(error);
+    }
+  });
+
   app.get("/api/connections/:connectionId/audit-logs", authenticateApiToken, async (req, res, next) => {
     try {
       const connectionId = parseInt(req.params.connectionId);

@@ -3,11 +3,11 @@ import {
   LdapConnection, InsertLdapConnection, 
   AdUser, InsertAdUser, AdGroup, InsertAdGroup, 
   AdOrgUnit, InsertAdOrgUnit, AdComputer, InsertAdComputer, 
-  AdDomain, InsertAdDomain, Role, ApiQuery,
+  AdDomain, InsertAdDomain, AdSite, InsertAdSite, AdSubnet, InsertAdSubnet, Role, ApiQuery,
   LdapFilter, InsertLdapFilter, LdapFilterRevision, InsertLdapFilterRevision,
   LdapAttribute, InsertLdapAttribute, AuditLog, InsertAuditLog,
   users, apiTokens, ldapConnections, adUsers, adGroups, adOrgUnits, adComputers, adDomains,
-  roles, ldapFilters, ldapFilterRevisions, ldapAttributes, auditLogs
+  adSites, adSubnets, roles, ldapFilters, ldapFilterRevisions, ldapAttributes, auditLogs
 } from "@shared/schema";
 import session from "express-session";
 import createMemoryStore from "memorystore";
@@ -120,6 +120,24 @@ export interface IStorage {
   updateAdDomain(id: number, domain: Partial<AdDomain>): Promise<AdDomain | undefined>;
   deleteAdDomain(id: number): Promise<boolean>;
   listAdDomains(connectionId: number, query?: any): Promise<AdDomain[]>;
+  
+  // AD Sites
+  getAdSite(id: number): Promise<AdSite | undefined>;
+  getAdSiteByObjectGUID(connectionId: number, objectGUID: string): Promise<AdSite | undefined>;
+  createAdSite(site: InsertAdSite): Promise<AdSite>;
+  updateAdSite(id: number, site: Partial<AdSite>): Promise<AdSite | undefined>;
+  updateAdSiteByObjectGUID(connectionId: number, objectGUID: string, site: Partial<AdSite>): Promise<AdSite | undefined>;
+  deleteAdSite(id: number): Promise<boolean>;
+  listAdSites(connectionId: number, query?: any): Promise<AdSite[]>;
+  
+  // AD Subnets
+  getAdSubnet(id: number): Promise<AdSubnet | undefined>;
+  getAdSubnetByObjectGUID(connectionId: number, objectGUID: string): Promise<AdSubnet | undefined>;
+  createAdSubnet(subnet: InsertAdSubnet): Promise<AdSubnet>;
+  updateAdSubnet(id: number, subnet: Partial<AdSubnet>): Promise<AdSubnet | undefined>;
+  updateAdSubnetByObjectGUID(connectionId: number, objectGUID: string, subnet: Partial<AdSubnet>): Promise<AdSubnet | undefined>;
+  deleteAdSubnet(id: number): Promise<boolean>;
+  listAdSubnets(connectionId: number, query?: any): Promise<AdSubnet[]>;
   
   // Audit logging
   createAuditLogEntry(entry: InsertAuditLog): Promise<AuditLog>;
@@ -548,6 +566,12 @@ export class DatabaseStorage implements IStorage {
       case 'domain':
         results = await this.listAdDomains(connectionId);
         break;
+      case 'site':
+        results = await this.listAdSites(connectionId);
+        break;
+      case 'subnet':
+        results = await this.listAdSubnets(connectionId);
+        break;
       default:
         throw new Error(`Unsupported object class: ${objectClass}`);
     }
@@ -651,6 +675,11 @@ export class DatabaseStorage implements IStorage {
       if (selectedFields && selectedFields.length > 0) {
         const result = users.map(user => {
           const filtered: Partial<AdUser> = { id: user.id };
+          
+          // Always include managedBy field regardless of selection
+          filtered.managedBy = user.managedBy;
+          
+          // Add selected fields
           selectedFields.forEach(field => {
             if (field in user) {
               filtered[field as keyof AdUser] = user[field as keyof AdUser];
@@ -765,6 +794,10 @@ export class DatabaseStorage implements IStorage {
       if (selectedFields && selectedFields.length > 0) {
         const result = groups.map(group => {
           const filtered: Partial<AdGroup> = { id: group.id };
+          
+          // Always include managedBy field regardless of selection
+          filtered.managedBy = group.managedBy;
+          
           selectedFields.forEach(field => {
             if (field in group) {
               filtered[field as keyof AdGroup] = group[field as keyof AdGroup];
@@ -845,6 +878,10 @@ export class DatabaseStorage implements IStorage {
       
       return orgUnits.map(ou => {
         const result: any = { id: ou.id };
+        
+        // Always include managedBy field regardless of selection
+        result.managedBy = ou.managedBy;
+        
         properties.forEach((prop: string) => {
           if ((ou as any)[prop] !== undefined) {
             result[prop] = (ou as any)[prop];
@@ -913,6 +950,10 @@ export class DatabaseStorage implements IStorage {
       
       return computers.map(computer => {
         const result: any = { id: computer.id };
+        
+        // Always include managedBy field regardless of selection
+        result.managedBy = computer.managedBy;
+        
         properties.forEach((prop: string) => {
           if ((computer as any)[prop] !== undefined) {
             result[prop] = (computer as any)[prop];
@@ -966,6 +1007,116 @@ export class DatabaseStorage implements IStorage {
     }
     
     return adDomainsQuery;
+  }
+  
+  // AD Sites
+  async getAdSite(id: number): Promise<AdSite | undefined> {
+    const result = await db.select().from(adSites).where(eq(adSites.id, id));
+    return result.length > 0 ? result[0] : undefined;
+  }
+  
+  async getAdSiteByObjectGUID(connectionId: number, objectGUID: string): Promise<AdSite | undefined> {
+    const result = await db.select().from(adSites).where(
+      and(
+        eq(adSites.connectionId, connectionId),
+        eq(adSites.objectGUID, objectGUID)
+      )
+    );
+    return result.length > 0 ? result[0] : undefined;
+  }
+  
+  async createAdSite(site: InsertAdSite): Promise<AdSite> {
+    const result = await db.insert(adSites).values(site).returning();
+    return result[0];
+  }
+  
+  async updateAdSite(id: number, site: Partial<AdSite>): Promise<AdSite | undefined> {
+    const result = await db.update(adSites).set(site).where(eq(adSites.id, id)).returning();
+    return result.length > 0 ? result[0] : undefined;
+  }
+  
+  async updateAdSiteByObjectGUID(connectionId: number, objectGUID: string, site: Partial<AdSite>): Promise<AdSite | undefined> {
+    const result = await db.update(adSites)
+      .set(site)
+      .where(
+        and(
+          eq(adSites.connectionId, connectionId),
+          eq(adSites.objectGUID, objectGUID)
+        )
+      )
+      .returning();
+    return result.length > 0 ? result[0] : undefined;
+  }
+  
+  async deleteAdSite(id: number): Promise<boolean> {
+    const result = await db.delete(adSites).where(eq(adSites.id, id)).returning({ id: adSites.id });
+    return result.length > 0;
+  }
+  
+  async listAdSites(connectionId: number, query?: any): Promise<AdSite[]> {
+    let adSitesQuery = db.select().from(adSites).where(eq(adSites.connectionId, connectionId));
+    
+    // Apply query options (filtering, pagination, etc.)
+    if (query) {
+      adSitesQuery = applyQueryOptions(adSitesQuery, query, adSites);
+    }
+    
+    return adSitesQuery;
+  }
+  
+  // AD Subnets
+  async getAdSubnet(id: number): Promise<AdSubnet | undefined> {
+    const result = await db.select().from(adSubnets).where(eq(adSubnets.id, id));
+    return result.length > 0 ? result[0] : undefined;
+  }
+  
+  async getAdSubnetByObjectGUID(connectionId: number, objectGUID: string): Promise<AdSubnet | undefined> {
+    const result = await db.select().from(adSubnets).where(
+      and(
+        eq(adSubnets.connectionId, connectionId),
+        eq(adSubnets.objectGUID, objectGUID)
+      )
+    );
+    return result.length > 0 ? result[0] : undefined;
+  }
+  
+  async createAdSubnet(subnet: InsertAdSubnet): Promise<AdSubnet> {
+    const result = await db.insert(adSubnets).values(subnet).returning();
+    return result[0];
+  }
+  
+  async updateAdSubnet(id: number, subnet: Partial<AdSubnet>): Promise<AdSubnet | undefined> {
+    const result = await db.update(adSubnets).set(subnet).where(eq(adSubnets.id, id)).returning();
+    return result.length > 0 ? result[0] : undefined;
+  }
+  
+  async updateAdSubnetByObjectGUID(connectionId: number, objectGUID: string, subnet: Partial<AdSubnet>): Promise<AdSubnet | undefined> {
+    const result = await db.update(adSubnets)
+      .set(subnet)
+      .where(
+        and(
+          eq(adSubnets.connectionId, connectionId),
+          eq(adSubnets.objectGUID, objectGUID)
+        )
+      )
+      .returning();
+    return result.length > 0 ? result[0] : undefined;
+  }
+  
+  async deleteAdSubnet(id: number): Promise<boolean> {
+    const result = await db.delete(adSubnets).where(eq(adSubnets.id, id)).returning({ id: adSubnets.id });
+    return result.length > 0;
+  }
+  
+  async listAdSubnets(connectionId: number, query?: any): Promise<AdSubnet[]> {
+    let adSubnetsQuery = db.select().from(adSubnets).where(eq(adSubnets.connectionId, connectionId));
+    
+    // Apply query options (filtering, pagination, etc.)
+    if (query) {
+      adSubnetsQuery = applyQueryOptions(adSubnetsQuery, query, adSubnets);
+    }
+    
+    return adSubnetsQuery;
   }
   
   // Audit logging

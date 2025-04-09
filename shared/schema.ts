@@ -226,6 +226,39 @@ export const adDomains = pgTable("ad_domains", {
   adProperties: jsonb("ad_properties"),
 });
 
+// AD Sites table for Sites and Services
+export const adSites = pgTable("ad_sites", {
+  id: serial("id").primaryKey(),
+  connectionId: integer("connection_id").notNull(),
+  objectGUID: text("object_guid").notNull(),
+  distinguishedName: text("distinguished_name").notNull(),
+  cn: text("cn"),
+  name: text("name").notNull(),
+  description: text("description"),
+  location: text("location"),
+  managedBy: text("managed_by"),
+  adProperties: jsonb("ad_properties"),
+  objectType: text("object_type").default("site").notNull(),
+});
+
+// AD Subnets table for Sites and Services
+export const adSubnets = pgTable("ad_subnets", {
+  id: serial("id").primaryKey(),
+  connectionId: integer("connection_id").notNull(),
+  objectGUID: text("object_guid").notNull(),
+  distinguishedName: text("distinguished_name").notNull(),
+  cn: text("cn"),
+  name: text("name").notNull(),
+  description: text("description"),
+  siteObject: text("site_object"),
+  location: text("location"),
+  networkAddress: text("network_address"),
+  networkMask: text("network_mask"),
+  managedBy: text("managed_by"),
+  adProperties: jsonb("ad_properties"),
+  objectType: text("object_type").default("subnet").notNull(),
+});
+
 // Define relations between tables
 export const rolesRelations = relations(roles, ({ many }) => ({
   permissions: many(rolePermissions),
@@ -270,6 +303,8 @@ export const insertAdGroupSchema = createInsertSchema(adGroups).omit({ id: true 
 export const insertAdOrgUnitSchema = createInsertSchema(adOrgUnits).omit({ id: true });
 export const insertAdComputerSchema = createInsertSchema(adComputers).omit({ id: true });
 export const insertAdDomainSchema = createInsertSchema(adDomains).omit({ id: true });
+export const insertAdSiteSchema = createInsertSchema(adSites).omit({ id: true });
+export const insertAdSubnetSchema = createInsertSchema(adSubnets).omit({ id: true });
 
 // Login schema
 export const loginSchema = z.object({
@@ -339,6 +374,10 @@ export type AdComputer = typeof adComputers.$inferSelect;
 export type InsertAdComputer = z.infer<typeof insertAdComputerSchema>;
 export type AdDomain = typeof adDomains.$inferSelect;
 export type InsertAdDomain = z.infer<typeof insertAdDomainSchema>;
+export type AdSite = typeof adSites.$inferSelect;
+export type InsertAdSite = z.infer<typeof insertAdSiteSchema>;
+export type AdSubnet = typeof adSubnets.$inferSelect;
+export type InsertAdSubnet = z.infer<typeof insertAdSubnetSchema>;
 export type Login = z.infer<typeof loginSchema>;
 export type ApiQuery = z.infer<typeof apiQuerySchema>;
 export type MoveComputer = z.infer<typeof moveComputerSchema>;
@@ -348,7 +387,7 @@ export type RemoveFromGroup = z.infer<typeof removeFromGroupSchema>;
 
 
 // LDAP Query Builder schemas
-export const ldapFilterObjectClasses = ["user", "group", "organizationalUnit", "computer", "domain"] as const;
+export const ldapFilterObjectClasses = ["user", "group", "organizationalUnit", "computer", "domain", "site", "subnet"] as const;
 
 // LDAP Filter schema
 export const ldapFilters = pgTable("ldap_filters", {
