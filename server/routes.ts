@@ -3,6 +3,7 @@ import { createServer, type Server } from "http";
 import { setupAuth } from "./auth";
 import { setupSwagger } from "./swagger";
 import { storage } from "./storage";
+import { db } from "./db";
 import { 
   apiQuerySchema, 
   PERMISSIONS, 
@@ -10,7 +11,12 @@ import {
   moveUserSchema, 
   addToGroupSchema, 
   removeFromGroupSchema,
-  updateManagedBySchema
+  updateManagedBySchema,
+  adUsers,
+  adGroups,
+  adOrgUnits,
+  adComputers,
+  adDomains
 } from "@shared/schema";
 import { ZodError } from "zod";
 import rateLimit from "express-rate-limit";
@@ -21,6 +27,13 @@ import {
   initializeRBAC
 } from "./authorization";
 import { ldapClient } from "./ldap";
+import { 
+  applyFilterConditions, 
+  generatePaginationMetadata, 
+  parseFilter, 
+  parsePagination 
+} from "./query-parser";
+import { eq, sql } from "drizzle-orm";
 
 // Extend Express Request to include user property
 interface Request extends ExpressRequest {
@@ -508,7 +521,42 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const query = parseQueryParams(req);
       const users = await storage.listAdUsers(connectionId, query);
       
-      res.json(users);
+      // Count total records for pagination metadata
+      const countQuery = db.select({ count: sql`count(*)` }).from(adUsers)
+        .where(eq(adUsers.connectionId, connectionId));
+      
+      // Apply filters if present
+      if (query && query.filter) {
+        const conditions = parseFilter(query.filter);
+        const whereClause = applyFilterConditions(adUsers, conditions);
+        if (whereClause) {
+          countQuery.where(whereClause);
+        }
+      }
+      
+      const [countResult] = await countQuery;
+      const totalRecords = Number(countResult?.count || 0);
+      
+      // Add objectType to each result
+      const usersWithObjectType = users.map(user => ({
+        ...user,
+        objectType: 'user'
+      }));
+      
+      // Generate pagination metadata
+      const { limit, offset } = parsePagination(query?.top, query?.skip);
+      const paginationMetadata = generatePaginationMetadata(
+        totalRecords,
+        limit,
+        offset,
+        `${req.protocol}://${req.get('host')}${req.originalUrl}`
+      );
+      
+      // Return data with pagination metadata
+      res.json({
+        data: usersWithObjectType,
+        ...paginationMetadata
+      });
     } catch (error) {
       next(error);
     }
@@ -1000,7 +1048,42 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const query = parseQueryParams(req);
       const groups = await storage.listAdGroups(connectionId, query);
       
-      res.json(groups);
+      // Count total records for pagination metadata
+      const countQuery = db.select({ count: sql`count(*)` }).from(adGroups)
+        .where(eq(adGroups.connectionId, connectionId));
+      
+      // Apply filters if present
+      if (query && query.filter) {
+        const conditions = parseFilter(query.filter);
+        const whereClause = applyFilterConditions(adGroups, conditions);
+        if (whereClause) {
+          countQuery.where(whereClause);
+        }
+      }
+      
+      const [countResult] = await countQuery;
+      const totalRecords = Number(countResult?.count || 0);
+      
+      // Add objectType to each result
+      const groupsWithObjectType = groups.map(group => ({
+        ...group,
+        objectType: 'group'
+      }));
+      
+      // Generate pagination metadata
+      const { limit, offset } = parsePagination(query?.top, query?.skip);
+      const paginationMetadata = generatePaginationMetadata(
+        totalRecords,
+        limit,
+        offset,
+        `${req.protocol}://${req.get('host')}${req.originalUrl}`
+      );
+      
+      // Return data with pagination metadata
+      res.json({
+        data: groupsWithObjectType,
+        ...paginationMetadata
+      });
     } catch (error) {
       next(error);
     }
@@ -1314,7 +1397,42 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const query = parseQueryParams(req);
       const orgUnits = await storage.listAdOrgUnits(connectionId, query);
       
-      res.json(orgUnits);
+      // Count total records for pagination metadata
+      const countQuery = db.select({ count: sql`count(*)` }).from(adOrgUnits)
+        .where(eq(adOrgUnits.connectionId, connectionId));
+      
+      // Apply filters if present
+      if (query && query.filter) {
+        const conditions = parseFilter(query.filter);
+        const whereClause = applyFilterConditions(adOrgUnits, conditions);
+        if (whereClause) {
+          countQuery.where(whereClause);
+        }
+      }
+      
+      const [countResult] = await countQuery;
+      const totalRecords = Number(countResult?.count || 0);
+      
+      // Add objectType to each result
+      const orgUnitsWithObjectType = orgUnits.map(ou => ({
+        ...ou,
+        objectType: 'organizationalUnit'
+      }));
+      
+      // Generate pagination metadata
+      const { limit, offset } = parsePagination(query?.top, query?.skip);
+      const paginationMetadata = generatePaginationMetadata(
+        totalRecords,
+        limit,
+        offset,
+        `${req.protocol}://${req.get('host')}${req.originalUrl}`
+      );
+      
+      // Return data with pagination metadata
+      res.json({
+        data: orgUnitsWithObjectType,
+        ...paginationMetadata
+      });
     } catch (error) {
       next(error);
     }
@@ -1492,7 +1610,42 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const query = parseQueryParams(req);
       const computers = await storage.listAdComputers(connectionId, query);
       
-      res.json(computers);
+      // Count total records for pagination metadata
+      const countQuery = db.select({ count: sql`count(*)` }).from(adComputers)
+        .where(eq(adComputers.connectionId, connectionId));
+      
+      // Apply filters if present
+      if (query && query.filter) {
+        const conditions = parseFilter(query.filter);
+        const whereClause = applyFilterConditions(adComputers, conditions);
+        if (whereClause) {
+          countQuery.where(whereClause);
+        }
+      }
+      
+      const [countResult] = await countQuery;
+      const totalRecords = Number(countResult?.count || 0);
+      
+      // Add objectType to each result
+      const computersWithObjectType = computers.map(computer => ({
+        ...computer,
+        objectType: 'computer'
+      }));
+      
+      // Generate pagination metadata
+      const { limit, offset } = parsePagination(query?.top, query?.skip);
+      const paginationMetadata = generatePaginationMetadata(
+        totalRecords,
+        limit,
+        offset,
+        `${req.protocol}://${req.get('host')}${req.originalUrl}`
+      );
+      
+      // Return data with pagination metadata
+      res.json({
+        data: computersWithObjectType,
+        ...paginationMetadata
+      });
     } catch (error) {
       next(error);
     }
@@ -1846,7 +1999,42 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const query = parseQueryParams(req);
       const domains = await storage.listAdDomains(connectionId, query);
       
-      res.json(domains);
+      // Count total records for pagination metadata
+      const countQuery = db.select({ count: sql`count(*)` }).from(adDomains)
+        .where(eq(adDomains.connectionId, connectionId));
+      
+      // Apply filters if present
+      if (query && query.filter) {
+        const conditions = parseFilter(query.filter);
+        const whereClause = applyFilterConditions(adDomains, conditions);
+        if (whereClause) {
+          countQuery.where(whereClause);
+        }
+      }
+      
+      const [countResult] = await countQuery;
+      const totalRecords = Number(countResult?.count || 0);
+      
+      // Add objectType to each result
+      const domainsWithObjectType = domains.map(domain => ({
+        ...domain,
+        objectType: 'domain'
+      }));
+      
+      // Generate pagination metadata
+      const { limit, offset } = parsePagination(query?.top, query?.skip);
+      const paginationMetadata = generatePaginationMetadata(
+        totalRecords,
+        limit,
+        offset,
+        `${req.protocol}://${req.get('host')}${req.originalUrl}`
+      );
+      
+      // Return data with pagination metadata
+      res.json({
+        data: domainsWithObjectType,
+        ...paginationMetadata
+      });
     } catch (error) {
       next(error);
     }
