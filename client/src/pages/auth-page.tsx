@@ -1,3 +1,4 @@
+import * as React from "react";
 import { useLocation } from "wouter";
 import { z } from "zod";
 import { useForm } from "react-hook-form";
@@ -54,6 +55,13 @@ export default function AuthPage() {
   const { toast } = useToast();
   const auth = useAuth();
 
+  // Redirect if already logged in
+  React.useEffect(() => {
+    if (auth.user) {
+      navigate("/");
+    }
+  }, [auth.user, navigate]);
+
   // Login form
   const loginForm = useForm<LoginFormValues>({
     resolver: zodResolver(loginSchema),
@@ -81,14 +89,28 @@ export default function AuthPage() {
   // Handle login form submission
   const onLoginSubmit = (data: LoginFormValues) => {
     const { username, password } = data;
-    auth.loginMutation.mutate({ username, password });
+    auth.loginMutation.mutate(
+      { username, password },
+      {
+        onSuccess: () => {
+          navigate("/");
+        }
+      }
+    );
   };
 
   // Handle register form submission
   const onRegisterSubmit = (data: RegisterFormValues) => {
     // Remove confirmPassword and acceptTerms which aren't part of the API request
     const { confirmPassword, acceptTerms, ...registerData } = data;
-    auth.registerMutation.mutate(registerData);
+    auth.registerMutation.mutate(
+      registerData,
+      {
+        onSuccess: () => {
+          navigate("/");
+        }
+      }
+    );
   };
 
   return (
