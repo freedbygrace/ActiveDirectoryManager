@@ -30,6 +30,7 @@ import {
   ShieldAlert,
   Filter,
   ClipboardList,
+  Building2,
 } from "lucide-react";
 import { useMobile } from "@/hooks/use-mobile";
 import { useToast } from "@/hooks/use-toast";
@@ -56,6 +57,7 @@ const menuSections: MenuSection[] = [
       { title: "Organizational Units", path: "/organizational-units", icon: <FolderClosed className="h-4 w-4" /> },
       { title: "Computers", path: "/computers", icon: <Monitor className="h-4 w-4" /> },
       { title: "Domains", path: "/domains", icon: <Globe className="h-4 w-4" /> },
+      { title: "Sites & Subnets", path: "/sites", icon: <Building2 className="h-4 w-4" /> },
     ],
   },
   {
