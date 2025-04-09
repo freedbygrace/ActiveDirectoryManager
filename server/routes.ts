@@ -4276,6 +4276,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const description = req.body.description || '';
       const location = req.body.location || '';
       const siteObject = req.body.siteObject || '';
+      const cidr = req.body.cidr || '';
       
       if (!subnetName) {
         return res.status(400).json({ message: "Subnet name is required" });
@@ -4334,6 +4335,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           description: description,
           location: location,
           siteObject: siteObject,
+          cidr: cidr,
           managedBy: null,
           adProperties: subnetData
         });
@@ -4391,6 +4393,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
    *               siteObject:
    *                 type: string
    *                 description: The distinguishedName of the site this subnet belongs to
+   *               cidr:
+   *                 type: string
+   *                 description: The subnet CIDR notation (e.g., 192.168.1.0/24)
    *               managedBy:
    *                 type: string
    *     responses:
@@ -4468,6 +4473,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
           }
         });
         updateData.siteObject = req.body.siteObject;
+      }
+      
+      if (req.body.cidr !== undefined) {
+        updateData.cidr = req.body.cidr;
       }
       
       // Handle managedBy separately

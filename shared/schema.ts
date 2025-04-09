@@ -254,6 +254,7 @@ export const adSubnets = pgTable("ad_subnets", {
   location: text("location"),
   networkAddress: text("network_address"),
   networkMask: text("network_mask"),
+  cidr: text("cidr"),
   managedBy: text("managed_by"),
   adProperties: jsonb("ad_properties"),
   objectType: text("object_type").default("subnet").notNull(),
