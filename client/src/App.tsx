@@ -19,6 +19,7 @@ import LdapQueryBuilderPage from "@/pages/ldap-query-builder-page";
 import SettingsPage from "@/pages/settings-page";
 import UserManagementPage from "@/pages/user-management-page";
 import AuditLogsPage from "@/pages/audit-logs-page";
+import SitesPage from "@/pages/sites-page";
 
 export default function App() {
   return (
@@ -42,6 +43,7 @@ export default function App() {
               <ProtectedRoute path="/audit-logs" component={AuditLogsPage} />
               <ProtectedRoute path="/settings" component={SettingsPage} />
               <ProtectedRoute path="/user-management" component={UserManagementPage} />
+              <ProtectedRoute path="/sites" component={SitesPage} />
               <Route>
                 <NotFound />
               </Route>
