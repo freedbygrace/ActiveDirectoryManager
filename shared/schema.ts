@@ -160,6 +160,7 @@ export const adUsers = pgTable("ad_users", {
   email: text("email"),
   enabled: boolean("enabled").default(true),
   lastLogon: timestamp("last_logon"),
+  managedBy: text("managed_by"),
   memberOf: jsonb("member_of"),
   adProperties: jsonb("ad_properties"),
 });
@@ -174,6 +175,7 @@ export const adGroups = pgTable("ad_groups", {
   sAMAccountName: text("sam_account_name").notNull(),
   groupType: text("group_type"),
   description: text("description"),
+  managedBy: text("managed_by"),
   members: jsonb("members"),
   adProperties: jsonb("ad_properties"),
 });
@@ -187,6 +189,7 @@ export const adOrgUnits = pgTable("ad_org_units", {
   cn: text("cn"),
   name: text("name").notNull(),
   description: text("description"),
+  managedBy: text("managed_by"),
   adProperties: jsonb("ad_properties"),
 });
 
@@ -204,6 +207,7 @@ export const adComputers = pgTable("ad_computers", {
   operatingSystemVersion: text("operating_system_version"),
   lastLogon: timestamp("last_logon"),
   enabled: boolean("enabled").default(true),
+  managedBy: text("managed_by"),
   memberOf: jsonb("member_of"),
   adProperties: jsonb("ad_properties"),
 });
@@ -307,6 +311,13 @@ export const removeFromGroupSchema = z.object({
   objectType: z.enum(["user", "computer"]),
 });
 
+// ManagedBy operation schema
+export const updateManagedBySchema = z.object({
+  objectGUID: z.string().min(1, "Object GUID is required"),
+  managerDistinguishedName: z.string().nullable(),
+  objectType: z.enum(["user", "group", "computer", "organizationalUnit"]),
+});
+
 // Export types
 export type Role = typeof roles.$inferSelect;
 export type InsertRole = z.infer<typeof insertRoleSchema>;
@@ -339,6 +350,7 @@ export type MoveComputer = z.infer<typeof moveComputerSchema>;
 export type MoveUser = z.infer<typeof moveUserSchema>;
 export type AddToGroup = z.infer<typeof addToGroupSchema>;
 export type RemoveFromGroup = z.infer<typeof removeFromGroupSchema>;
+export type UpdateManagedBy = z.infer<typeof updateManagedBySchema>;
 
 // LDAP Query Builder schemas
 export const ldapFilterObjectClasses = ["user", "group", "organizationalUnit", "computer", "domain"] as const;
