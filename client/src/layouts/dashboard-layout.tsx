@@ -29,6 +29,7 @@ import {
   Server,
   ShieldAlert,
   Filter,
+  ClipboardList,
 } from "lucide-react";
 import { useMobile } from "@/hooks/use-mobile";
 import { useToast } from "@/hooks/use-toast";
@@ -70,6 +71,7 @@ const menuSections: MenuSection[] = [
       { title: "API Tokens", path: "/api-tokens", icon: <Key className="h-4 w-4" /> },
       { title: "LDAP Connections", path: "/ldap-connections", icon: <Server className="h-4 w-4" /> },
       { title: "LDAP Query Builder", path: "/ldap-query-builder", icon: <Filter className="h-4 w-4" /> },
+      { title: "Audit Logs", path: "/audit-logs", icon: <ClipboardList className="h-4 w-4" /> },
       { title: "Settings", path: "/settings", icon: <Settings className="h-4 w-4" /> },
       { title: "User Management", path: "/user-management", icon: <ShieldAlert className="h-4 w-4" /> },
     ],

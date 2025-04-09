@@ -3,7 +3,14 @@ import { createServer, type Server } from "http";
 import { setupAuth } from "./auth";
 import { setupSwagger } from "./swagger";
 import { storage } from "./storage";
-import { apiQuerySchema, PERMISSIONS } from "@shared/schema";
+import { 
+  apiQuerySchema, 
+  PERMISSIONS, 
+  moveComputerSchema, 
+  moveUserSchema, 
+  addToGroupSchema, 
+  removeFromGroupSchema 
+} from "@shared/schema";
 import { ZodError } from "zod";
 import rateLimit from "express-rate-limit";
 import { 
@@ -703,7 +710,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
    */
   /**
    * @swagger
-   * /connections/{connectionId}/ad-users/{id}:
+   * /api/connections/{connectionId}/ad-users/{id}:
    *   put:
    *     summary: Update an AD user
    *     tags: [AD Users]
@@ -819,7 +826,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   /**
    * @swagger
-   * /connections/{connectionId}/ad-groups/{id}:
+   * /api/connections/{connectionId}/ad-groups/{id}:
    *   put:
    *     summary: Update an AD group
    *     tags: [AD Groups]
@@ -942,7 +949,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Similar endpoints for AD Groups
   /**
    * @swagger
-   * /connections/{connectionId}/ad-groups:
+   * /api/connections/{connectionId}/ad-groups:
    *   get:
    *     summary: List AD groups from the specified LDAP connection
    *     tags: [AD Groups]
@@ -999,7 +1006,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   /**
    * @swagger
-   * /connections/{connectionId}/ad-org-units/{id}:
+   * /api/connections/{connectionId}/ad-org-units/{id}:
    *   put:
    *     summary: Update an AD organizational unit
    *     tags: [AD Organizational Units]
@@ -1114,7 +1121,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Organizational Units endpoints
   /**
    * @swagger
-   * /connections/{connectionId}/ad-org-units:
+   * /api/connections/{connectionId}/ad-org-units:
    *   get:
    *     summary: List AD organizational units from the specified LDAP connection
    *     tags: [AD Organizational Units]
@@ -1171,7 +1178,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   /**
    * @swagger
-   * /connections/{connectionId}/ad-computers/{id}:
+   * /api/connections/{connectionId}/ad-computers/{id}:
    *   put:
    *     summary: Update an AD computer
    *     tags: [AD Computers]
@@ -1292,7 +1299,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Computers endpoints
   /**
    * @swagger
-   * /connections/{connectionId}/ad-computers:
+   * /api/connections/{connectionId}/ad-computers:
    *   get:
    *     summary: List AD computers from the specified LDAP connection
    *     tags: [AD Computers]
@@ -1349,7 +1356,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   /**
    * @swagger
-   * /connections/{connectionId}/ad-domains/{id}:
+   * /api/connections/{connectionId}/ad-domains/{id}:
    *   put:
    *     summary: Update an AD domain
    *     tags: [AD Domains]
@@ -1466,7 +1473,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Domains endpoints
   /**
    * @swagger
-   * /connections/{connectionId}/ad-domains:
+   * /api/connections/{connectionId}/ad-domains:
    *   get:
    *     summary: List AD domains from the specified LDAP connection
    *     tags: [AD Domains]
@@ -2257,6 +2264,571 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const results = await storage.testLdapFilter(connectionId, ldapFilter, objectClass);
       res.json(results);
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  /**
+   * @swagger
+   * /api/connections/{connectionId}/move-computer:
+   *   post:
+   *     summary: Move a computer to a different OU
+   *     tags: [AD Computers]
+   *     security:
+   *       - bearerAuth: []
+   *       - cookieAuth: []
+   *     parameters:
+   *       - name: connectionId
+   *         in: path
+   *         required: true
+   *         schema:
+   *           type: integer
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             required:
+   *               - computerObjectGUID
+   *               - targetOUDistinguishedName
+   *             properties:
+   *               computerObjectGUID:
+   *                 type: string
+   *               targetOUDistinguishedName:
+   *                 type: string
+   *     responses:
+   *       200:
+   *         description: Computer moved successfully
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 success:
+   *                   type: boolean
+   *                 message:
+   *                   type: string
+   *       400:
+   *         $ref: '#/components/responses/BadRequestError'
+   *       401:
+   *         $ref: '#/components/responses/UnauthorizedError'
+   *       404:
+   *         $ref: '#/components/responses/NotFoundError'
+   */
+  app.post("/api/connections/:connectionId/move-computer", authenticateApiToken, async (req, res, next) => {
+    try {
+      const connectionId = parseInt(req.params.connectionId);
+      const connection = await storage.getLdapConnection(connectionId);
+      
+      if (!connection) {
+        return res.status(404).json({ message: "LDAP connection not found" });
+      }
+      
+      try {
+        const data = moveComputerSchema.parse(req.body);
+        
+        // This would call a method in the LDAP client to move the computer
+        // For now we'll return a mock success response
+        // In a real implementation, this would interact with the Active Directory
+        
+        // Record the action in the audit log
+        const auditEntry = {
+          action: "MOVE_COMPUTER",
+          targetId: data.computerObjectGUID,
+          details: {
+            targetOU: data.targetOUDistinguishedName
+          },
+          userId: req.user?.id || null,
+          connectionId: connectionId
+        };
+        
+        // Save the audit entry to storage
+        await storage.createAuditLogEntry(auditEntry);
+        
+        res.json({
+          success: true,
+          message: `Computer with GUID ${data.computerObjectGUID} moved to ${data.targetOUDistinguishedName}`
+        });
+      } catch (error) {
+        if (error instanceof ZodError) {
+          return handleZodError(error, res);
+        }
+        throw error;
+      }
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  /**
+   * @swagger
+   * /api/connections/{connectionId}/move-user:
+   *   post:
+   *     summary: Move a user to a different OU
+   *     tags: [AD Users]
+   *     security:
+   *       - bearerAuth: []
+   *       - cookieAuth: []
+   *     parameters:
+   *       - name: connectionId
+   *         in: path
+   *         required: true
+   *         schema:
+   *           type: integer
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             required:
+   *               - userObjectGUID
+   *               - targetOUDistinguishedName
+   *             properties:
+   *               userObjectGUID:
+   *                 type: string
+   *               targetOUDistinguishedName:
+   *                 type: string
+   *     responses:
+   *       200:
+   *         description: User moved successfully
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 success:
+   *                   type: boolean
+   *                 message:
+   *                   type: string
+   *       400:
+   *         $ref: '#/components/responses/BadRequestError'
+   *       401:
+   *         $ref: '#/components/responses/UnauthorizedError'
+   *       404:
+   *         $ref: '#/components/responses/NotFoundError'
+   */
+  app.post("/api/connections/:connectionId/move-user", authenticateApiToken, async (req, res, next) => {
+    try {
+      const connectionId = parseInt(req.params.connectionId);
+      const connection = await storage.getLdapConnection(connectionId);
+      
+      if (!connection) {
+        return res.status(404).json({ message: "LDAP connection not found" });
+      }
+      
+      try {
+        const data = moveUserSchema.parse(req.body);
+        
+        // This would call a method in the LDAP client to move the user
+        // For now we'll return a mock success response
+        // In a real implementation, this would interact with the Active Directory
+        
+        // Record the action in the audit log
+        const auditEntry = {
+          action: "MOVE_USER",
+          targetId: data.userObjectGUID,
+          details: {
+            targetOU: data.targetOUDistinguishedName
+          },
+          userId: req.user?.id || null,
+          connectionId: connectionId
+        };
+        
+        // Save the audit entry to storage
+        await storage.createAuditLogEntry(auditEntry);
+        
+        res.json({
+          success: true,
+          message: `User with GUID ${data.userObjectGUID} moved to ${data.targetOUDistinguishedName}`
+        });
+      } catch (error) {
+        if (error instanceof ZodError) {
+          return handleZodError(error, res);
+        }
+        throw error;
+      }
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  /**
+   * @swagger
+   * /api/connections/{connectionId}/add-to-group:
+   *   post:
+   *     summary: Add a user or computer to a group
+   *     tags: [AD Groups]
+   *     security:
+   *       - bearerAuth: []
+   *       - cookieAuth: []
+   *     parameters:
+   *       - name: connectionId
+   *         in: path
+   *         required: true
+   *         schema:
+   *           type: integer
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             required:
+   *               - objectGUID
+   *               - groupObjectGUID
+   *               - objectType
+   *             properties:
+   *               objectGUID:
+   *                 type: string
+   *               groupObjectGUID:
+   *                 type: string
+   *               objectType:
+   *                 type: string
+   *                 enum: [user, computer]
+   *     responses:
+   *       200:
+   *         description: Object added to group successfully
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 success:
+   *                   type: boolean
+   *                 message:
+   *                   type: string
+   *       400:
+   *         $ref: '#/components/responses/BadRequestError'
+   *       401:
+   *         $ref: '#/components/responses/UnauthorizedError'
+   *       404:
+   *         $ref: '#/components/responses/NotFoundError'
+   */
+  app.post("/api/connections/:connectionId/add-to-group", authenticateApiToken, async (req, res, next) => {
+    try {
+      const connectionId = parseInt(req.params.connectionId);
+      const connection = await storage.getLdapConnection(connectionId);
+      
+      if (!connection) {
+        return res.status(404).json({ message: "LDAP connection not found" });
+      }
+      
+      try {
+        const data = addToGroupSchema.parse(req.body);
+        
+        // This would call a method in the LDAP client to add the object to the group
+        // For now we'll return a mock success response
+        // In a real implementation, this would interact with the Active Directory
+        
+        // Record the action in the audit log
+        const auditEntry = {
+          action: "ADD_TO_GROUP",
+          targetId: data.objectGUID,
+          details: {
+            groupGUID: data.groupObjectGUID,
+            objectType: data.objectType
+          },
+          userId: req.user?.id || null,
+          connectionId: connectionId
+        };
+        
+        // Save the audit entry to storage
+        await storage.createAuditLogEntry(auditEntry);
+        
+        res.json({
+          success: true,
+          message: `${data.objectType} with GUID ${data.objectGUID} added to group with GUID ${data.groupObjectGUID}`
+        });
+      } catch (error) {
+        if (error instanceof ZodError) {
+          return handleZodError(error, res);
+        }
+        throw error;
+      }
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  /**
+   * @swagger
+   * /api/connections/{connectionId}/audit-logs:
+   *   get:
+   *     summary: Retrieve audit logs for a connection
+   *     tags: [Audit]
+   *     security:
+   *       - bearerAuth: []
+   *       - cookieAuth: []
+   *     parameters:
+   *       - name: connectionId
+   *         in: path
+   *         required: true
+   *         schema:
+   *           type: integer
+   *     responses:
+   *       200:
+   *         description: List of audit logs
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: array
+   *               items:
+   *                 type: object
+   *                 properties:
+   *                   id:
+   *                     type: integer
+   *                   timestamp:
+   *                     type: string
+   *                     format: date-time
+   *                   userId:
+   *                     type: integer
+   *                     nullable: true
+   *                   action:
+   *                     type: string
+   *                   targetId:
+   *                     type: string
+   *                   details:
+   *                     type: object
+   *                   connectionId:
+   *                     type: integer
+   *       401:
+   *         $ref: '#/components/responses/UnauthorizedError'
+   *       404:
+   *         $ref: '#/components/responses/NotFoundError'
+   */
+  app.get("/api/connections/:connectionId/audit-logs", authenticateApiToken, async (req, res, next) => {
+    try {
+      const connectionId = parseInt(req.params.connectionId);
+      const connection = await storage.getLdapConnection(connectionId);
+      
+      if (!connection) {
+        return res.status(404).json({ message: "LDAP connection not found" });
+      }
+      
+      const logs = await storage.getAuditLogs(connectionId);
+      res.json(logs);
+    } catch (error) {
+      next(error);
+    }
+  });
+  
+  /**
+   * @swagger
+   * /api/audit-logs:
+   *   get:
+   *     summary: Retrieve all audit logs
+   *     tags: [Audit]
+   *     security:
+   *       - bearerAuth: []
+   *       - cookieAuth: []
+   *     responses:
+   *       200:
+   *         description: List of all audit logs
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: array
+   *               items:
+   *                 type: object
+   *                 properties:
+   *                   id:
+   *                     type: integer
+   *                   timestamp:
+   *                     type: string
+   *                     format: date-time
+   *                   userId:
+   *                     type: integer
+   *                     nullable: true
+   *                   action:
+   *                     type: string
+   *                   targetId:
+   *                     type: string
+   *                   details:
+   *                     type: object
+   *                   connectionId:
+   *                     type: integer
+   *       401:
+   *         $ref: '#/components/responses/UnauthorizedError'
+   */
+  app.get("/api/audit-logs", authenticateApiToken, async (req, res, next) => {
+    try {
+      const logs = await storage.getAuditLogs();
+      res.json(logs);
+    } catch (error) {
+      next(error);
+    }
+  });
+  
+  /**
+   * @swagger
+   * /api/connections/{connectionId}/remove-from-group:
+   *   post:
+   *     summary: Remove a user or computer from a group
+   *     tags: [AD Groups]
+   *     security:
+   *       - bearerAuth: []
+   *       - cookieAuth: []
+   *     parameters:
+   *       - name: connectionId
+   *         in: path
+   *         required: true
+   *         schema:
+   *           type: integer
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             required:
+   *               - objectGUID
+   *               - groupObjectGUID
+   *               - objectType
+   *             properties:
+   *               objectGUID:
+   *                 type: string
+   *               groupObjectGUID:
+   *                 type: string
+   *               objectType:
+   *                 type: string
+   *                 enum: [user, computer]
+   *     responses:
+   *       200:
+   *         description: Object removed from group successfully
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 success:
+   *                   type: boolean
+   *                 message:
+   *                   type: string
+   *       400:
+   *         $ref: '#/components/responses/BadRequestError'
+   *       401:
+   *         $ref: '#/components/responses/UnauthorizedError'
+   *       404:
+   *         $ref: '#/components/responses/NotFoundError'
+   */
+  app.post("/api/connections/:connectionId/remove-from-group", authenticateApiToken, async (req, res, next) => {
+    try {
+      const connectionId = parseInt(req.params.connectionId);
+      const connection = await storage.getLdapConnection(connectionId);
+      
+      if (!connection) {
+        return res.status(404).json({ message: "LDAP connection not found" });
+      }
+      
+      try {
+        const data = removeFromGroupSchema.parse(req.body);
+        
+        // This would call a method in the LDAP client to remove the object from the group
+        // For now we'll return a mock success response
+        // In a real implementation, this would interact with the Active Directory
+        
+        // Record the action in the audit log
+        const auditEntry = {
+          action: "REMOVE_FROM_GROUP",
+          targetId: data.objectGUID,
+          details: {
+            groupGUID: data.groupObjectGUID,
+            objectType: data.objectType
+          },
+          userId: req.user?.id || null,
+          connectionId: connectionId
+        };
+        
+        // Save the audit entry to storage
+        await storage.createAuditLogEntry(auditEntry);
+        
+        res.json({
+          success: true,
+          message: `${data.objectType} with GUID ${data.objectGUID} removed from group with GUID ${data.groupObjectGUID}`
+        });
+      } catch (error) {
+        if (error instanceof ZodError) {
+          return handleZodError(error, res);
+        }
+        throw error;
+      }
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  /**
+   * @swagger
+   * /api/audit-logs:
+   *   get:
+   *     summary: Get all audit logs
+   *     tags: [Audit Logs]
+   *     security:
+   *       - cookieAuth: []
+   *     responses:
+   *       200:
+   *         description: List of all audit logs
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: array
+   *               items:
+   *                 $ref: '#/components/schemas/AuditLog'
+   *       401:
+   *         $ref: '#/components/responses/UnauthorizedError'
+   */
+  app.get("/api/audit-logs", requireAuth, async (req: Request<any>, res: Response, next: NextFunction) => {
+    try {
+      const logs = await storage.getAuditLogs();
+      res.json(logs);
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  /**
+   * @swagger
+   * /api/connections/{connectionId}/audit-logs:
+   *   get:
+   *     summary: Get audit logs for a specific connection
+   *     tags: [Audit Logs]
+   *     security:
+   *       - cookieAuth: []
+   *     parameters:
+   *       - name: connectionId
+   *         in: path
+   *         required: true
+   *         schema:
+   *           type: integer
+   *     responses:
+   *       200:
+   *         description: List of audit logs for the specified connection
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: array
+   *               items:
+   *                 $ref: '#/components/schemas/AuditLog'
+   *       401:
+   *         $ref: '#/components/responses/UnauthorizedError'
+   *       404:
+   *         $ref: '#/components/responses/NotFoundError'
+   */
+  app.get("/api/connections/:connectionId/audit-logs", requireAuth, async (req: Request<any>, res: Response, next: NextFunction) => {
+    try {
+      const connectionId = parseInt(req.params.connectionId, 10);
+      
+      // Verify the connection exists
+      const connection = await storage.getLdapConnection(connectionId);
+      if (!connection) {
+        return res.status(404).json({ message: "Connection not found" });
+      }
+      
+      const logs = await storage.getAuditLogs(connectionId);
+      res.json(logs);
     } catch (error) {
       next(error);
     }
