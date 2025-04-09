@@ -1,9 +1,8 @@
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { useLocation } from "wouter";
 import { z } from "zod";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useMutation } from "@tanstack/react-query";
 import {
   Card,
   CardContent,
@@ -24,7 +23,7 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Checkbox } from "@/components/ui/checkbox";
 import { insertUserSchema } from "@shared/schema";
-import { apiRequest } from "@/lib/queryClient";
+import { useAuth } from "@/hooks/use-auth";
 import { useToast } from "@/hooks/use-toast";
 
 // Login form schema
@@ -54,73 +53,19 @@ type RegisterFormValues = z.infer<typeof registerSchema>;
 export default function AuthPage() {
   const [location, navigate] = useLocation();
   const { toast } = useToast();
-  const [isChecking, setIsChecking] = useState(true);
-
-  // Check if user is already logged in
+  const { user, isLoading, loginMutation, registerMutation } = useAuth();
+  
+  // Redirect if user is already logged in
   useEffect(() => {
-    const checkAuth = async () => {
-      try {
-        const response = await fetch('/api/user', {
-          credentials: 'include'
-        });
-        
-        if (response.ok) {
-          // User is already logged in, redirect to home
-          navigate('/');
-        }
-      } catch (error) {
-        console.error('Error checking auth status:', error);
-      } finally {
-        setIsChecking(false);
-      }
-    };
-    
-    checkAuth();
-  }, [navigate]);
-
-  // Login mutation
-  const loginMutation = useMutation({
-    mutationFn: async (credentials: LoginFormValues) => {
-      const res = await apiRequest("POST", "/api/login", credentials);
-      return await res.json();
-    },
-    onSuccess: (user) => {
-      toast({
-        title: "Login successful",
-        description: `Welcome back, ${user.username}!`,
-      });
+    if (user) {
       navigate('/');
-    },
-    onError: (error: Error) => {
-      toast({
-        title: "Login failed",
-        description: error.message,
-        variant: "destructive",
-      });
-    },
-  });
+    }
+  }, [user, navigate]);
 
-  // Register mutation
-  const registerMutation = useMutation({
-    mutationFn: async (credentials: any) => {
-      const res = await apiRequest("POST", "/api/register", credentials);
-      return await res.json();
-    },
-    onSuccess: (user) => {
-      toast({
-        title: "Registration successful",
-        description: `Welcome, ${user.username}!`,
-      });
-      navigate('/');
-    },
-    onError: (error: Error) => {
-      toast({
-        title: "Registration failed",
-        description: error.message,
-        variant: "destructive",
-      });
-    },
-  });
+  // If still checking authentication status, show nothing
+  if (isLoading) {
+    return null;
+  }
 
   // Login form
   const loginForm = useForm<LoginFormValues>({
