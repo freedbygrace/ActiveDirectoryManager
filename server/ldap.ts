@@ -196,6 +196,75 @@ class LdapClient extends EventEmitter {
       });
     });
   }
+
+  // Get the managed by attribute for an object
+  async getManagedBy(connectionId: number, dn: string): Promise<string | null> {
+    const client = this.getClient(connectionId);
+    if (!client) throw new Error('LDAP connection not established');
+    
+    return new Promise((resolve, reject) => {
+      client.search(dn, {
+        scope: 'base',
+        attributes: ['managedBy']
+      }, (err, res) => {
+        if (err) {
+          reject(err);
+          return;
+        }
+        
+        let managedBy: string | null = null;
+        
+        res.on('searchEntry', (entry) => {
+          const attrs = entry.attributes;
+          for (const attr of attrs) {
+            if (attr.type === 'managedBy' && attr.vals && attr.vals.length > 0) {
+              managedBy = attr.vals[0].toString();
+            }
+          }
+        });
+        
+        res.on('error', (err) => {
+          reject(err);
+        });
+        
+        res.on('end', (result) => {
+          if (result.status !== 0) {
+            reject(new Error(`LDAP search error: ${result.errorMessage}`));
+            return;
+          }
+          resolve(managedBy);
+        });
+      });
+    });
+  }
+  
+  // Set the managed by attribute for an object
+  async setManagedBy(connectionId: number, dn: string, managerDn: string | null): Promise<boolean> {
+    const client = this.getClient(connectionId);
+    if (!client) throw new Error('LDAP connection not established');
+    
+    const changes = [];
+    
+    if (managerDn === null) {
+      // Remove the managedBy attribute
+      changes.push(new ldap.Change({
+        operation: 'delete',
+        modification: {
+          managedBy: []
+        }
+      }));
+    } else {
+      // Add or replace the managedBy attribute
+      changes.push(new ldap.Change({
+        operation: 'replace',
+        modification: {
+          managedBy: managerDn
+        }
+      }));
+    }
+    
+    return this.updateEntry(connectionId, dn, changes);
+  }
 }
 
 export const ldapClient = new LdapClient();

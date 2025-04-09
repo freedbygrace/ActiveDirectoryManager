@@ -9,7 +9,8 @@ import {
   moveComputerSchema, 
   moveUserSchema, 
   addToGroupSchema, 
-  removeFromGroupSchema 
+  removeFromGroupSchema,
+  updateManagedBySchema
 } from "@shared/schema";
 import { ZodError } from "zod";
 import rateLimit from "express-rate-limit";
@@ -3077,6 +3078,286 @@ export async function registerRoutes(app: Express): Promise<Server> {
           return handleZodError(error, res);
         }
         throw error;
+      }
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  /**
+   * @swagger
+   * /api/connections/{connectionId}/managed-by:
+   *   get:
+   *     summary: Get the 'managedBy' attribute for an AD object
+   *     tags: [AD Objects]
+   *     security:
+   *       - bearerAuth: []
+   *       - cookieAuth: []
+   *     parameters:
+   *       - name: connectionId
+   *         in: path
+   *         required: true
+   *         schema:
+   *           type: integer
+   *       - name: objectGUID
+   *         in: query
+   *         required: true
+   *         schema:
+   *           type: string
+   *       - name: objectType
+   *         in: query
+   *         required: true
+   *         schema:
+   *           type: string
+   *           enum: [user, group, computer, organizationalUnit]
+   *     responses:
+   *       200:
+   *         description: The managedBy attribute
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 managedBy:
+   *                   type: string
+   *                   nullable: true
+   *       401:
+   *         $ref: '#/components/responses/UnauthorizedError'
+   *       404:
+   *         description: Object not found
+   */
+  app.get("/api/connections/:connectionId/managed-by", authenticateApiToken, async (req, res, next) => {
+    try {
+      const connectionId = parseInt(req.params.connectionId);
+      const connection = await storage.getLdapConnection(connectionId);
+      
+      if (!connection) {
+        return res.status(404).json({ message: "LDAP connection not found" });
+      }
+
+      const objectGUID = req.query.objectGUID as string;
+      const objectType = req.query.objectType as string;
+
+      if (!objectGUID || !objectType) {
+        return res.status(400).json({ message: "objectGUID and objectType are required query parameters" });
+      }
+
+      if (!['user', 'group', 'computer', 'organizationalUnit'].includes(objectType)) {
+        return res.status(400).json({ message: "objectType must be one of: user, group, computer, organizationalUnit" });
+      }
+
+      // Get the object distinguished name
+      let objectDN;
+      switch (objectType) {
+        case 'user':
+          const adUser = await storage.getAdUserByObjectGUID(connectionId, objectGUID);
+          if (!adUser) {
+            return res.status(404).json({ message: "User not found" });
+          }
+          objectDN = adUser.distinguishedName;
+          break;
+        case 'group':
+          const adGroup = await storage.getAdGroupByObjectGUID(connectionId, objectGUID);
+          if (!adGroup) {
+            return res.status(404).json({ message: "Group not found" });
+          }
+          objectDN = adGroup.distinguishedName;
+          break;
+        case 'computer':
+          const adComputer = await storage.getAdComputerByObjectGUID(connectionId, objectGUID);
+          if (!adComputer) {
+            return res.status(404).json({ message: "Computer not found" });
+          }
+          objectDN = adComputer.distinguishedName;
+          break;
+        case 'organizationalUnit':
+          const adOU = await storage.getAdOrgUnitByObjectGUID(connectionId, objectGUID);
+          if (!adOU) {
+            return res.status(404).json({ message: "Organizational Unit not found" });
+          }
+          objectDN = adOU.distinguishedName;
+          break;
+      }
+
+      // Connect to LDAP
+      try {
+        await ldapClient.connect(connection);
+      } catch (error) {
+        console.error("LDAP connection error:", error);
+        return res.status(500).json({ message: "Failed to connect to LDAP server", error: error.message });
+      }
+
+      try {
+        // Get the managedBy attribute
+        const managedBy = await ldapClient.getManagedBy(connectionId, objectDN);
+        
+        return res.status(200).json({ managedBy });
+      } catch (error) {
+        console.error("Error getting managedBy attribute:", error);
+        return res.status(500).json({ message: "Failed to get managedBy attribute", error: error.message });
+      }
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  /**
+   * @swagger
+   * /api/connections/{connectionId}/managed-by:
+   *   post:
+   *     summary: Set the 'managedBy' attribute for an AD object
+   *     tags: [AD Objects]
+   *     security:
+   *       - bearerAuth: []
+   *       - cookieAuth: []
+   *     parameters:
+   *       - name: connectionId
+   *         in: path
+   *         required: true
+   *         schema:
+   *           type: integer
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             required:
+   *               - objectGUID
+   *               - objectType
+   *             properties:
+   *               objectGUID:
+   *                 type: string
+   *               managerDistinguishedName:
+   *                 type: string
+   *                 nullable: true
+   *               objectType:
+   *                 type: string
+   *                 enum: [user, group, computer, organizationalUnit]
+   *     responses:
+   *       200:
+   *         description: ManagedBy attribute updated successfully
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 success:
+   *                   type: boolean
+   *                 message:
+   *                   type: string
+   *       401:
+   *         $ref: '#/components/responses/UnauthorizedError'
+   *       404:
+   *         description: Object not found
+   */
+  app.post("/api/connections/:connectionId/managed-by", authenticateApiToken, async (req, res, next) => {
+    try {
+      // Parse and validate request body
+      try {
+        updateManagedBySchema.parse(req.body);
+      } catch (err) {
+        if (err instanceof ZodError) {
+          return handleZodError(err, res);
+        }
+        throw err;
+      }
+
+      const connectionId = parseInt(req.params.connectionId);
+      const connection = await storage.getLdapConnection(connectionId);
+      
+      if (!connection) {
+        return res.status(404).json({ message: "LDAP connection not found" });
+      }
+
+      const { objectGUID, managerDistinguishedName, objectType } = req.body;
+
+      // Get the object distinguished name
+      let objectDN;
+      let objectName;
+      switch (objectType) {
+        case 'user':
+          const adUser = await storage.getAdUserByObjectGUID(connectionId, objectGUID);
+          if (!adUser) {
+            return res.status(404).json({ message: "User not found" });
+          }
+          objectDN = adUser.distinguishedName;
+          objectName = adUser.displayName || adUser.sAMAccountName;
+          break;
+        case 'group':
+          const adGroup = await storage.getAdGroupByObjectGUID(connectionId, objectGUID);
+          if (!adGroup) {
+            return res.status(404).json({ message: "Group not found" });
+          }
+          objectDN = adGroup.distinguishedName;
+          objectName = adGroup.sAMAccountName;
+          break;
+        case 'computer':
+          const adComputer = await storage.getAdComputerByObjectGUID(connectionId, objectGUID);
+          if (!adComputer) {
+            return res.status(404).json({ message: "Computer not found" });
+          }
+          objectDN = adComputer.distinguishedName;
+          objectName = adComputer.name;
+          break;
+        case 'organizationalUnit':
+          const adOU = await storage.getAdOrgUnitByObjectGUID(connectionId, objectGUID);
+          if (!adOU) {
+            return res.status(404).json({ message: "Organizational Unit not found" });
+          }
+          objectDN = adOU.distinguishedName;
+          objectName = adOU.name;
+          break;
+      }
+
+      // Connect to LDAP
+      try {
+        await ldapClient.connect(connection);
+      } catch (error) {
+        console.error("LDAP connection error:", error);
+        return res.status(500).json({ message: "Failed to connect to LDAP server", error: error.message });
+      }
+
+      try {
+        // Set the managedBy attribute
+        await ldapClient.setManagedBy(connectionId, objectDN, managerDistinguishedName);
+        
+        // Update the database record
+        const updateData = { managedBy: managerDistinguishedName };
+        switch (objectType) {
+          case 'user':
+            await storage.updateAdUserByObjectGUID(connectionId, objectGUID, updateData);
+            break;
+          case 'group':
+            await storage.updateAdGroupByObjectGUID(connectionId, objectGUID, updateData);
+            break;
+          case 'computer':
+            await storage.updateAdComputerByObjectGUID(connectionId, objectGUID, updateData);
+            break;
+          case 'organizationalUnit':
+            await storage.updateAdOrgUnitByObjectGUID(connectionId, objectGUID, updateData);
+            break;
+        }
+
+        // Log the action
+        await storage.createAuditLogEntry({
+          action: `update_managed_by:${objectType}`,
+          targetId: objectGUID,
+          details: {
+            objectDN,
+            managerDN: managerDistinguishedName
+          },
+          userId: req.user?.id,
+          connectionId
+        });
+
+        return res.status(200).json({
+          success: true,
+          message: `ManagedBy attribute successfully updated for ${objectName}`
+        });
+      } catch (error) {
+        console.error("Error updating managedBy attribute:", error);
+        return res.status(500).json({ message: "Failed to update managedBy attribute", error: error.message });
       }
     } catch (error) {
       next(error);

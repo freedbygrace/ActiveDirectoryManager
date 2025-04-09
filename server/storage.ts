@@ -80,29 +80,37 @@ export interface IStorage {
 
   // AD Users
   getAdUser(id: number): Promise<AdUser | undefined>;
+  getAdUserByObjectGUID(connectionId: number, objectGUID: string): Promise<AdUser | undefined>;
   createAdUser(user: InsertAdUser): Promise<AdUser>;
   updateAdUser(id: number, user: Partial<AdUser>): Promise<AdUser | undefined>;
+  updateAdUserByObjectGUID(connectionId: number, objectGUID: string, user: Partial<AdUser>): Promise<AdUser | undefined>;
   deleteAdUser(id: number): Promise<boolean>;
   listAdUsers(connectionId: number, query?: any): Promise<AdUser[]>;
 
   // AD Groups
   getAdGroup(id: number): Promise<AdGroup | undefined>;
+  getAdGroupByObjectGUID(connectionId: number, objectGUID: string): Promise<AdGroup | undefined>;
   createAdGroup(group: InsertAdGroup): Promise<AdGroup>;
   updateAdGroup(id: number, group: Partial<AdGroup>): Promise<AdGroup | undefined>;
+  updateAdGroupByObjectGUID(connectionId: number, objectGUID: string, group: Partial<AdGroup>): Promise<AdGroup | undefined>;
   deleteAdGroup(id: number): Promise<boolean>;
   listAdGroups(connectionId: number, query?: any): Promise<AdGroup[]>;
 
   // AD Organizational Units
   getAdOrgUnit(id: number): Promise<AdOrgUnit | undefined>;
+  getAdOrgUnitByObjectGUID(connectionId: number, objectGUID: string): Promise<AdOrgUnit | undefined>;
   createAdOrgUnit(ou: InsertAdOrgUnit): Promise<AdOrgUnit>;
   updateAdOrgUnit(id: number, ou: Partial<AdOrgUnit>): Promise<AdOrgUnit | undefined>;
+  updateAdOrgUnitByObjectGUID(connectionId: number, objectGUID: string, ou: Partial<AdOrgUnit>): Promise<AdOrgUnit | undefined>;
   deleteAdOrgUnit(id: number): Promise<boolean>;
   listAdOrgUnits(connectionId: number, query?: any): Promise<AdOrgUnit[]>;
 
   // AD Computers
   getAdComputer(id: number): Promise<AdComputer | undefined>;
+  getAdComputerByObjectGUID(connectionId: number, objectGUID: string): Promise<AdComputer | undefined>;
   createAdComputer(computer: InsertAdComputer): Promise<AdComputer>;
   updateAdComputer(id: number, computer: Partial<AdComputer>): Promise<AdComputer | undefined>;
+  updateAdComputerByObjectGUID(connectionId: number, objectGUID: string, computer: Partial<AdComputer>): Promise<AdComputer | undefined>;
   deleteAdComputer(id: number): Promise<boolean>;
   listAdComputers(connectionId: number, query?: any): Promise<AdComputer[]>;
 
@@ -558,6 +566,18 @@ export class DatabaseStorage implements IStorage {
     const result = await db.select().from(adUsers).where(eq(adUsers.id, id));
     return result.length > 0 ? result[0] : undefined;
   }
+  
+  async getAdUserByObjectGUID(connectionId: number, objectGUID: string): Promise<AdUser | undefined> {
+    const result = await db.select()
+      .from(adUsers)
+      .where(
+        and(
+          eq(adUsers.connectionId, connectionId),
+          eq(adUsers.objectGUID, objectGUID)
+        )
+      );
+    return result.length > 0 ? result[0] : undefined;
+  }
 
   async createAdUser(user: InsertAdUser): Promise<AdUser> {
     const result = await db.insert(adUsers).values(user).returning();
@@ -566,6 +586,19 @@ export class DatabaseStorage implements IStorage {
 
   async updateAdUser(id: number, userData: Partial<AdUser>): Promise<AdUser | undefined> {
     const result = await db.update(adUsers).set(userData).where(eq(adUsers.id, id)).returning();
+    return result.length > 0 ? result[0] : undefined;
+  }
+  
+  async updateAdUserByObjectGUID(connectionId: number, objectGUID: string, userData: Partial<AdUser>): Promise<AdUser | undefined> {
+    const result = await db.update(adUsers)
+      .set(userData)
+      .where(
+        and(
+          eq(adUsers.connectionId, connectionId),
+          eq(adUsers.objectGUID, objectGUID)
+        )
+      )
+      .returning();
     return result.length > 0 ? result[0] : undefined;
   }
 
@@ -647,6 +680,18 @@ export class DatabaseStorage implements IStorage {
     const result = await db.select().from(adGroups).where(eq(adGroups.id, id));
     return result.length > 0 ? result[0] : undefined;
   }
+  
+  async getAdGroupByObjectGUID(connectionId: number, objectGUID: string): Promise<AdGroup | undefined> {
+    const result = await db.select()
+      .from(adGroups)
+      .where(
+        and(
+          eq(adGroups.connectionId, connectionId),
+          eq(adGroups.objectGUID, objectGUID)
+        )
+      );
+    return result.length > 0 ? result[0] : undefined;
+  }
 
   async createAdGroup(group: InsertAdGroup): Promise<AdGroup> {
     const result = await db.insert(adGroups).values(group).returning();
@@ -655,6 +700,19 @@ export class DatabaseStorage implements IStorage {
 
   async updateAdGroup(id: number, groupData: Partial<AdGroup>): Promise<AdGroup | undefined> {
     const result = await db.update(adGroups).set(groupData).where(eq(adGroups.id, id)).returning();
+    return result.length > 0 ? result[0] : undefined;
+  }
+  
+  async updateAdGroupByObjectGUID(connectionId: number, objectGUID: string, groupData: Partial<AdGroup>): Promise<AdGroup | undefined> {
+    const result = await db.update(adGroups)
+      .set(groupData)
+      .where(
+        and(
+          eq(adGroups.connectionId, connectionId),
+          eq(adGroups.objectGUID, objectGUID)
+        )
+      )
+      .returning();
     return result.length > 0 ? result[0] : undefined;
   }
 
@@ -736,6 +794,18 @@ export class DatabaseStorage implements IStorage {
     const result = await db.select().from(adOrgUnits).where(eq(adOrgUnits.id, id));
     return result.length > 0 ? result[0] : undefined;
   }
+  
+  async getAdOrgUnitByObjectGUID(connectionId: number, objectGUID: string): Promise<AdOrgUnit | undefined> {
+    const result = await db.select()
+      .from(adOrgUnits)
+      .where(
+        and(
+          eq(adOrgUnits.connectionId, connectionId),
+          eq(adOrgUnits.objectGUID, objectGUID)
+        )
+      );
+    return result.length > 0 ? result[0] : undefined;
+  }
 
   async createAdOrgUnit(ou: InsertAdOrgUnit): Promise<AdOrgUnit> {
     const result = await db.insert(adOrgUnits).values(ou).returning();
@@ -744,6 +814,19 @@ export class DatabaseStorage implements IStorage {
 
   async updateAdOrgUnit(id: number, ouData: Partial<AdOrgUnit>): Promise<AdOrgUnit | undefined> {
     const result = await db.update(adOrgUnits).set(ouData).where(eq(adOrgUnits.id, id)).returning();
+    return result.length > 0 ? result[0] : undefined;
+  }
+  
+  async updateAdOrgUnitByObjectGUID(connectionId: number, objectGUID: string, ouData: Partial<AdOrgUnit>): Promise<AdOrgUnit | undefined> {
+    const result = await db.update(adOrgUnits)
+      .set(ouData)
+      .where(
+        and(
+          eq(adOrgUnits.connectionId, connectionId),
+          eq(adOrgUnits.objectGUID, objectGUID)
+        )
+      )
+      .returning();
     return result.length > 0 ? result[0] : undefined;
   }
 
@@ -779,6 +862,18 @@ export class DatabaseStorage implements IStorage {
     const result = await db.select().from(adComputers).where(eq(adComputers.id, id));
     return result.length > 0 ? result[0] : undefined;
   }
+  
+  async getAdComputerByObjectGUID(connectionId: number, objectGUID: string): Promise<AdComputer | undefined> {
+    const result = await db.select()
+      .from(adComputers)
+      .where(
+        and(
+          eq(adComputers.connectionId, connectionId),
+          eq(adComputers.objectGUID, objectGUID)
+        )
+      );
+    return result.length > 0 ? result[0] : undefined;
+  }
 
   async createAdComputer(computer: InsertAdComputer): Promise<AdComputer> {
     const result = await db.insert(adComputers).values(computer).returning();
@@ -787,6 +882,19 @@ export class DatabaseStorage implements IStorage {
 
   async updateAdComputer(id: number, computerData: Partial<AdComputer>): Promise<AdComputer | undefined> {
     const result = await db.update(adComputers).set(computerData).where(eq(adComputers.id, id)).returning();
+    return result.length > 0 ? result[0] : undefined;
+  }
+  
+  async updateAdComputerByObjectGUID(connectionId: number, objectGUID: string, computerData: Partial<AdComputer>): Promise<AdComputer | undefined> {
+    const result = await db.update(adComputers)
+      .set(computerData)
+      .where(
+        and(
+          eq(adComputers.connectionId, connectionId),
+          eq(adComputers.objectGUID, objectGUID)
+        )
+      )
+      .returning();
     return result.length > 0 ? result[0] : undefined;
   }
 
