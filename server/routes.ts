@@ -701,6 +701,59 @@ export async function registerRoutes(app: Express): Promise<Server> {
    *       404:
    *         $ref: '#/components/responses/NotFoundError'
    */
+  /**
+   * @swagger
+   * /connections/{connectionId}/ad-users/{id}:
+   *   put:
+   *     summary: Update an AD user
+   *     tags: [AD Users]
+   *     security:
+   *       - bearerAuth: []
+   *       - cookieAuth: []
+   *     parameters:
+   *       - name: connectionId
+   *         in: path
+   *         required: true
+   *         schema:
+   *           type: integer
+   *       - name: id
+   *         in: path
+   *         required: true
+   *         schema:
+   *           type: integer
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             properties:
+   *               givenName: 
+   *                 type: string
+   *               surname:
+   *                 type: string
+   *               displayName:
+   *                 type: string
+   *               email:
+   *                 type: string
+   *               enabled:
+   *                 type: boolean
+   *               userPrincipalName:
+   *                 type: string
+   *               adProperties:
+   *                 type: object
+   *     responses:
+   *       200:
+   *         description: Updated AD user
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/AdUser'
+   *       401:
+   *         $ref: '#/components/responses/UnauthorizedError'
+   *       404:
+   *         $ref: '#/components/responses/NotFoundError'
+   */
   app.put("/api/connections/:connectionId/ad-users/:id", authenticateApiToken, async (req, res, next) => {
     try {
       const user = await storage.getAdUser(parseInt(req.params.id));
@@ -764,7 +817,164 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  /**
+   * @swagger
+   * /connections/{connectionId}/ad-groups/{id}:
+   *   put:
+   *     summary: Update an AD group
+   *     tags: [AD Groups]
+   *     security:
+   *       - bearerAuth: []
+   *       - cookieAuth: []
+   *     parameters:
+   *       - name: connectionId
+   *         in: path
+   *         required: true
+   *         schema:
+   *           type: integer
+   *       - name: id
+   *         in: path
+   *         required: true
+   *         schema:
+   *           type: integer
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             properties:
+   *               distinguishedName:
+   *                 type: string
+   *               name:
+   *                 type: string
+   *               description:
+   *                 type: string
+   *               groupScope:
+   *                 type: string
+   *                 enum: [DomainLocal, Global, Universal]
+   *               groupType:
+   *                 type: string
+   *                 enum: [Security, Distribution]
+   *               members:
+   *                 type: array
+   *                 items:
+   *                   type: string
+   *               adProperties:
+   *                 type: object
+   *     responses:
+   *       200:
+   *         description: Group updated successfully
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/AdGroup'
+   *       401:
+   *         $ref: '#/components/responses/UnauthorizedError'
+   *       404:
+   *         $ref: '#/components/responses/NotFoundError'
+   *       400:
+   *         $ref: '#/components/responses/BadRequestError'
+   */
+  app.put("/api/connections/:connectionId/ad-groups/:id", authenticateApiToken, async (req, res, next) => {
+    try {
+      const group = await storage.getAdGroup(parseInt(req.params.id));
+      
+      if (!group || group.connectionId !== parseInt(req.params.connectionId)) {
+        return res.status(404).json({ message: "AD group not found" });
+      }
+      
+      const updatedGroup = await storage.updateAdGroup(parseInt(req.params.id), req.body);
+      res.json(updatedGroup);
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  /**
+   * @swagger
+   * /api/connections/{connectionId}/ad-groups/{id}:
+   *   delete:
+   *     summary: Delete an AD group
+   *     tags: [AD Groups]
+   *     security:
+   *       - bearerAuth: []
+   *       - cookieAuth: []
+   *     parameters:
+   *       - name: connectionId
+   *         in: path
+   *         required: true
+   *         schema:
+   *           type: integer
+   *       - name: id
+   *         in: path
+   *         required: true
+   *         schema:
+   *           type: integer
+   *     responses:
+   *       200:
+   *         description: Group deleted successfully
+   *       401:
+   *         $ref: '#/components/responses/UnauthorizedError'
+   *       404:
+   *         $ref: '#/components/responses/NotFoundError'
+   */
+  app.delete("/api/connections/:connectionId/ad-groups/:id", authenticateApiToken, async (req, res, next) => {
+    try {
+      const group = await storage.getAdGroup(parseInt(req.params.id));
+      
+      if (!group || group.connectionId !== parseInt(req.params.connectionId)) {
+        return res.status(404).json({ message: "AD group not found" });
+      }
+      
+      const deleted = await storage.deleteAdGroup(parseInt(req.params.id));
+      
+      if (!deleted) {
+        return res.status(404).json({ message: "AD group not found" });
+      }
+      
+      res.json({ success: true });
+    } catch (error) {
+      next(error);
+    }
+  });
+  
   // Similar endpoints for AD Groups
+  /**
+   * @swagger
+   * /connections/{connectionId}/ad-groups:
+   *   get:
+   *     summary: List AD groups from the specified LDAP connection
+   *     tags: [AD Groups]
+   *     security:
+   *       - bearerAuth: []
+   *       - cookieAuth: []
+   *     parameters:
+   *       - name: connectionId
+   *         in: path
+   *         required: true
+   *         schema:
+   *           type: integer
+   *       - $ref: '#/components/parameters/filterParam'
+   *       - $ref: '#/components/parameters/selectParam'
+   *       - $ref: '#/components/parameters/expandParam'
+   *       - $ref: '#/components/parameters/orderByParam'
+   *       - $ref: '#/components/parameters/topParam'
+   *       - $ref: '#/components/parameters/skipParam'
+   *     responses:
+   *       200:
+   *         description: A list of AD groups
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: array
+   *               items:
+   *                 $ref: '#/components/schemas/AdGroup'
+   *       401:
+   *         $ref: '#/components/responses/UnauthorizedError'
+   *       404:
+   *         $ref: '#/components/responses/NotFoundError'
+   */
   app.get("/api/connections/:connectionId/ad-groups", async (req, res, next) => {
     try {
       if (!req.isAuthenticated() && !req.headers.authorization) {
@@ -787,7 +997,156 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  /**
+   * @swagger
+   * /connections/{connectionId}/ad-org-units/{id}:
+   *   put:
+   *     summary: Update an AD organizational unit
+   *     tags: [AD Organizational Units]
+   *     security:
+   *       - bearerAuth: []
+   *       - cookieAuth: []
+   *     parameters:
+   *       - name: connectionId
+   *         in: path
+   *         required: true
+   *         schema:
+   *           type: integer
+   *       - name: id
+   *         in: path
+   *         required: true
+   *         schema:
+   *           type: integer
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             properties:
+   *               distinguishedName:
+   *                 type: string
+   *               name:
+   *                 type: string
+   *               description:
+   *                 type: string
+   *               parentOu:
+   *                 type: string
+   *               adProperties:
+   *                 type: object
+   *     responses:
+   *       200:
+   *         description: Organizational unit updated successfully
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/AdOrgUnit'
+   *       401:
+   *         $ref: '#/components/responses/UnauthorizedError'
+   *       404:
+   *         $ref: '#/components/responses/NotFoundError'
+   *       400:
+   *         $ref: '#/components/responses/BadRequestError'
+   */
+  app.put("/api/connections/:connectionId/ad-org-units/:id", authenticateApiToken, async (req, res, next) => {
+    try {
+      const orgUnit = await storage.getAdOrgUnit(parseInt(req.params.id));
+      
+      if (!orgUnit || orgUnit.connectionId !== parseInt(req.params.connectionId)) {
+        return res.status(404).json({ message: "AD organizational unit not found" });
+      }
+      
+      const updatedOrgUnit = await storage.updateAdOrgUnit(parseInt(req.params.id), req.body);
+      res.json(updatedOrgUnit);
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  /**
+   * @swagger
+   * /api/connections/{connectionId}/ad-org-units/{id}:
+   *   delete:
+   *     summary: Delete an AD organizational unit
+   *     tags: [AD Organizational Units]
+   *     security:
+   *       - bearerAuth: []
+   *       - cookieAuth: []
+   *     parameters:
+   *       - name: connectionId
+   *         in: path
+   *         required: true
+   *         schema:
+   *           type: integer
+   *       - name: id
+   *         in: path
+   *         required: true
+   *         schema:
+   *           type: integer
+   *     responses:
+   *       200:
+   *         description: Organizational unit deleted successfully
+   *       401:
+   *         $ref: '#/components/responses/UnauthorizedError'
+   *       404:
+   *         $ref: '#/components/responses/NotFoundError'
+   */
+  app.delete("/api/connections/:connectionId/ad-org-units/:id", authenticateApiToken, async (req, res, next) => {
+    try {
+      const orgUnit = await storage.getAdOrgUnit(parseInt(req.params.id));
+      
+      if (!orgUnit || orgUnit.connectionId !== parseInt(req.params.connectionId)) {
+        return res.status(404).json({ message: "AD organizational unit not found" });
+      }
+      
+      const deleted = await storage.deleteAdOrgUnit(parseInt(req.params.id));
+      
+      if (!deleted) {
+        return res.status(404).json({ message: "AD organizational unit not found" });
+      }
+      
+      res.json({ success: true });
+    } catch (error) {
+      next(error);
+    }
+  });
+  
   // Organizational Units endpoints
+  /**
+   * @swagger
+   * /connections/{connectionId}/ad-org-units:
+   *   get:
+   *     summary: List AD organizational units from the specified LDAP connection
+   *     tags: [AD Organizational Units]
+   *     security:
+   *       - bearerAuth: []
+   *       - cookieAuth: []
+   *     parameters:
+   *       - name: connectionId
+   *         in: path
+   *         required: true
+   *         schema:
+   *           type: integer
+   *       - $ref: '#/components/parameters/filterParam'
+   *       - $ref: '#/components/parameters/selectParam'
+   *       - $ref: '#/components/parameters/expandParam'
+   *       - $ref: '#/components/parameters/orderByParam'
+   *       - $ref: '#/components/parameters/topParam'
+   *       - $ref: '#/components/parameters/skipParam'
+   *     responses:
+   *       200:
+   *         description: A list of AD organizational units
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: array
+   *               items:
+   *                 $ref: '#/components/schemas/AdOrgUnit'
+   *       401:
+   *         $ref: '#/components/responses/UnauthorizedError'
+   *       404:
+   *         $ref: '#/components/responses/NotFoundError'
+   */
   app.get("/api/connections/:connectionId/ad-org-units", async (req, res, next) => {
     try {
       if (!req.isAuthenticated() && !req.headers.authorization) {
@@ -810,7 +1169,162 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  /**
+   * @swagger
+   * /connections/{connectionId}/ad-computers/{id}:
+   *   put:
+   *     summary: Update an AD computer
+   *     tags: [AD Computers]
+   *     security:
+   *       - bearerAuth: []
+   *       - cookieAuth: []
+   *     parameters:
+   *       - name: connectionId
+   *         in: path
+   *         required: true
+   *         schema:
+   *           type: integer
+   *       - name: id
+   *         in: path
+   *         required: true
+   *         schema:
+   *           type: integer
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             properties:
+   *               distinguishedName:
+   *                 type: string
+   *               name:
+   *                 type: string
+   *               dnsHostName:
+   *                 type: string
+   *               description:
+   *                 type: string
+   *               operatingSystem:
+   *                 type: string
+   *               operatingSystemVersion:
+   *                 type: string
+   *               enabled:
+   *                 type: boolean
+   *               adProperties:
+   *                 type: object
+   *     responses:
+   *       200:
+   *         description: Computer updated successfully
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/AdComputer'
+   *       401:
+   *         $ref: '#/components/responses/UnauthorizedError'
+   *       404:
+   *         $ref: '#/components/responses/NotFoundError'
+   *       400:
+   *         $ref: '#/components/responses/BadRequestError'
+   */
+  app.put("/api/connections/:connectionId/ad-computers/:id", authenticateApiToken, async (req, res, next) => {
+    try {
+      const computer = await storage.getAdComputer(parseInt(req.params.id));
+      
+      if (!computer || computer.connectionId !== parseInt(req.params.connectionId)) {
+        return res.status(404).json({ message: "AD computer not found" });
+      }
+      
+      const updatedComputer = await storage.updateAdComputer(parseInt(req.params.id), req.body);
+      res.json(updatedComputer);
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  /**
+   * @swagger
+   * /api/connections/{connectionId}/ad-computers/{id}:
+   *   delete:
+   *     summary: Delete an AD computer
+   *     tags: [AD Computers]
+   *     security:
+   *       - bearerAuth: []
+   *       - cookieAuth: []
+   *     parameters:
+   *       - name: connectionId
+   *         in: path
+   *         required: true
+   *         schema:
+   *           type: integer
+   *       - name: id
+   *         in: path
+   *         required: true
+   *         schema:
+   *           type: integer
+   *     responses:
+   *       200:
+   *         description: Computer deleted successfully
+   *       401:
+   *         $ref: '#/components/responses/UnauthorizedError'
+   *       404:
+   *         $ref: '#/components/responses/NotFoundError'
+   */
+  app.delete("/api/connections/:connectionId/ad-computers/:id", authenticateApiToken, async (req, res, next) => {
+    try {
+      const computer = await storage.getAdComputer(parseInt(req.params.id));
+      
+      if (!computer || computer.connectionId !== parseInt(req.params.connectionId)) {
+        return res.status(404).json({ message: "AD computer not found" });
+      }
+      
+      const deleted = await storage.deleteAdComputer(parseInt(req.params.id));
+      
+      if (!deleted) {
+        return res.status(404).json({ message: "AD computer not found" });
+      }
+      
+      res.json({ success: true });
+    } catch (error) {
+      next(error);
+    }
+  });
+  
   // Computers endpoints
+  /**
+   * @swagger
+   * /connections/{connectionId}/ad-computers:
+   *   get:
+   *     summary: List AD computers from the specified LDAP connection
+   *     tags: [AD Computers]
+   *     security:
+   *       - bearerAuth: []
+   *       - cookieAuth: []
+   *     parameters:
+   *       - name: connectionId
+   *         in: path
+   *         required: true
+   *         schema:
+   *           type: integer
+   *       - $ref: '#/components/parameters/filterParam'
+   *       - $ref: '#/components/parameters/selectParam'
+   *       - $ref: '#/components/parameters/expandParam'
+   *       - $ref: '#/components/parameters/orderByParam'
+   *       - $ref: '#/components/parameters/topParam'
+   *       - $ref: '#/components/parameters/skipParam'
+   *     responses:
+   *       200:
+   *         description: A list of AD computers
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: array
+   *               items:
+   *                 $ref: '#/components/schemas/AdComputer'
+   *       401:
+   *         $ref: '#/components/responses/UnauthorizedError'
+   *       404:
+   *         $ref: '#/components/responses/NotFoundError'
+   */
   app.get("/api/connections/:connectionId/ad-computers", async (req, res, next) => {
     try {
       if (!req.isAuthenticated() && !req.headers.authorization) {
@@ -833,7 +1347,158 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  /**
+   * @swagger
+   * /connections/{connectionId}/ad-domains/{id}:
+   *   put:
+   *     summary: Update an AD domain
+   *     tags: [AD Domains]
+   *     security:
+   *       - bearerAuth: []
+   *       - cookieAuth: []
+   *     parameters:
+   *       - name: connectionId
+   *         in: path
+   *         required: true
+   *         schema:
+   *           type: integer
+   *       - name: id
+   *         in: path
+   *         required: true
+   *         schema:
+   *           type: integer
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             properties:
+   *               distinguishedName:
+   *                 type: string
+   *               name:
+   *                 type: string
+   *               netBIOSName:
+   *                 type: string
+   *               forestName:
+   *                 type: string
+   *               domainFunctionality:
+   *                 type: string
+   *               adProperties:
+   *                 type: object
+   *     responses:
+   *       200:
+   *         description: Domain updated successfully
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/AdDomain'
+   *       401:
+   *         $ref: '#/components/responses/UnauthorizedError'
+   *       404:
+   *         $ref: '#/components/responses/NotFoundError'
+   *       400:
+   *         $ref: '#/components/responses/BadRequestError'
+   */
+  app.put("/api/connections/:connectionId/ad-domains/:id", authenticateApiToken, async (req, res, next) => {
+    try {
+      const domain = await storage.getAdDomain(parseInt(req.params.id));
+      
+      if (!domain || domain.connectionId !== parseInt(req.params.connectionId)) {
+        return res.status(404).json({ message: "AD domain not found" });
+      }
+      
+      const updatedDomain = await storage.updateAdDomain(parseInt(req.params.id), req.body);
+      res.json(updatedDomain);
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  /**
+   * @swagger
+   * /api/connections/{connectionId}/ad-domains/{id}:
+   *   delete:
+   *     summary: Delete an AD domain
+   *     tags: [AD Domains]
+   *     security:
+   *       - bearerAuth: []
+   *       - cookieAuth: []
+   *     parameters:
+   *       - name: connectionId
+   *         in: path
+   *         required: true
+   *         schema:
+   *           type: integer
+   *       - name: id
+   *         in: path
+   *         required: true
+   *         schema:
+   *           type: integer
+   *     responses:
+   *       200:
+   *         description: Domain deleted successfully
+   *       401:
+   *         $ref: '#/components/responses/UnauthorizedError'
+   *       404:
+   *         $ref: '#/components/responses/NotFoundError'
+   */
+  app.delete("/api/connections/:connectionId/ad-domains/:id", authenticateApiToken, async (req, res, next) => {
+    try {
+      const domain = await storage.getAdDomain(parseInt(req.params.id));
+      
+      if (!domain || domain.connectionId !== parseInt(req.params.connectionId)) {
+        return res.status(404).json({ message: "AD domain not found" });
+      }
+      
+      const deleted = await storage.deleteAdDomain(parseInt(req.params.id));
+      
+      if (!deleted) {
+        return res.status(404).json({ message: "AD domain not found" });
+      }
+      
+      res.json({ success: true });
+    } catch (error) {
+      next(error);
+    }
+  });
+  
   // Domains endpoints
+  /**
+   * @swagger
+   * /connections/{connectionId}/ad-domains:
+   *   get:
+   *     summary: List AD domains from the specified LDAP connection
+   *     tags: [AD Domains]
+   *     security:
+   *       - bearerAuth: []
+   *       - cookieAuth: []
+   *     parameters:
+   *       - name: connectionId
+   *         in: path
+   *         required: true
+   *         schema:
+   *           type: integer
+   *       - $ref: '#/components/parameters/filterParam'
+   *       - $ref: '#/components/parameters/selectParam'
+   *       - $ref: '#/components/parameters/expandParam'
+   *       - $ref: '#/components/parameters/orderByParam'
+   *       - $ref: '#/components/parameters/topParam'
+   *       - $ref: '#/components/parameters/skipParam'
+   *     responses:
+   *       200:
+   *         description: A list of AD domains
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: array
+   *               items:
+   *                 $ref: '#/components/schemas/AdDomain'
+   *       401:
+   *         $ref: '#/components/responses/UnauthorizedError'
+   *       404:
+   *         $ref: '#/components/responses/NotFoundError'
+   */
   app.get("/api/connections/:connectionId/ad-domains", async (req, res, next) => {
     try {
       if (!req.isAuthenticated() && !req.headers.authorization) {
