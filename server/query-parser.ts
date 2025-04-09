@@ -258,6 +258,72 @@ export function applyQueryOptions<T extends PgTableWithColumns<any>>(
 }
 
 /**
+ * Generate pagination metadata for response
+ */
+export function generatePaginationMetadata(
+  totalRecords: number,
+  limit?: number,
+  offset?: number,
+  baseUrl?: string
+) {
+  // If no pagination params were specified
+  if (limit === undefined) {
+    return {
+      pagination: {
+        totalRecords,
+        currentPage: 1,
+        totalPages: 1,
+        nextPage: null,
+        previousPage: null
+      }
+    };
+  }
+  
+  // Calculate current page (1-based) and total pages
+  const currentPage = offset !== undefined ? Math.floor(offset / limit) + 1 : 1;
+  const totalPages = Math.ceil(totalRecords / limit);
+  
+  // Prepare pagination metadata
+  const pagination = {
+    totalRecords,
+    currentPage,
+    totalPages,
+    nextPage: null as string | null,
+    previousPage: null as string | null
+  };
+  
+  // Add nextPage and previousPage URLs if baseUrl is provided
+  if (baseUrl) {
+    const url = new URL(baseUrl);
+    const params = new URLSearchParams(url.search);
+    
+    // Next page
+    if (currentPage < totalPages) {
+      const nextOffset = offset !== undefined ? offset + limit : limit;
+      params.set('top', String(limit));
+      params.set('skip', String(nextOffset));
+      
+      const nextUrl = new URL(url.pathname, url.origin);
+      nextUrl.search = params.toString();
+      pagination.nextPage = nextUrl.toString();
+    }
+    
+    // Previous page
+    if (currentPage > 1 && offset !== undefined) {
+      const prevOffset = Math.max(0, offset - limit);
+      params.set('top', String(limit));
+      params.set('skip', String(prevOffset));
+      
+      const prevUrl = new URL(url.pathname, url.origin);
+      prevUrl.search = params.toString();
+      pagination.previousPage = prevUrl.toString();
+    }
+  }
+  
+  return { pagination };
+}
+
+/**
  * Build a cache key based on query parameters
  */
 export function buildCacheKey(baseKey: string, options: QueryOptions): string {
@@ -348,5 +414,19 @@ Use the \`top\` and \`skip\` parameters for pagination.
 - \`skip\`: Number of records to skip
 
 Example: \`?top=10&skip=20\` (return records 21-30)
+
+The response will include pagination metadata with the following structure:
+\`\`\`json
+{
+  "data": [...],  // The actual records
+  "pagination": {
+    "totalRecords": 100,  // Total number of records
+    "currentPage": 3,     // Current page number (1-based)
+    "totalPages": 10,     // Total number of pages
+    "nextPage": "http://example.com/api/resource?top=10&skip=30",  // URL to next page (or null)
+    "previousPage": "http://example.com/api/resource?top=10&skip=10"  // URL to previous page (or null)
+  }
+}
+\`\`\`
 `;
 }
