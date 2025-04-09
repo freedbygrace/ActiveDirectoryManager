@@ -5,6 +5,7 @@ type Theme = 'dark' | 'light' | 'system';
 interface ThemeContextType {
   theme: Theme;
   setTheme: (theme: Theme) => void;
+  resolvedTheme: 'dark' | 'light';
 }
 
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
@@ -24,25 +25,60 @@ export function ThemeProvider({
   const [theme, setTheme] = useState<Theme>(
     () => (localStorage.getItem(storageKey) as Theme) || defaultTheme
   );
+  const [resolvedTheme, setResolvedTheme] = useState<'dark' | 'light'>(
+    window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
+  );
 
+  // Apply the theme to the document
   useEffect(() => {
     const root = window.document.documentElement;
     root.classList.remove('light', 'dark');
 
+    let effectiveTheme: 'light' | 'dark';
+    
     if (theme === 'system') {
-      const systemTheme = window.matchMedia('(prefers-color-scheme: dark)').matches
-        ? 'dark'
-        : 'light';
-      
-      root.classList.add(systemTheme);
-      return;
+      effectiveTheme = resolvedTheme;
+    } else {
+      effectiveTheme = theme as 'light' | 'dark';
     }
+    
+    root.classList.add(effectiveTheme);
 
-    root.classList.add(theme);
-  }, [theme]);
+    // Add a transition for smoother theme changes
+    root.style.colorScheme = effectiveTheme;
+    
+    // Set meta theme-color for mobile browsers
+    document.querySelector('meta[name="theme-color"]')?.setAttribute(
+      'content', 
+      effectiveTheme === 'dark' ? '#020817' : '#ffffff'
+    );
+  }, [theme, resolvedTheme]);
+
+  // Listen for system theme changes
+  useEffect(() => {
+    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+    
+    // Define handler for system theme changes
+    const handleSystemThemeChange = (event: MediaQueryListEvent) => {
+      const newSystemTheme = event.matches ? 'dark' : 'light';
+      setResolvedTheme(newSystemTheme);
+      
+      // Log the change for debugging
+      console.log(`System theme changed to ${newSystemTheme}`);
+    };
+    
+    // Add listener for system theme changes
+    mediaQuery.addEventListener('change', handleSystemThemeChange);
+    
+    // Clean up listener on component unmount
+    return () => {
+      mediaQuery.removeEventListener('change', handleSystemThemeChange);
+    };
+  }, []);
 
   const value = {
     theme,
+    resolvedTheme,
     setTheme: (theme: Theme) => {
       localStorage.setItem(storageKey, theme);
       setTheme(theme);
@@ -64,6 +100,9 @@ export const useTheme = (): ThemeContextType => {
     // This prevents crashes but won't sync across components
     const storageKey = 'ad-management-theme';
     const defaultTheme = 'system';
+    const resolvedSystemTheme = window.matchMedia('(prefers-color-scheme: dark)').matches
+      ? 'dark'
+      : 'light';
     
     // Create a fallback state using localStorage
     const getThemeFromStorage = (): Theme => {
@@ -77,19 +116,29 @@ export const useTheme = (): ThemeContextType => {
     
     const currentTheme = getThemeFromStorage();
     
+    const getResolvedTheme = (theme: Theme): 'light' | 'dark' => {
+      if (theme === 'system') {
+        return resolvedSystemTheme;
+      }
+      return theme as 'light' | 'dark';
+    };
+    
     const applyThemeToDOM = (newTheme: Theme) => {
       try {
         const root = window.document.documentElement;
         root.classList.remove('light', 'dark');
         
-        if (newTheme === 'system') {
-          const systemTheme = window.matchMedia('(prefers-color-scheme: dark)').matches
-            ? 'dark'
-            : 'light';
-          root.classList.add(systemTheme);
-        } else {
-          root.classList.add(newTheme);
-        }
+        const effectiveTheme = getResolvedTheme(newTheme);
+        root.classList.add(effectiveTheme);
+        
+        // Add a transition for smoother theme changes
+        root.style.colorScheme = effectiveTheme;
+        
+        // Set meta theme-color for mobile browsers
+        document.querySelector('meta[name="theme-color"]')?.setAttribute(
+          'content', 
+          effectiveTheme === 'dark' ? '#020817' : '#ffffff'
+        );
       } catch (e) {
         console.error('Error applying theme to DOM:', e);
       }
@@ -101,6 +150,7 @@ export const useTheme = (): ThemeContextType => {
     // Return a fallback implementation
     return {
       theme: currentTheme,
+      resolvedTheme: getResolvedTheme(currentTheme),
       setTheme: (newTheme: Theme) => {
         try {
           localStorage.setItem(storageKey, newTheme);
