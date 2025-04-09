@@ -1,4 +1,3 @@
-import { useEffect } from "react";
 import { useLocation } from "wouter";
 import { z } from "zod";
 import { useForm } from "react-hook-form";
@@ -53,19 +52,7 @@ type RegisterFormValues = z.infer<typeof registerSchema>;
 export default function AuthPage() {
   const [location, navigate] = useLocation();
   const { toast } = useToast();
-  const { user, isLoading, loginMutation, registerMutation } = useAuth();
-  
-  // Redirect if user is already logged in
-  useEffect(() => {
-    if (user) {
-      navigate('/');
-    }
-  }, [user, navigate]);
-
-  // If still checking authentication status, show nothing
-  if (isLoading) {
-    return null;
-  }
+  const auth = useAuth();
 
   // Login form
   const loginForm = useForm<LoginFormValues>({
@@ -94,14 +81,14 @@ export default function AuthPage() {
   // Handle login form submission
   const onLoginSubmit = (data: LoginFormValues) => {
     const { username, password } = data;
-    loginMutation.mutate({ username, password });
+    auth.loginMutation.mutate({ username, password });
   };
 
   // Handle register form submission
   const onRegisterSubmit = (data: RegisterFormValues) => {
     // Remove confirmPassword and acceptTerms which aren't part of the API request
     const { confirmPassword, acceptTerms, ...registerData } = data;
-    registerMutation.mutate(registerData);
+    auth.registerMutation.mutate(registerData);
   };
 
   return (
@@ -142,7 +129,7 @@ export default function AuthPage() {
                               <Input 
                                 placeholder="Enter your username" 
                                 {...field} 
-                                disabled={loginMutation.isPending}
+                                disabled={auth.loginMutation.isPending}
                               />
                             </FormControl>
                             <FormMessage />
@@ -161,7 +148,7 @@ export default function AuthPage() {
                                 type="password" 
                                 placeholder="Enter your password" 
                                 {...field} 
-                                disabled={loginMutation.isPending}
+                                disabled={auth.loginMutation.isPending}
                               />
                             </FormControl>
                             <FormMessage />
@@ -179,7 +166,7 @@ export default function AuthPage() {
                                 <Checkbox 
                                   checked={field.value} 
                                   onCheckedChange={field.onChange}
-                                  disabled={loginMutation.isPending}  
+                                  disabled={auth.loginMutation.isPending}  
                                 />
                               </FormControl>
                               <FormLabel className="text-sm font-normal">
@@ -189,7 +176,7 @@ export default function AuthPage() {
                           )}
                         />
 
-                        <Button variant="link" className="text-sm p-0 h-auto" disabled={loginMutation.isPending}>
+                        <Button variant="link" className="text-sm p-0 h-auto" disabled={auth.loginMutation.isPending}>
                           Forgot password?
                         </Button>
                       </div>
@@ -197,9 +184,9 @@ export default function AuthPage() {
                       <Button 
                         type="submit" 
                         className="w-full" 
-                        disabled={loginMutation.isPending}
+                        disabled={auth.loginMutation.isPending}
                       >
-                        {loginMutation.isPending ? "Logging in..." : "Log in"}
+                        {auth.loginMutation.isPending ? "Logging in..." : "Log in"}
                       </Button>
                     </form>
                   </Form>
@@ -228,7 +215,7 @@ export default function AuthPage() {
                               <Input 
                                 placeholder="Choose a username" 
                                 {...field} 
-                                disabled={registerMutation.isPending}
+                                disabled={auth.registerMutation.isPending}
                               />
                             </FormControl>
                             <FormMessage />
@@ -247,7 +234,7 @@ export default function AuthPage() {
                                 placeholder="Enter your full name" 
                                 {...field} 
                                 value={field.value || ""}
-                                disabled={registerMutation.isPending}
+                                disabled={auth.registerMutation.isPending}
                               />
                             </FormControl>
                             <FormMessage />
@@ -267,7 +254,7 @@ export default function AuthPage() {
                                 placeholder="Enter your email" 
                                 {...field} 
                                 value={field.value || ""}
-                                disabled={registerMutation.isPending}
+                                disabled={auth.registerMutation.isPending}
                               />
                             </FormControl>
                             <FormMessage />
@@ -286,7 +273,7 @@ export default function AuthPage() {
                                 type="password" 
                                 placeholder="Create a password" 
                                 {...field} 
-                                disabled={registerMutation.isPending}
+                                disabled={auth.registerMutation.isPending}
                               />
                             </FormControl>
                             <FormMessage />
@@ -305,7 +292,7 @@ export default function AuthPage() {
                                 type="password" 
                                 placeholder="Confirm your password" 
                                 {...field} 
-                                disabled={registerMutation.isPending}
+                                disabled={auth.registerMutation.isPending}
                               />
                             </FormControl>
                             <FormMessage />
@@ -322,7 +309,7 @@ export default function AuthPage() {
                               <Checkbox 
                                 checked={field.value} 
                                 onCheckedChange={field.onChange} 
-                                disabled={registerMutation.isPending}
+                                disabled={auth.registerMutation.isPending}
                               />
                             </FormControl>
                             <div className="space-y-1 leading-none">
@@ -338,9 +325,9 @@ export default function AuthPage() {
                       <Button 
                         type="submit" 
                         className="w-full" 
-                        disabled={registerMutation.isPending}
+                        disabled={auth.registerMutation.isPending}
                       >
-                        {registerMutation.isPending ? "Creating account..." : "Create account"}
+                        {auth.registerMutation.isPending ? "Creating account..." : "Create account"}
                       </Button>
                     </form>
                   </Form>
