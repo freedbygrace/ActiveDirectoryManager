@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Save, Trash, History, ArrowLeftRight, RefreshCw, Play } from "lucide-react";
+import { Loader2, Save, Trash, History, ArrowLeftRight, RefreshCw, Play, Plus, FolderPlus, X } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { 
   Dialog, 
