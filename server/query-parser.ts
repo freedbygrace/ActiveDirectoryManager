@@ -269,7 +269,7 @@ export function generatePaginationMetadata(
   // If no pagination params were specified
   if (limit === undefined) {
     return {
-      pagination: {
+      metadata: {
         totalRecords,
         currentPage: 1,
         totalPages: 1,
@@ -284,7 +284,7 @@ export function generatePaginationMetadata(
   const totalPages = Math.ceil(totalRecords / limit);
   
   // Prepare pagination metadata
-  const pagination = {
+  const metadata = {
     totalRecords,
     currentPage,
     totalPages,
@@ -305,7 +305,7 @@ export function generatePaginationMetadata(
       
       const nextUrl = new URL(url.pathname, url.origin);
       nextUrl.search = params.toString();
-      pagination.nextPage = nextUrl.toString();
+      metadata.nextPage = nextUrl.toString();
     }
     
     // Previous page
@@ -316,11 +316,11 @@ export function generatePaginationMetadata(
       
       const prevUrl = new URL(url.pathname, url.origin);
       prevUrl.search = params.toString();
-      pagination.previousPage = prevUrl.toString();
+      metadata.previousPage = prevUrl.toString();
     }
   }
   
-  return { pagination };
+  return { metadata };
 }
 
 /**
@@ -419,7 +419,7 @@ The response will include pagination metadata with the following structure:
 \`\`\`json
 {
   "data": [...],  // The actual records
-  "pagination": {
+  "metadata": {
     "totalRecords": 100,  // Total number of records
     "currentPage": 3,     // Current page number (1-based)
     "totalPages": 10,     // Total number of pages
