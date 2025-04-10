@@ -42,9 +42,14 @@ export interface Condition {
 }
 
 interface RuleEditorProps {
-  rule?: DynamicGroupRule;
+  rule?: DynamicGroupRule & { connectionIds?: number[] };
   onSave: (rule: DynamicGroupRule, schedules: ScheduleItem[]) => void;
   onCancel: () => void;
+}
+
+// Extend the DynamicGroupRule type to include connectionIds for frontend use
+interface ExtendedDynamicGroupRule extends DynamicGroupRule {
+  connectionIds?: number[];
 }
 
 export const RuleEditor: React.FC<RuleEditorProps> = ({ rule, onSave, onCancel }) => {
@@ -232,8 +237,8 @@ export const RuleEditor: React.FC<RuleEditorProps> = ({ rule, onSave, onCancel }
 
     const targetGroupDN = getTargetGroupDN();
     
-    const ruleData: DynamicGroupRule = {
-      id: rule?.id,
+    const ruleData: ExtendedDynamicGroupRule = {
+      id: rule?.id || 0, // Default to 0 for new records
       name: formData.name,
       description: formData.description || null,
       targetGroup: targetGroupDN,
