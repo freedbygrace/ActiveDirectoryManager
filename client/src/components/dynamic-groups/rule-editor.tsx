@@ -381,12 +381,16 @@ export const RuleEditor: React.FC<RuleEditorProps> = ({ rule, onSave, onCancel }
                     <div className="absolute right-1 top-1">
                       <VariableSelector 
                         onSelectVariable={(variable) => {
-                          const variableText = `{${variable}}`;
+                          // Direct insertion of variable or prefixed OU segment
                           const currentValue = formData.targetOU || '';
-                          const newValue = currentValue + variableText;
+                          // Check if this is a variable or a direct DC value
+                          const newValue = variable.startsWith("DC=") || variable.startsWith("OU=") 
+                            ? (currentValue && !currentValue.endsWith(",") ? currentValue + "," : currentValue) + variable 
+                            : currentValue + variable;
                           setFormData({ ...formData, targetOU: newValue });
                         }}
                         connections={formData.connections}
+                        isForOU={true}
                       />
                     </div>
                   </div>

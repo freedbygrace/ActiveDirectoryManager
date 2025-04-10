@@ -51,14 +51,45 @@ const COMMON_ATTRIBUTES = [
   { value: 'ipPhone', label: 'ipPhone', description: 'IP phone' },
 ];
 
-const VariableSelector: React.FC<VariableSelectorProps> = ({ onSelectVariable, connections }) => {
+const VariableSelector: React.FC<VariableSelectorProps> = ({ onSelectVariable, connections, isForOU = false }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [customAttribute, setCustomAttribute] = useState('');
   const { toast } = useToast();
   const inputRef = useRef<HTMLInputElement>(null);
 
+  // Get LDAP connection details to determine domain name for rootDSE
+  const { data: ldapConnections = [] } = useQuery<LdapConnection[]>({
+    queryKey: ['/api/ldap-connections'],
+    staleTime: 60000,
+  });
+
+  // Find the first selected connection to get domain info
+  const selectedConnection = ldapConnections.find(conn => connections.includes(conn.id));
+  
+  // Generate rootDSE string based on selected connection's domain
+  const getRootDSE = () => {
+    if (!selectedConnection || !selectedConnection.domain) {
+      return "DC=example,DC=com";
+    }
+    
+    const domainParts = selectedConnection.domain.split('.');
+    return domainParts.map(part => `DC=${part}`).join(',');
+  };
+  
+  const addRootDSE = () => {
+    const rootDSE = getRootDSE();
+    onSelectVariable(rootDSE);
+    setIsOpen(false);
+  };
+  
   const handleSelect = (attribute: string) => {
-    onSelectVariable(attribute);
+    if (isForOU) {
+      // Format OU path with proper prefixes
+      const formattedVar = `OU={${attribute}}`;
+      onSelectVariable(formattedVar);
+    } else {
+      onSelectVariable(attribute);
+    }
     setIsOpen(false);
   };
 
@@ -72,7 +103,13 @@ const VariableSelector: React.FC<VariableSelectorProps> = ({ onSelectVariable, c
       return;
     }
 
-    onSelectVariable(customAttribute.trim());
+    if (isForOU) {
+      // Format custom attribute as OU path segment
+      const formattedVar = `OU={${customAttribute.trim()}}`;
+      onSelectVariable(formattedVar);
+    } else {
+      onSelectVariable(customAttribute.trim());
+    }
     setCustomAttribute('');
     setIsOpen(false);
   };
@@ -96,6 +133,26 @@ const VariableSelector: React.FC<VariableSelectorProps> = ({ onSelectVariable, c
           
           <CommandList className="max-h-[300px]">
             <CommandEmpty>No attributes found</CommandEmpty>
+            
+            {isForOU && (
+              <CommandGroup heading="Domain Options">
+                <CommandItem
+                  value="rootDSE"
+                  onSelect={addRootDSE}
+                  className="flex items-center"
+                >
+                  <Database className="mr-2 h-4 w-4 text-muted-foreground" />
+                  <div className="flex-1">
+                    <p className="text-sm">Add RootDSE</p>
+                    <p className="text-xs text-muted-foreground">
+                      {selectedConnection?.domain ? 
+                        `Adds ${getRootDSE()} from ${selectedConnection.name}` : 
+                        'Adds DC=example,DC=com (no connection selected)'}
+                    </p>
+                  </div>
+                </CommandItem>
+              </CommandGroup>
+            )}
             
             <CommandGroup heading="Custom Attribute">
               <div className="flex items-center px-2 py-1.5">
