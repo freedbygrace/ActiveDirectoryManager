@@ -1,9 +1,10 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { useLocation } from "wouter";
 import { DashboardLayout, DashboardConfig } from "@/components/dashboard/dashboard-layout";
 import { ShareDashboardDialog } from "@/components/dashboard/share-dashboard-dialog";
+import { DashboardExport } from "@/components/dashboard/dashboard-export";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Plus, RefreshCw, Share2, Trash2, ArrowLeft } from "lucide-react";
@@ -57,6 +58,7 @@ export default function CustomDashboardsPage() {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [dashboardToDelete, setDashboardToDelete] = useState<string | null>(null);
   const [dataSourcesLoading, setDataSourcesLoading] = useState(true);
+  const dashboardRef = useRef<HTMLDivElement>(null);
   const [dataSources, setDataSources] = useState<Array<{
     id: string;
     name: string;
@@ -234,7 +236,7 @@ export default function CustomDashboardsPage() {
     const newDashboard: DashboardConfig = {
       id: uuidv4(),
       name: values.name,
-      layout: { lg: [] },
+      layouts: { lg: [] },
       widgets: [],
       branding: {
         title: values.name,
@@ -324,14 +326,20 @@ export default function CustomDashboardsPage() {
         </div>
         <div className="flex gap-2">
           {dashboards.length > 0 && activeTab !== "dashboard-overview" && (
-            <Button 
-              variant="outline" 
-              onClick={() => confirmDelete(activeTab)}
-              className="text-destructive hover:bg-destructive/10"
-            >
-              <Trash2 className="h-4 w-4 mr-2" />
-              Delete Dashboard
-            </Button>
+            <>
+              <DashboardExport 
+                dashboardRef={dashboardRef} 
+                title={dashboards.find(d => d.id === activeTab)?.name || "Custom Dashboard"} 
+              />
+              <Button 
+                variant="outline" 
+                onClick={() => confirmDelete(activeTab)}
+                className="text-destructive hover:bg-destructive/10"
+              >
+                <Trash2 className="h-4 w-4 mr-2" />
+                Delete Dashboard
+              </Button>
+            </>
           )}
           <Button onClick={() => setIsCreateDialogOpen(true)}>
             <Plus className="h-4 w-4 mr-2" />
@@ -367,11 +375,13 @@ export default function CustomDashboardsPage() {
                   <span className="ml-2">Loading data sources...</span>
                 </div>
               ) : (
-                <DashboardLayout
-                  config={dashboard}
-                  onSave={handleSaveDashboard}
-                  dataSources={dataSources}
-                />
+                <div ref={dashboardRef}>
+                  <DashboardLayout
+                    config={dashboard}
+                    onSave={handleSaveDashboard}
+                    dataSources={dataSources}
+                  />
+                </div>
               )}
             </TabsContent>
           ))
