@@ -206,10 +206,66 @@ export default function AuthPage() {
                       <Button 
                         type="submit" 
                         className="w-full" 
-                        disabled={auth.loginMutation.isPending}
+                        disabled={auth.loginMutation.isPending || auth.ldapLoginMutation.isPending}
                       >
                         {auth.loginMutation.isPending ? "Logging in..." : "Log in"}
                       </Button>
+                      
+                      <div className="relative my-5">
+                        <div className="absolute inset-0 flex items-center">
+                          <span className="w-full border-t border-gray-300"></span>
+                        </div>
+                        <div className="relative flex justify-center text-sm">
+                          <span className="px-2 bg-white text-gray-500">Or continue with</span>
+                        </div>
+                      </div>
+                      
+                      <div className="grid grid-cols-2 gap-3">
+                        <Button 
+                          type="button" 
+                          variant="outline"
+                          className="w-full"
+                          disabled={auth.ldapLoginMutation.isPending || auth.loginMutation.isPending}
+                          onClick={() => {
+                            const username = loginForm.getValues("username");
+                            const password = loginForm.getValues("password");
+                            
+                            // Validate the fields
+                            if (!username || !password) {
+                              loginForm.setError("username", { 
+                                type: "manual", 
+                                message: !username ? "Username is required" : undefined 
+                              });
+                              loginForm.setError("password", { 
+                                type: "manual", 
+                                message: !password ? "Password is required" : undefined 
+                              });
+                              return;
+                            }
+                            
+                            auth.ldapLoginMutation.mutate(
+                              { username, password },
+                              {
+                                onSuccess: () => {
+                                  navigate("/");
+                                }
+                              }
+                            );
+                          }}
+                        >
+                          {auth.ldapLoginMutation.isPending ? "Authenticating..." : "LDAP Login"}
+                        </Button>
+                        
+                        <Button 
+                          type="button" 
+                          variant="outline"
+                          className="w-full"
+                          disabled={auth.ldapLoginMutation.isPending || auth.loginMutation.isPending}
+                          onClick={() => auth.initiateOidcLogin()}
+                        >
+                          OpenID Connect
+                        </Button>
+                      </div>
                     </form>
                   </Form>
                 </CardContent>

@@ -13,11 +13,14 @@ type AuthContextType = {
   isLoading: boolean;
   error: Error | null;
   loginMutation: UseMutationResult<SelectUser, Error, LoginData>;
+  ldapLoginMutation: UseMutationResult<SelectUser, Error, LdapLoginData>;
+  initiateOidcLogin: () => void;
   logoutMutation: UseMutationResult<void, Error, void>;
   registerMutation: UseMutationResult<SelectUser, Error, InsertUser>;
 };
 
 type LoginData = Pick<InsertUser, "username" | "password">;
+type LdapLoginData = Pick<InsertUser, "username" | "password">;
 
 export const AuthContext = createContext<AuthContextType | null>(null);
 
@@ -74,6 +77,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     },
   });
 
+  const ldapLoginMutation = useMutation({
+    mutationFn: async (credentials: LdapLoginData) => {
+      const res = await apiRequest("POST", "/api/auth/ldap", credentials);
+      return await res.json();
+    },
+    onSuccess: (user: SelectUser) => {
+      queryClient.setQueryData(["/api/user"], user);
+      toast({
+        title: "LDAP Login successful",
+        description: `Welcome back, ${user.username}!`,
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "LDAP Login failed",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Function to initiate OIDC login flow
+  const initiateOidcLogin = () => {
+    // OpenID Connect requires a redirect to the provider's login page
+    window.location.href = "/api/auth/oidc";
+  };
+
   const logoutMutation = useMutation({
     mutationFn: async () => {
       await apiRequest("POST", "/api/logout");
@@ -101,6 +131,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         isLoading,
         error,
         loginMutation,
+        ldapLoginMutation,
+        initiateOidcLogin,
         logoutMutation,
         registerMutation,
       }}
