@@ -57,7 +57,9 @@ export const RuleEditor: React.FC<RuleEditorProps> = ({ rule, onSave, onCancel }
     description: rule?.description || '',
     targetGroupName: rule?.targetGroup ? rule?.targetGroup.split(',')[0].replace('CN=', '') : '',
     targetOU: rule?.targetGroup ? rule?.targetGroup.split(',').slice(1).join(',') : '',
-    createGroupIfNotExists: false,
+    createGroupIfNotExists: rule?.createGroupIfNotExists || false,
+    createOUIfNotExists: false,
+    createGroupForEachAttributeValue: false,
     enabled: rule?.enabled ?? true,
     variablePattern: rule?.variablePattern || '',
     connections: rule?.connectionIds || []
@@ -194,7 +196,9 @@ export const RuleEditor: React.FC<RuleEditorProps> = ({ rule, onSave, onCancel }
       lastRunStatus: rule?.lastRunStatus || null,
       variablePattern: formData.variablePattern || null,
       connectionIds: formData.connections,
-      createGroupIfNotExists: formData.createGroupIfNotExists
+      createGroupIfNotExists: formData.createGroupIfNotExists,
+      createOUIfNotExists: formData.createOUIfNotExists,
+      createGroupForEachAttributeValue: formData.createGroupForEachAttributeValue
     };
 
     onSave(ruleData, schedules);
@@ -210,7 +214,9 @@ export const RuleEditor: React.FC<RuleEditorProps> = ({ rule, onSave, onCancel }
           targetGroup: targetGroupDN,
           connectionIds: formData.connections,
           variablePattern: formData.variablePattern || null,
-          createGroupIfNotExists: formData.createGroupIfNotExists
+          createGroupIfNotExists: formData.createGroupIfNotExists,
+          createOUIfNotExists: formData.createOUIfNotExists,
+          createGroupForEachAttributeValue: formData.createGroupForEachAttributeValue
         },
         conditions
       });
@@ -345,7 +351,44 @@ export const RuleEditor: React.FC<RuleEditorProps> = ({ rule, onSave, onCancel }
               
               <h3 className="text-md font-medium mb-2">Target AD Group</h3>
               
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="space-y-6">
+                <div className="space-y-2">
+                  <Label htmlFor="targetOU">Organizational Unit <span className="text-destructive">*</span></Label>
+                  <div className="relative">
+                    <Input 
+                      id="targetOU" 
+                      name="targetOU" 
+                      value={formData.targetOU} 
+                      onChange={handleInputChange} 
+                      className="pr-24"
+                      placeholder="OU=Groups,DC=example,DC=com" 
+                    />
+                    <div className="absolute right-1 top-1">
+                      <VariableSelector 
+                        onSelectVariable={(variable) => {
+                          const variableText = `{${variable}}`;
+                          const currentValue = formData.targetOU || '';
+                          const newValue = currentValue + variableText;
+                          setFormData({ ...formData, targetOU: newValue });
+                        }}
+                        connections={formData.connections}
+                      />
+                    </div>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    The OU where the group belongs (can include variables like {'{attributeName}'})
+                  </p>
+                </div>
+                
+                <div className="flex items-center space-x-2">
+                  <Switch 
+                    id="createOUIfNotExists"
+                    checked={formData.createOUIfNotExists}
+                    onCheckedChange={(checked) => handleToggleChange('createOUIfNotExists', checked)}
+                  />
+                  <Label htmlFor="createOUIfNotExists">Create OU if it doesn't exist</Label>
+                </div>
+                
                 <div className="space-y-2">
                   <Label htmlFor="targetGroupName">Group Name <span className="text-destructive">*</span></Label>
                   <div className="flex gap-2">
@@ -377,42 +420,31 @@ export const RuleEditor: React.FC<RuleEditorProps> = ({ rule, onSave, onCancel }
                   </p>
                 </div>
                 
-                <div className="space-y-2">
-                  <Label htmlFor="targetOU">Organizational Unit <span className="text-destructive">*</span></Label>
-                  <Input 
-                    id="targetOU" 
-                    name="targetOU" 
-                    value={formData.targetOU} 
-                    onChange={handleInputChange} 
-                    placeholder="OU=Groups,DC=example,DC=com" 
+                <div className="flex items-center space-x-2">
+                  <Switch 
+                    id="createGroupIfNotExists"
+                    checked={formData.createGroupIfNotExists}
+                    onCheckedChange={(checked) => handleToggleChange('createGroupIfNotExists', checked)}
                   />
-                  <p className="text-xs text-muted-foreground">
-                    The OU where the group belongs
-                  </p>
+                  <Label htmlFor="createGroupIfNotExists">Create group if it doesn't exist</Label>
                 </div>
               </div>
               
-              <div className="flex items-center space-x-2 mt-2">
-                <Switch 
-                  id="createGroupIfNotExists"
-                  checked={formData.createGroupIfNotExists}
-                  onCheckedChange={(checked) => handleToggleChange('createGroupIfNotExists', checked)}
-                />
-                <Label htmlFor="createGroupIfNotExists">Create group if it doesn't exist</Label>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="variablePattern">Variable Pattern</Label>
-                <Input 
-                  id="variablePattern" 
-                  name="variablePattern" 
-                  value={formData.variablePattern} 
-                  onChange={handleInputChange} 
-                  placeholder="e.g., &#123;attributeName&#125; Value" 
-                />
+              <div className="mt-4 space-y-2 border rounded-md p-4 bg-muted/30">
+                <h4 className="text-sm font-medium">Advanced Options</h4>
+                <div className="flex items-center space-x-2">
+                  <Switch 
+                    id="createGroupForEachAttributeValue"
+                    checked={formData.createGroupForEachAttributeValue}
+                    onCheckedChange={(checked) => handleToggleChange('createGroupForEachAttributeValue', checked)}
+                  />
+                  <Label htmlFor="createGroupForEachAttributeValue">
+                    Automatically create a group for each distinct attribute value
+                  </Label>
+                </div>
                 <p className="text-xs text-muted-foreground">
-                  Optional pattern for generating variable values in name or description. 
-                  Use &#123;attributeName&#125; to insert attribute values.
+                  When enabled, the system will automatically create separate groups for each distinct value 
+                  of the attribute variables used in the group name or OU
                 </p>
               </div>
 
@@ -493,9 +525,21 @@ export const RuleEditor: React.FC<RuleEditorProps> = ({ rule, onSave, onCancel }
                         </dd>
                       </div>
                       <div className="flex justify-between">
-                        <dt className="text-sm font-medium text-muted-foreground">Create if not exists:</dt>
+                        <dt className="text-sm font-medium text-muted-foreground">Create group if not exists:</dt>
                         <dd className="text-sm">
                           {formData.createGroupIfNotExists ? 'Yes' : 'No'}
+                        </dd>
+                      </div>
+                      <div className="flex justify-between">
+                        <dt className="text-sm font-medium text-muted-foreground">Create OU if not exists:</dt>
+                        <dd className="text-sm">
+                          {formData.createOUIfNotExists ? 'Yes' : 'No'}
+                        </dd>
+                      </div>
+                      <div className="flex justify-between">
+                        <dt className="text-sm font-medium text-muted-foreground">Create groups per attribute value:</dt>
+                        <dd className="text-sm">
+                          {formData.createGroupForEachAttributeValue ? 'Yes' : 'No'}
                         </dd>
                       </div>
                       <div className="flex justify-between">
