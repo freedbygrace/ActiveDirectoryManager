@@ -64,19 +64,20 @@ export default function DashboardPage() {
   const { data: usersData, isLoading: isLoadingUsers } = useQuery<any>({
     queryKey: ['/api/user-dashboard-data'],
     queryFn: async () => {
-      // This would normally come from an API endpoint
-      // Here we're implementing a mock data fetcher for the dashboard
-      const response = await fetch('/api/ad/users?properties=name,mail,title,department,employeeId,manager,memberOf,whenCreated');
+      const response = await fetch('/api/user-dashboard-data');
       if (!response.ok) throw new Error('Failed to fetch users');
       const users = await response.json();
       
       // Get the structure of the data to determine field types
-      const fields = getFieldTypes(users.data || []);
+      const userData = users.data || [];
+      const fields = getFieldTypes(userData);
+      
+      console.log('User data fields:', fields);
       
       return {
         id: 'users',
         name: 'Active Directory Users',
-        data: users.data || [],
+        data: userData,
         fields,
       };
     },
@@ -87,17 +88,20 @@ export default function DashboardPage() {
   const { data: computersData, isLoading: isLoadingComputers } = useQuery<any>({
     queryKey: ['/api/computer-dashboard-data'],
     queryFn: async () => {
-      const response = await fetch('/api/ad/computers?properties=name,operatingSystem,operatingSystemVersion,whenCreated,lastLogonTimestamp,enabled,memberOf');
+      const response = await fetch('/api/computer-dashboard-data');
       if (!response.ok) throw new Error('Failed to fetch computers');
       const computers = await response.json();
       
       // Get the structure of the data to determine field types
-      const fields = getFieldTypes(computers.data || []);
+      const computerData = computers.data || [];
+      const fields = getFieldTypes(computerData);
+      
+      console.log('Computer data fields:', fields);
       
       return {
         id: 'computers',
         name: 'Active Directory Computers',
-        data: computers.data || [],
+        data: computerData,
         fields,
       };
     },
@@ -108,17 +112,20 @@ export default function DashboardPage() {
   const { data: groupsData, isLoading: isLoadingGroups } = useQuery<any>({
     queryKey: ['/api/group-dashboard-data'],
     queryFn: async () => {
-      const response = await fetch('/api/ad/groups?properties=name,description,whenCreated,member,memberOf');
+      const response = await fetch('/api/group-dashboard-data');
       if (!response.ok) throw new Error('Failed to fetch groups');
       const groups = await response.json();
       
       // Get the structure of the data to determine field types
-      const fields = getFieldTypes(groups.data || []);
+      const groupData = groups.data || [];
+      const fields = getFieldTypes(groupData);
+      
+      console.log('Group data fields:', fields);
       
       return {
         id: 'groups',
         name: 'Active Directory Groups',
-        data: groups.data || [],
+        data: groupData,
         fields,
       };
     },

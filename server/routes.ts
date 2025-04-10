@@ -5090,19 +5090,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const connectionId = connections[0].id;
       
       // Get counts from all AD objects
-      const usersCount = await db.select({ count: sql`count(*)` }).from(adUsers)
+      const usersCount = await db.select({ count: count() }).from(adUsers)
         .where(eq(adUsers.connectionId, connectionId));
       
-      const computersCount = await db.select({ count: sql`count(*)` }).from(adComputers)
+      const computersCount = await db.select({ count: count() }).from(adComputers)
         .where(eq(adComputers.connectionId, connectionId));
       
-      const groupsCount = await db.select({ count: sql`count(*)` }).from(adGroups)
+      const groupsCount = await db.select({ count: count() }).from(adGroups)
         .where(eq(adGroups.connectionId, connectionId));
       
-      const sitesCount = await db.select({ count: sql`count(*)` }).from(adSites)
+      const sitesCount = await db.select({ count: count() }).from(adSites)
         .where(eq(adSites.connectionId, connectionId));
       
-      const domainsCount = await db.select({ count: sql`count(*)` }).from(adDomains)
+      const domainsCount = await db.select({ count: count() }).from(adDomains)
         .where(eq(adDomains.connectionId, connectionId));
       
       // Return the counts
