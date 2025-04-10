@@ -1,102 +1,186 @@
-import React, { useState, useEffect } from "react";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { useQuery } from "@tanstack/react-query";
-import { Loader2, Plus, Trash, ArrowRightLeft, MoveVertical, Group, Layers } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
+import React, { useState, useEffect } from 'react';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Card, CardContent } from '@/components/ui/card';
+import { useToast } from '@/hooks/use-toast';
+import { useQuery } from '@tanstack/react-query';
 import {
   DndContext,
-  DragOverlay,
   closestCenter,
   KeyboardSensor,
   PointerSensor,
   useSensor,
   useSensors,
-  DragStartEvent,
-  DragEndEvent,
-} from "@dnd-kit/core";
+  DragEndEvent
+} from '@dnd-kit/core';
 import {
+  arrayMove,
   SortableContext,
   sortableKeyboardCoordinates,
-  verticalListSortingStrategy,
-  useSortable,
-} from "@dnd-kit/sortable";
-import { CSS } from "@dnd-kit/utilities";
-
-interface Condition {
-  id: number;
-  type: "condition" | "group";
-  parentId: number | null;
-  operator: string;
-  attribute?: string;
-  value?: string;
-  position: number;
-  children?: Condition[];
-}
-
-interface Connection {
-  id: number;
-  name: string;
-  server: string;
-}
-
-interface LdapAttribute {
-  id: number;
-  name: string;
-  displayName: string | null;
-  description: string | null;
-  type: string | null;
-  multiValued: boolean;
-  objectClass: string;
-}
+  useSortable
+} from '@dnd-kit/sortable';
+import { Trash, Plus, Move, PlusCircle, FolderPlus, ChevronDown, ChevronRight } from 'lucide-react';
+import { Condition } from './rule-editor';
+import { LdapAttribute } from '@shared/schema';
 
 interface ConditionBuilderProps {
   conditions: Condition[];
   onChange: (conditions: Condition[]) => void;
-  connections: Connection[];
+  connections: number[];
 }
 
-const conditionOperators = [
-  { value: "equals", label: "Equals" },
-  { value: "contains", label: "Contains" },
-  { value: "startsWith", label: "Starts With" },
-  { value: "endsWith", label: "Ends With" },
-  { value: "present", label: "Is Present" },
-  { value: "notPresent", label: "Is Not Present" },
-  { value: "greaterThan", label: "Greater Than" },
-  { value: "lessThan", label: "Less Than" },
+const operators = [
+  { value: '=', label: 'Equals' },
+  { value: '!=', label: 'Not Equals' },
+  { value: 'contains', label: 'Contains' },
+  { value: 'startsWith', label: 'Starts With' },
+  { value: 'endsWith', label: 'Ends With' },
+  { value: 'present', label: 'Is Present' },
+  { value: 'notPresent', label: 'Is Not Present' }
 ];
 
-const groupOperators = [
-  { value: "and", label: "AND" },
-  { value: "or", label: "OR" },
-  { value: "not", label: "NOT" },
+const logicalOperators = [
+  { value: 'AND', label: 'AND' },
+  { value: 'OR', label: 'OR' }
 ];
 
-export default function ConditionBuilder({ conditions, onChange, connections }: ConditionBuilderProps) {
-  const [selectedConnectionId, setSelectedConnectionId] = useState<number | null>(null);
-  const [activeId, setActiveId] = useState<number | null>(null);
-  const [nextId, setNextId] = useState<number>(1);
+const defaultCondition: Condition = {
+  attribute: '',
+  operator: '=',
+  value: '',
+  logicalOperator: 'AND'
+};
 
-  // Ensure we have unique IDs for new conditions
-  useEffect(() => {
-    if (conditions.length > 0) {
-      const maxId = Math.max(...conditions.map(c => c.id)) + 1;
-      setNextId(maxId);
-    }
-  }, [conditions]);
+const defaultGroup: Condition = {
+  attribute: '',
+  operator: '',
+  value: '',
+  logicalOperator: 'AND',
+  isGroup: true
+};
 
-  // Fetch LDAP attributes for the selected connection
-  const { data: attributes, isLoading: isLoadingAttributes } = useQuery({
-    queryKey: ["/api/ldap-attributes", selectedConnectionId],
-    enabled: !!selectedConnectionId,
-    retry: false,
+const ConditionBuilder: React.FC<ConditionBuilderProps> = ({ 
+  conditions, 
+  onChange,
+  connections
+}) => {
+  const { toast } = useToast();
+  const [expandedGroups, setExpandedGroups] = useState<Set<number>>(new Set());
+  
+  // Load LDAP attributes from connections
+  const { data: attributesData = [] } = useQuery<LdapAttribute[]>({
+    queryKey: ['/api/ldap-attributes', { connectionIds: connections }],
+    enabled: connections.length > 0,
+    staleTime: 60000,
   });
 
-  // DnD setup
+  const [availableAttributes, setAvailableAttributes] = useState<string[]>([
+    'cn', 'sAMAccountName', 'givenName', 'sn', 'mail', 'displayName', 
+    'memberOf', 'distinguishedName', 'objectClass', 'objectCategory',
+    'userAccountControl', 'department', 'company', 'title', 'manager'
+  ]);
+  
+  // Update available attributes when data is loaded
+  useEffect(() => {
+    if (attributesData.length > 0) {
+      setAvailableAttributes([
+        ...new Set(attributesData.map(attr => attr.name))
+      ]);
+    }
+  }, [attributesData]);
+
+  // Handle adding a new condition
+  const addCondition = (parentId?: number | null) => {
+    const newCondition: Condition = {
+      ...defaultCondition,
+      parentId
+    };
+    
+    // Find the appropriate insertion position
+    if (parentId === undefined) {
+      // Add to root level
+      onChange([...conditions, newCondition]);
+    } else {
+      // Find the last condition with the same parent to add it after
+      const sameParentConditions = conditions.filter(c => c.parentId === parentId);
+      const insertIndex = sameParentConditions.length > 0 
+        ? conditions.indexOf(sameParentConditions[sameParentConditions.length - 1]) + 1
+        : conditions.findIndex(c => c.id === parentId) + 1;
+      
+      const newConditions = [...conditions];
+      newConditions.splice(insertIndex, 0, newCondition);
+      onChange(newConditions);
+    }
+  };
+
+  // Handle adding a new condition group
+  const addConditionGroup = (parentId?: number | null) => {
+    const newGroup: Condition = {
+      ...defaultGroup,
+      parentId
+    };
+    
+    // Similar insertion logic as addCondition
+    if (parentId === undefined) {
+      onChange([...conditions, newGroup]);
+    } else {
+      const sameParentConditions = conditions.filter(c => c.parentId === parentId);
+      const insertIndex = sameParentConditions.length > 0 
+        ? conditions.indexOf(sameParentConditions[sameParentConditions.length - 1]) + 1
+        : conditions.findIndex(c => c.id === parentId) + 1;
+      
+      const newConditions = [...conditions];
+      newConditions.splice(insertIndex, 0, newGroup);
+      onChange(newConditions);
+      
+      // Automatically expand the new group
+      if (newGroup.id) {
+        setExpandedGroups(prev => new Set([...prev, newGroup.id!]));
+      }
+    }
+  };
+
+  // Handle updating a condition
+  const updateCondition = (index: number, field: keyof Condition, value: any) => {
+    const newConditions = [...conditions];
+    newConditions[index] = { ...newConditions[index], [field]: value };
+    onChange(newConditions);
+  };
+
+  // Handle removing a condition
+  const removeCondition = (index: number) => {
+    const conditionToRemove = conditions[index];
+    
+    // If it's a group, also remove all child conditions
+    if (conditionToRemove.isGroup) {
+      const childConditions = conditions.filter(c => c.parentId === conditionToRemove.id);
+      
+      if (childConditions.length > 0) {
+        const confirmDelete = window.confirm(
+          `This will also delete ${childConditions.length} child condition(s). Continue?`
+        );
+        
+        if (!confirmDelete) {
+          return;
+        }
+      }
+      
+      // Remove the group and all its children
+      const newConditions = conditions.filter(
+        c => c.id !== conditionToRemove.id && c.parentId !== conditionToRemove.id
+      );
+      onChange(newConditions);
+    } else {
+      // Just remove the single condition
+      const newConditions = [...conditions];
+      newConditions.splice(index, 1);
+      onChange(newConditions);
+    }
+  };
+
+  // Setup drag sensors
   const sensors = useSensors(
     useSensor(PointerSensor),
     useSensor(KeyboardSensor, {
@@ -104,461 +188,225 @@ export default function ConditionBuilder({ conditions, onChange, connections }: 
     })
   );
 
-  const handleDragStart = (event: DragStartEvent) => {
-    setActiveId(event.active.id as number);
-  };
-
+  // Handle drag and drop
   const handleDragEnd = (event: DragEndEvent) => {
-    setActiveId(null);
-    
     const { active, over } = event;
     
-    if (over && active.id !== over.id) {
-      // Handle reordering logic here
-      const updatedConditions = [...conditions];
-      // Implement sorting logic
-      onChange(updatedConditions);
-    }
-  };
-
-  // Add a new condition to the root level
-  const addCondition = () => {
-    const newCondition: Condition = {
-      id: nextId,
-      type: "condition",
-      parentId: null,
-      operator: "equals",
-      attribute: "",
-      value: "",
-      position: conditions.length,
-    };
+    if (!over) return;
     
-    onChange([...conditions, newCondition]);
-    setNextId(nextId + 1);
-  };
-
-  // Add a new condition group to the root level
-  const addGroup = () => {
-    const newGroup: Condition = {
-      id: nextId,
-      type: "group",
-      parentId: null,
-      operator: "and",
-      position: conditions.length,
-      children: [],
-    };
-    
-    onChange([...conditions, newGroup]);
-    setNextId(nextId + 1);
-  };
-
-  // Update a condition
-  const updateCondition = (id: number, updates: Partial<Condition>) => {
-    const updatedConditions = conditions.map(condition => {
-      if (condition.id === id) {
-        return { ...condition, ...updates };
+    if (active.id !== over.id) {
+      const activeIndex = conditions.findIndex(c => c.id === active.id);
+      const overIndex = conditions.findIndex(c => c.id === over.id);
+      
+      // Don't allow dropping a condition outside its parent group
+      const sourceCondition = conditions[activeIndex];
+      const overCondition = conditions[overIndex];
+      
+      if (sourceCondition.parentId !== overCondition.parentId) {
+        toast({
+          title: "Invalid Move",
+          description: "Conditions can only be reordered within the same group",
+          variant: "destructive"
+        });
+        return;
       }
-      return condition;
-    });
-    
-    onChange(updatedConditions);
-  };
-
-  // Delete a condition
-  const deleteCondition = (id: number) => {
-    const filteredConditions = conditions.filter(condition => condition.id !== id);
-    onChange(filteredConditions);
-  };
-
-  // Add a nested condition inside a group
-  const addNestedCondition = (parentId: number) => {
-    const updatedConditions = [...conditions];
-    const parentIndex = updatedConditions.findIndex(c => c.id === parentId);
-    
-    if (parentIndex !== -1 && updatedConditions[parentIndex].type === "group") {
-      const parent = updatedConditions[parentIndex];
-      const children = parent.children || [];
       
-      const newCondition: Condition = {
-        id: nextId,
-        type: "condition",
-        parentId: parentId,
-        operator: "equals",
-        attribute: "",
-        value: "",
-        position: children.length,
-      };
-      
-      updatedConditions[parentIndex] = {
-        ...parent,
-        children: [...children, newCondition],
-      };
-      
-      onChange(updatedConditions);
-      setNextId(nextId + 1);
+      const newConditions = arrayMove(conditions, activeIndex, overIndex);
+      onChange(newConditions);
     }
   };
 
-  return (
-    <div className="space-y-4">
-      <div className="flex items-center space-x-4 mb-6">
-        <Label htmlFor="connection-select" className="min-w-36">Select LDAP Connection:</Label>
-        <Select
-          value={selectedConnectionId?.toString() || ""}
-          onValueChange={(value) => setSelectedConnectionId(parseInt(value, 10))}
-        >
-          <SelectTrigger id="connection-select" className="w-[260px]">
-            <SelectValue placeholder="Select a connection" />
-          </SelectTrigger>
-          <SelectContent>
-            {connections.map((connection) => (
-              <SelectItem key={connection.id} value={connection.id.toString()}>
-                {connection.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
-
-      <div className="flex items-center space-x-2 mb-4">
-        <Button onClick={addCondition} variant="outline" size="sm">
-          <Plus className="mr-1 h-4 w-4" />
-          Add Condition
-        </Button>
-        <Button onClick={addGroup} variant="outline" size="sm">
-          <Layers className="mr-1 h-4 w-4" />
-          Add Group
-        </Button>
-      </div>
-
-      <DndContext
-        sensors={sensors}
-        collisionDetection={closestCenter}
-        onDragStart={handleDragStart}
-        onDragEnd={handleDragEnd}
-      >
-        <SortableContext
-          items={conditions.map(c => c.id)}
-          strategy={verticalListSortingStrategy}
-        >
-          <div className="space-y-3">
-            {conditions.length === 0 ? (
-              <div className="border border-dashed rounded-lg p-6 text-center">
-                <p className="text-muted-foreground">No conditions defined. Add a condition or group to get started.</p>
-              </div>
-            ) : (
-              conditions.map(condition => (
-                <ConditionItem
-                  key={condition.id}
-                  condition={condition}
-                  attributes={attributes || []}
-                  isLoadingAttributes={isLoadingAttributes}
-                  onUpdate={(updates) => updateCondition(condition.id, updates)}
-                  onDelete={() => deleteCondition(condition.id)}
-                  onAddNested={
-                    condition.type === "group" 
-                      ? () => addNestedCondition(condition.id) 
-                      : undefined
-                  }
-                  selectedConnectionId={selectedConnectionId}
-                />
-              ))
-            )}
-          </div>
-        </SortableContext>
-        
-        <DragOverlay>
-          {activeId ? (
-            <div className="bg-background border rounded-lg p-4 shadow-lg">
-              Dragging Item {activeId}
-            </div>
-          ) : null}
-        </DragOverlay>
-      </DndContext>
-    </div>
-  );
-}
-
-interface ConditionItemProps {
-  condition: Condition;
-  attributes: LdapAttribute[];
-  isLoadingAttributes: boolean;
-  onUpdate: (updates: Partial<Condition>) => void;
-  onDelete: () => void;
-  onAddNested?: () => void;
-  selectedConnectionId: number | null;
-}
-
-function ConditionItem({ 
-  condition, 
-  attributes, 
-  isLoadingAttributes, 
-  onUpdate, 
-  onDelete,
-  onAddNested,
-  selectedConnectionId
-}: ConditionItemProps) {
-  const {
-    attributes: sortableAttributes,
-    listeners,
-    setNodeRef,
-    transform,
-    transition,
-  } = useSortable({ id: condition.id });
-
-  const style = {
-    transform: CSS.Transform.toString(transform),
-    transition,
+  // Toggle group expansion
+  const toggleGroupExpand = (groupId: number) => {
+    setExpandedGroups(prev => {
+      const newExpanded = new Set(prev);
+      if (newExpanded.has(groupId)) {
+        newExpanded.delete(groupId);
+      } else {
+        newExpanded.add(groupId);
+      }
+      return newExpanded;
+    });
   };
 
-  if (condition.type === "group") {
-    return (
-      <div ref={setNodeRef} style={style} className="relative">
-        <Card className="border-primary/20">
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between mb-2">
-              <div className="flex items-center space-x-2">
-                <Badge variant="outline" className="cursor-move" {...sortableAttributes} {...listeners}>
-                  <MoveVertical className="h-3 w-3 mr-1" />
-                  Drag
-                </Badge>
-                
-                <Label>Group Operator:</Label>
-                <Select
-                  value={condition.operator}
-                  onValueChange={(value) => onUpdate({ operator: value })}
-                >
-                  <SelectTrigger className="w-[140px]">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {groupOperators.map((op) => (
-                      <SelectItem key={op.value} value={op.value}>
-                        {op.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              
-              <div className="flex items-center space-x-2">
-                <Button variant="ghost" size="icon" onClick={onAddNested}>
-                  <Plus className="h-4 w-4" />
-                </Button>
-                <Button variant="ghost" size="icon" onClick={onDelete}>
-                  <Trash className="h-4 w-4 text-destructive" />
-                </Button>
-              </div>
-            </div>
-            
-            <div className="pl-6 border-l-2 border-primary/20 mt-4 space-y-3">
-              {condition.children && condition.children.length > 0 ? (
-                condition.children.map((child) => (
-                  <NestedConditionItem
-                    key={child.id}
-                    condition={child}
-                    attributes={attributes}
-                    isLoadingAttributes={isLoadingAttributes}
-                    onUpdate={(updates) => {
-                      const updatedChildren = condition.children?.map((c) => {
-                        if (c.id === child.id) {
-                          return { ...c, ...updates };
-                        }
-                        return c;
-                      });
-                      onUpdate({ children: updatedChildren });
-                    }}
-                    onDelete={() => {
-                      const updatedChildren = condition.children?.filter((c) => c.id !== child.id);
-                      onUpdate({ children: updatedChildren });
-                    }}
-                    selectedConnectionId={selectedConnectionId}
-                  />
-                ))
-              ) : (
-                <div className="text-center py-2 text-sm text-muted-foreground">
-                  <p>No conditions in this group.</p>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="mt-1"
-                    onClick={onAddNested}
-                  >
-                    <Plus className="h-4 w-4 mr-1" />
-                    Add Condition
-                  </Button>
-                </div>
-              )}
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+  // Get the conditions that belong to a specific parent (or root level)
+  const getConditionsForParent = (parentId?: number | null) => {
+    return conditions.filter(c => 
+      parentId === undefined 
+        ? c.parentId === null || c.parentId === undefined
+        : c.parentId === parentId
     );
-  }
-  
-  return (
-    <div ref={setNodeRef} style={style}>
-      <Card>
-        <CardContent className="p-4">
-          <div className="flex flex-wrap gap-3 items-center">
-            <Badge variant="outline" className="cursor-move" {...sortableAttributes} {...listeners}>
-              <MoveVertical className="h-3 w-3 mr-1" />
-              Drag
-            </Badge>
-            
-            <div className="flex-1 min-w-52">
-              <Label htmlFor={`attribute-${condition.id}`} className="mb-1 block text-xs">
-                Attribute
-              </Label>
-              {isLoadingAttributes ? (
-                <div className="flex items-center">
-                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                  <span className="text-sm">Loading attributes...</span>
-                </div>
-              ) : !selectedConnectionId ? (
-                <Input
-                  id={`attribute-${condition.id}`}
-                  value={condition.attribute || ""}
-                  onChange={(e) => onUpdate({ attribute: e.target.value })}
-                  placeholder="Select a connection first"
-                  className="w-full"
-                />
+  };
+
+  // Render a condition group
+  const renderConditionGroup = (condition: Condition, index: number, level = 0) => {
+    const isExpanded = condition.id ? expandedGroups.has(condition.id) : false;
+    const childConditions = condition.id ? getConditionsForParent(condition.id) : [];
+    
+    return (
+      <div 
+        key={`group-${index}`} 
+        className="border border-border rounded-md p-3 mb-3"
+        style={{ marginLeft: level > 0 ? `${level * 20}px` : '0' }}
+      >
+        <div className="flex items-center justify-between mb-2">
+          <div className="flex items-center space-x-2">
+            <button
+              type="button"
+              onClick={() => condition.id && toggleGroupExpand(condition.id)}
+              className="p-1 hover:bg-accent rounded-sm"
+            >
+              {isExpanded ? (
+                <ChevronDown className="h-4 w-4" />
               ) : (
-                <Select
-                  value={condition.attribute || ""}
-                  onValueChange={(value) => onUpdate({ attribute: value })}
-                >
-                  <SelectTrigger id={`attribute-${condition.id}`} className="w-full">
-                    <SelectValue placeholder="Select attribute" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {attributes.map((attr) => (
-                      <SelectItem key={attr.id} value={attr.name}>
-                        {attr.displayName || attr.name}
-                      </SelectItem>
-                    ))}
-                    <SelectItem value="custom">Custom attribute...</SelectItem>
-                  </SelectContent>
-                </Select>
+                <ChevronRight className="h-4 w-4" />
               )}
-            </div>
+            </button>
             
-            <div className="w-36">
-              <Label htmlFor={`operator-${condition.id}`} className="mb-1 block text-xs">
-                Operator
-              </Label>
-              <Select
-                value={condition.operator}
-                onValueChange={(value) => onUpdate({ operator: value })}
-              >
-                <SelectTrigger id={`operator-${condition.id}`} className="w-full">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {conditionOperators.map((op) => (
-                    <SelectItem key={op.value} value={op.value}>
-                      {op.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            
-            <div className="flex-1 min-w-52">
-              <Label htmlFor={`value-${condition.id}`} className="mb-1 block text-xs">
-                Value
-              </Label>
-              <Input
-                id={`value-${condition.id}`}
-                value={condition.value || ""}
-                onChange={(e) => onUpdate({ value: e.target.value })}
-                placeholder="Value"
-                className="w-full"
-                disabled={["present", "notPresent"].includes(condition.operator)}
-              />
-            </div>
-            
-            <Button variant="ghost" size="icon" onClick={onDelete} className="self-end mb-0.5">
-              <Trash className="h-4 w-4 text-destructive" />
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-    </div>
-  );
-}
-
-interface NestedConditionItemProps {
-  condition: Condition;
-  attributes: LdapAttribute[];
-  isLoadingAttributes: boolean;
-  onUpdate: (updates: Partial<Condition>) => void;
-  onDelete: () => void;
-  selectedConnectionId: number | null;
-}
-
-function NestedConditionItem({ 
-  condition, 
-  attributes, 
-  isLoadingAttributes, 
-  onUpdate, 
-  onDelete,
-  selectedConnectionId
-}: NestedConditionItemProps) {
-  return (
-    <Card className="border-muted">
-      <CardContent className="p-3">
-        <div className="flex flex-wrap gap-2 items-center">
-          <div className="flex-1 min-w-40">
-            <Label htmlFor={`nested-attribute-${condition.id}`} className="mb-1 block text-xs">
-              Attribute
-            </Label>
-            {isLoadingAttributes ? (
-              <div className="flex items-center">
-                <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                <span className="text-sm">Loading...</span>
-              </div>
-            ) : !selectedConnectionId ? (
-              <Input
-                id={`nested-attribute-${condition.id}`}
-                value={condition.attribute || ""}
-                onChange={(e) => onUpdate({ attribute: e.target.value })}
-                placeholder="Select a connection first"
-                className="w-full"
-              />
-            ) : (
-              <Select
-                value={condition.attribute || ""}
-                onValueChange={(value) => onUpdate({ attribute: value })}
-              >
-                <SelectTrigger id={`nested-attribute-${condition.id}`} className="w-full">
-                  <SelectValue placeholder="Select attribute" />
-                </SelectTrigger>
-                <SelectContent>
-                  {attributes.map((attr) => (
-                    <SelectItem key={attr.id} value={attr.name}>
-                      {attr.displayName || attr.name}
-                    </SelectItem>
-                  ))}
-                  <SelectItem value="custom">Custom attribute...</SelectItem>
-                </SelectContent>
-              </Select>
-            )}
+            <span className="text-sm font-medium">
+              Condition Group ({condition.logicalOperator})
+            </span>
           </div>
           
-          <div className="w-32">
-            <Label htmlFor={`nested-operator-${condition.id}`} className="mb-1 block text-xs">
-              Operator
-            </Label>
+          <div className="flex items-center space-x-2">
             <Select
-              value={condition.operator}
-              onValueChange={(value) => onUpdate({ operator: value })}
+              value={condition.logicalOperator || 'AND'}
+              onValueChange={(value) => updateCondition(index, 'logicalOperator', value)}
             >
-              <SelectTrigger id={`nested-operator-${condition.id}`} className="w-full">
-                <SelectValue />
+              <SelectTrigger className="w-20 h-8">
+                <SelectValue placeholder="Operator" />
               </SelectTrigger>
               <SelectContent>
-                {conditionOperators.map((op) => (
+                {logicalOperators.map((op) => (
+                  <SelectItem key={op.value} value={op.value}>
+                    {op.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => addCondition(condition.id)}
+              title="Add Condition"
+            >
+              <Plus className="h-4 w-4" />
+            </Button>
+            
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => addConditionGroup(condition.id)}
+              title="Add Group"
+            >
+              <FolderPlus className="h-4 w-4" />
+            </Button>
+            
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => removeCondition(index)}
+              title="Remove Group"
+            >
+              <Trash className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+        
+        {isExpanded && (
+          <div className="pl-2">
+            {childConditions.length === 0 ? (
+              <div className="text-sm text-muted-foreground p-2">
+                No conditions in this group. Add one using the buttons above.
+              </div>
+            ) : (
+              childConditions.map((child, childIndex) => {
+                const originalIndex = conditions.findIndex(c => c === child);
+                return child.isGroup 
+                  ? renderConditionGroup(child, originalIndex, level + 1) 
+                  : renderCondition(child, originalIndex, level + 1);
+              })
+            )}
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  // Sortable Item wrapper component
+  const SortableItem = ({ 
+    condition, 
+    index, 
+    level = 0 
+  }: { 
+    condition: Condition; 
+    index: number; 
+    level?: number;
+  }) => {
+    const {
+      attributes,
+      listeners,
+      setNodeRef,
+      transform,
+      transition,
+      isDragging
+    } = useSortable({ 
+      id: condition.id || index,
+      data: {
+        condition,
+        index,
+        level,
+        type: condition.isGroup ? 'group' : 'condition'
+      }
+    });
+    
+    const style = {
+      transform: transform ? `translate3d(${transform.x}px, ${transform.y}px, 0)` : undefined,
+      transition,
+      marginLeft: level > 0 ? `${level * 20}px` : '0',
+      zIndex: isDragging ? 100 : 1,
+      position: 'relative' as 'relative',
+      opacity: isDragging ? 0.5 : 1,
+    };
+    
+    return (
+      <div
+        ref={setNodeRef}
+        style={style}
+        {...attributes}
+      >
+        {condition.isGroup ? (
+          renderConditionGroup(condition, index, level)
+        ) : (
+          renderConditionContent(condition, index, level, listeners)
+        )}
+      </div>
+    );
+  };
+  
+  // Render condition content (without the wrapper)
+  const renderConditionContent = (
+    condition: Condition, 
+    index: number, 
+    level = 0,
+    listeners?: ReturnType<typeof useSortable>['listeners']
+  ) => {
+    return (
+      <div 
+        className="grid grid-cols-12 gap-2 items-center mb-2 border border-transparent hover:border-border p-2 rounded-md"
+      >
+        {index > 0 && !condition.isGroup && condition.parentId === conditions[index-1].parentId && (
+          <div className="col-span-1">
+            <Select
+              value={condition.logicalOperator || 'AND'}
+              onValueChange={(value) => updateCondition(index, 'logicalOperator', value)}
+            >
+              <SelectTrigger className="h-8">
+                <SelectValue placeholder="AND" />
+              </SelectTrigger>
+              <SelectContent>
+                {logicalOperators.map((op) => (
                   <SelectItem key={op.value} value={op.value}>
                     {op.label}
                   </SelectItem>
@@ -566,26 +414,211 @@ function NestedConditionItem({
               </SelectContent>
             </Select>
           </div>
+        )}
+        
+        {(index === 0 || condition.parentId !== conditions[index-1].parentId) && (
+          <div className="col-span-1"></div>
+        )}
+        
+        <div className="col-span-4">
+          <Select
+            value={condition.attribute}
+            onValueChange={(value) => updateCondition(index, 'attribute', value)}
+          >
+            <SelectTrigger>
+              <SelectValue placeholder="Select attribute" />
+            </SelectTrigger>
+            <SelectContent>
+              {availableAttributes.map((attr) => (
+                <SelectItem key={attr} value={attr}>
+                  {attr}
+                </SelectItem>
+              ))}
+              <SelectItem value="custom">Custom Attribute</SelectItem>
+            </SelectContent>
+          </Select>
           
-          <div className="flex-1 min-w-40">
-            <Label htmlFor={`nested-value-${condition.id}`} className="mb-1 block text-xs">
-              Value
-            </Label>
+          {condition.attribute === 'custom' && (
             <Input
-              id={`nested-value-${condition.id}`}
-              value={condition.value || ""}
-              onChange={(e) => onUpdate({ value: e.target.value })}
-              placeholder="Value"
-              className="w-full"
-              disabled={["present", "notPresent"].includes(condition.operator)}
+              className="mt-1"
+              placeholder="Enter custom attribute"
+              value={condition.attribute === 'custom' ? '' : condition.attribute}
+              onChange={(e) => updateCondition(index, 'attribute', e.target.value)}
             />
-          </div>
-          
-          <Button variant="ghost" size="icon" onClick={onDelete} className="self-end mb-0.5">
-            <Trash className="h-4 w-4 text-destructive" />
+          )}
+        </div>
+        
+        <div className="col-span-3">
+          <Select
+            value={condition.operator}
+            onValueChange={(value) => updateCondition(index, 'operator', value)}
+          >
+            <SelectTrigger>
+              <SelectValue placeholder="Select operator" />
+            </SelectTrigger>
+            <SelectContent>
+              {operators.map((op) => (
+                <SelectItem key={op.value} value={op.value}>
+                  {op.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        
+        <div className="col-span-3">
+          {condition.operator !== 'present' && condition.operator !== 'notPresent' && (
+            <Input
+              placeholder="Value"
+              value={condition.value}
+              onChange={(e) => updateCondition(index, 'value', e.target.value)}
+            />
+          )}
+        </div>
+        
+        <div className="col-span-1 flex justify-end">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => removeCondition(index)}
+            title="Remove Condition"
+          >
+            <Trash className="h-4 w-4" />
           </Button>
         </div>
-      </CardContent>
-    </Card>
+      </div>
+    );
+  };
+
+  return (
+    <div className="space-y-4">
+      {conditions.length === 0 ? (
+        <Card>
+          <CardContent className="p-6 flex flex-col items-center justify-center">
+            <p className="text-muted-foreground mb-4">No conditions defined yet</p>
+            <div className="flex space-x-2">
+              <Button 
+                variant="outline" 
+                onClick={() => addCondition()}
+                className="flex items-center"
+              >
+                <Plus className="mr-2 h-4 w-4" />
+                Add Condition
+              </Button>
+              <Button 
+                variant="outline" 
+                onClick={() => addConditionGroup()}
+                className="flex items-center"
+              >
+                <FolderPlus className="mr-2 h-4 w-4" />
+                Add Condition Group
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      ) : (
+        <>
+          <DndContext 
+            sensors={sensors}
+            collisionDetection={closestCenter}
+            onDragEnd={handleDragEnd}
+          >
+            <SortableContext items={conditions.map(c => c.id || 0)}>
+              <div className="space-y-2">
+                {conditions.map((condition, index) => (
+                  condition.parentId === null || condition.parentId === undefined ? (
+                    condition.isGroup ? 
+                      renderConditionGroup(condition, index) : 
+                      renderCondition(condition, index)
+                  ) : null
+                ))}
+              </div>
+            </SortableContext>
+          </DndContext>
+          
+          <div className="flex space-x-2">
+            <Button 
+              variant="outline" 
+              size="sm"
+              onClick={() => addCondition()}
+              className="flex items-center"
+            >
+              <Plus className="mr-2 h-4 w-4" />
+              Add Condition
+            </Button>
+            <Button 
+              variant="outline" 
+              size="sm"
+              onClick={() => addConditionGroup()}
+              className="flex items-center"
+            >
+              <FolderPlus className="mr-2 h-4 w-4" />
+              Add Condition Group
+            </Button>
+          </div>
+          
+          <div className="mt-4 p-4 bg-muted rounded-md">
+            <Label className="text-sm font-medium mb-2 block">Generated LDAP Filter:</Label>
+            <div className="font-mono text-sm overflow-auto p-2 bg-background rounded border whitespace-pre-wrap">
+              {generateLdapFilter(conditions)}
+            </div>
+          </div>
+        </>
+      )}
+    </div>
   );
-}
+};
+
+// Function to generate LDAP filter syntax from conditions
+const generateLdapFilter = (conditions: Condition[]): string => {
+  if (conditions.length === 0) return '(objectClass=*)';
+  
+  // Helper function to generate filter for a single condition
+  const generateSingleFilter = (condition: Condition): string => {
+    if (condition.isGroup) {
+      // Get all child conditions for this group
+      const childConditions = conditions.filter(c => c.parentId === condition.id);
+      if (childConditions.length === 0) return '(objectClass=*)';
+      
+      const operator = condition.logicalOperator === 'AND' ? '&' : '|';
+      const childFilters = childConditions.map(generateSingleFilter).join('');
+      
+      return `(${operator}${childFilters})`;
+    } else {
+      // Regular condition
+      switch (condition.operator) {
+        case '=':
+          return `(${condition.attribute}=${condition.value})`;
+        case '!=':
+          return `(!(${condition.attribute}=${condition.value}))`;
+        case 'contains':
+          return `(${condition.attribute}=*${condition.value}*)`;
+        case 'startsWith':
+          return `(${condition.attribute}=${condition.value}*)`;
+        case 'endsWith':
+          return `(${condition.attribute}=*${condition.value})`;
+        case 'present':
+          return `(${condition.attribute}=*)`;
+        case 'notPresent':
+          return `(!(${condition.attribute}=*))`;
+        default:
+          return `(${condition.attribute}=${condition.value})`;
+      }
+    }
+  };
+  
+  // Handle root-level conditions
+  const rootConditions = conditions.filter(c => 
+    c.parentId === null || c.parentId === undefined
+  );
+  
+  if (rootConditions.length === 1) {
+    return generateSingleFilter(rootConditions[0]);
+  } else {
+    // When multiple root conditions, wrap in an AND by default
+    const rootFilters = rootConditions.map(generateSingleFilter).join('');
+    return `(&${rootFilters})`;
+  }
+};
+
+export default ConditionBuilder;
