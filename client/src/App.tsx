@@ -44,6 +44,7 @@ export default function App() {
               <ProtectedRoute path="/settings" component={SettingsPage} />
               <ProtectedRoute path="/user-management" component={UserManagementPage} />
               <ProtectedRoute path="/sites" component={SitesPage} />
+              <ProtectedRoute path="/reporting/dashboards" component={DashboardPage} />
               <Route>
                 <NotFound />
               </Route>

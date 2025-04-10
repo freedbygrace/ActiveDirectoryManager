@@ -31,6 +31,8 @@ import {
   Filter,
   ClipboardList,
   Building2,
+  BarChart3,
+  LineChart,
 } from "lucide-react";
 import { useMobile } from "@/hooks/use-mobile";
 import { useToast } from "@/hooks/use-toast";
@@ -58,6 +60,12 @@ const menuSections: MenuSection[] = [
       { title: "Computers", path: "/computers", icon: <Monitor className="h-4 w-4" /> },
       { title: "Domains", path: "/domains", icon: <Globe className="h-4 w-4" /> },
       { title: "Sites & Subnets", path: "/sites", icon: <Building2 className="h-4 w-4" /> },
+    ],
+  },
+  {
+    title: "Reporting",
+    items: [
+      { title: "Custom Dashboards", path: "/reporting/dashboards", icon: <BarChart3 className="h-4 w-4" /> },
     ],
   },
   {
