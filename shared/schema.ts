@@ -106,7 +106,7 @@ export const rolePermissions = pgTable("role_permissions", {
   };
 });
 
-// User schema for local authentication
+// User schema for authentication (local, LDAP, or OIDC)
 export const users = pgTable("users", {
   id: serial("id").primaryKey(),
   username: text("username").notNull().unique(),
@@ -114,6 +114,8 @@ export const users = pgTable("users", {
   email: text("email"),
   fullName: text("full_name"),
   roleId: integer("role_id").references(() => roles.id),
+  authProvider: text("auth_provider").default("local"),
+  providerUserId: text("provider_user_id"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 

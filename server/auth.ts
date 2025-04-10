@@ -3,7 +3,7 @@ import { Strategy as LocalStrategy } from "passport-local";
 import { Strategy as JwtStrategy, ExtractJwt } from "passport-jwt";
 import LdapStrategy from "passport-ldapauth";
 import { Strategy as OpenIDStrategy } from "passport-openidconnect";
-import { Express } from "express";
+import { Express, Request, Response, NextFunction } from "express";
 import session from "express-session";
 import { scrypt, randomBytes, timingSafeEqual } from "crypto";
 import { promisify } from "util";
@@ -140,7 +140,7 @@ export function setupAuth(app: Express) {
   // OpenID Connect authentication strategy
   if (process.env.OIDC_ENABLED === "true") {
     passport.use(
-      new OpenIDConnectStrategy(
+      new OpenIDStrategy(
         {
           issuer: process.env.OIDC_ISSUER,
           authorizationURL: process.env.OIDC_AUTHORIZATION_URL,
@@ -151,7 +151,7 @@ export function setupAuth(app: Express) {
           callbackURL: process.env.OIDC_CALLBACK_URL || "http://localhost:3000/api/auth/oidc/callback",
           scope: ["openid", "profile", "email"],
         },
-        async (issuer, profile, done) => {
+        async (issuer: string, profile: any, done: any) => {
           try {
             const { id, displayName, emails } = profile;
             
@@ -236,7 +236,7 @@ export function setupAuth(app: Express) {
     }
   });
 
-  // Login endpoint
+  // Login endpoint (local strategy)
   app.post("/api/login", (req, res, next) => {
     passport.authenticate("local", (err: any, user: any, info: any) => {
       if (err) return next(err);
@@ -251,6 +251,40 @@ export function setupAuth(app: Express) {
       });
     })(req, res, next);
   });
+  
+  // LDAP authentication routes
+  if (process.env.LDAP_ENABLED === "true") {
+    // LDAP login endpoint
+    app.post("/api/auth/ldap", (req, res, next) => {
+      passport.authenticate("ldapauth", (err: any, user: any, info: any) => {
+        if (err) return next(err);
+        if (!user) {
+          return res.status(401).json({ message: info?.message || "LDAP authentication failed" });
+        }
+        req.login(user, (loginErr) => {
+          if (loginErr) return next(loginErr);
+          // Remove password from response
+          const userResponse = { ...user, password: undefined };
+          res.json(userResponse);
+        });
+      })(req, res, next);
+    });
+  }
+  
+  // OpenID Connect authentication routes
+  if (process.env.OIDC_ENABLED === "true") {
+    // OIDC login initiation
+    app.get("/api/auth/oidc", passport.authenticate("openidconnect"));
+    
+    // OIDC callback
+    app.get("/api/auth/oidc/callback", 
+      passport.authenticate("openidconnect", { failureRedirect: "/auth" }),
+      (req: Request, res: Response) => {
+        // Successful authentication, redirect to the main application
+        res.redirect("/");
+      }
+    );
+  }
 
   // Logout endpoint
   app.post("/api/logout", (req, res, next) => {
