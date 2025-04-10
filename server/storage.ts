@@ -6,8 +6,11 @@ import {
   AdDomain, InsertAdDomain, AdSite, InsertAdSite, AdSubnet, InsertAdSubnet, Role, ApiQuery,
   LdapFilter, InsertLdapFilter, LdapFilterRevision, InsertLdapFilterRevision,
   LdapAttribute, InsertLdapAttribute, AuditLog, InsertAuditLog,
+  DynamicGroupRule, InsertDynamicGroupRule, DynamicGroupCondition, InsertDynamicGroupCondition,
+  ScheduleRule, InsertScheduleRule,
   users, apiTokens, ldapConnections, adUsers, adGroups, adOrgUnits, adComputers, adDomains,
-  adSites, adSubnets, roles, ldapFilters, ldapFilterRevisions, ldapAttributes, auditLogs
+  adSites, adSubnets, roles, ldapFilters, ldapFilterRevisions, ldapAttributes, auditLogs,
+  dynamicGroupRules, dynamicGroupConditions, dynamicGroupRuleConnections, scheduleRules, rolePermissions
 } from "@shared/schema";
 import session from "express-session";
 import createMemoryStore from "memorystore";
