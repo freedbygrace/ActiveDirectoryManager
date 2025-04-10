@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -29,6 +29,7 @@ import {
   Loader2
 } from "lucide-react";
 import { DashboardLayout } from "@/layouts/dashboard-layout";
+import { DashboardExport } from "@/components/dashboard/dashboard-export";
 
 interface DashboardSummary {
   userCount: number;
@@ -41,6 +42,9 @@ interface DashboardSummary {
 }
 
 export default function MainDashboardPage() {
+  // Create a ref for the dashboard content
+  const dashboardRef = useRef<HTMLDivElement>(null);
+  
   // Fetch summary data
   const { data: summary, isLoading: summaryLoading } = useQuery<DashboardSummary>({
     queryKey: ['/api/dashboard-summary'],
@@ -101,13 +105,17 @@ export default function MainDashboardPage() {
 
   return (
     <DashboardLayout title="Active Directory Dashboard" description="Overview of your Active Directory environment">
+      <div className="flex justify-end mb-4">
+        <DashboardExport dashboardRef={dashboardRef} title="Active Directory Dashboard" />
+      </div>
+      
       {isLoading ? (
         <div className="flex justify-center items-center min-h-[60vh]">
           <Loader2 className="h-8 w-8 animate-spin text-primary" />
           <span className="ml-2">Loading dashboard data...</span>
         </div>
       ) : (
-        <>
+        <div ref={dashboardRef}>
           {/* Summary Cards */}
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 mb-6">
             <Card>
@@ -270,7 +278,7 @@ export default function MainDashboardPage() {
               </div>
             </CardContent>
           </Card>
-        </>
+        </div>
       )}
     </DashboardLayout>
   );
