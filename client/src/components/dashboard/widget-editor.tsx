@@ -61,6 +61,15 @@ const widgetSchema = z.object({
     showLegend: z.boolean().default(true),
     stacked: z.boolean().default(false),
     precision: z.number().min(0).max(10).default(2),
+    // New chart options
+    colors: z.array(z.string()).optional(),
+    showGrid: z.boolean().default(true),
+    showTooltip: z.boolean().default(true),
+    enableAnimation: z.boolean().default(true),
+    valueFormatter: z.enum(["none", "number", "percent", "currency"]).default("none"),
+    currencySymbol: z.string().default("$"),
+    minValue: z.number().nullable().default(null),
+    maxValue: z.number().nullable().default(null),
   }),
 });
 
@@ -100,6 +109,15 @@ export function WidgetEditor({
         showLegend: editWidget?.config?.showLegend ?? true,
         stacked: editWidget?.config?.stacked ?? false,
         precision: editWidget?.config?.precision ?? 2,
+        // New chart options with defaults
+        colors: editWidget?.config?.colors || [],
+        showGrid: editWidget?.config?.showGrid ?? true,
+        showTooltip: editWidget?.config?.showTooltip ?? true,
+        enableAnimation: editWidget?.config?.enableAnimation ?? true,
+        valueFormatter: editWidget?.config?.valueFormatter || "none",
+        currencySymbol: editWidget?.config?.currencySymbol || "$",
+        minValue: editWidget?.config?.minValue ?? null,
+        maxValue: editWidget?.config?.maxValue ?? null,
       },
     },
   });
@@ -406,89 +424,261 @@ export function WidgetEditor({
                     <AccordionTrigger>Chart Options</AccordionTrigger>
                     <AccordionContent>
                       <div className="space-y-4">
+                        {/* Data Configuration section */}
                         {["bar", "line", "area"].includes(watchType) && (
-                          <div className="space-y-2">
-                            <FormField
-                              control={form.control}
-                              name="config.xAxis"
-                              render={({ field }) => (
-                                <FormItem>
-                                  <FormLabel>X-Axis Field</FormLabel>
-                                  <Select
-                                    value={field.value}
-                                    onValueChange={field.onChange}
-                                  >
-                                    <FormControl>
-                                      <SelectTrigger>
-                                        <SelectValue placeholder="Select X-Axis field" />
-                                      </SelectTrigger>
-                                    </FormControl>
-                                    <SelectContent>
-                                      {(form.getValues('config.dimensions') || []).map((dimension) => (
-                                        <SelectItem key={dimension} value={dimension}>
-                                          {dimension}
-                                        </SelectItem>
-                                      ))}
-                                    </SelectContent>
-                                  </Select>
-                                  <FormDescription>
-                                    Choose a dimension field for the X-Axis
-                                  </FormDescription>
-                                  <FormMessage />
-                                </FormItem>
-                              )}
-                            />
-                            
-                            <div>
-                              <FormLabel>Y-Axis Fields</FormLabel>
-                              <div className="space-y-2 mt-2">
-                                {(form.getValues('config.metrics') || []).map((metric) => (
-                                  <div key={metric} className="flex items-center space-x-2">
-                                    <Checkbox
-                                      checked={(form.getValues('config.yAxis') || []).includes(metric)}
-                                      onCheckedChange={(checked) => {
-                                        if (checked) {
-                                          toggleAsYAxis(metric);
-                                        } else {
-                                          toggleAsYAxis(metric);
-                                        }
-                                      }}
-                                      id={`y-axis-${metric}`}
-                                    />
-                                    <label
-                                      htmlFor={`y-axis-${metric}`}
-                                      className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                          <div className="space-y-4">
+                            <h3 className="text-sm font-medium">Data Configuration</h3>
+                            <div className="space-y-2 border-l-2 pl-3">
+                              <FormField
+                                control={form.control}
+                                name="config.xAxis"
+                                render={({ field }) => (
+                                  <FormItem>
+                                    <FormLabel>X-Axis Field</FormLabel>
+                                    <Select
+                                      value={field.value}
+                                      onValueChange={field.onChange}
                                     >
-                                      {metric}
-                                    </label>
-                                  </div>
-                                ))}
-                              </div>
-                              <FormDescription>
-                                Select metric fields to display on the Y-Axis
-                              </FormDescription>
-                            </div>
-                            
-                            <FormField
-                              control={form.control}
-                              name="config.stacked"
-                              render={({ field }) => (
-                                <FormItem className="flex flex-row items-center justify-between">
-                                  <div className="space-y-0.5">
-                                    <FormLabel className="text-sm">Stacked Chart</FormLabel>
+                                      <FormControl>
+                                        <SelectTrigger>
+                                          <SelectValue placeholder="Select X-Axis field" />
+                                        </SelectTrigger>
+                                      </FormControl>
+                                      <SelectContent>
+                                        {(form.getValues('config.dimensions') || []).map((dimension) => (
+                                          <SelectItem key={dimension} value={dimension}>
+                                            {dimension}
+                                          </SelectItem>
+                                        ))}
+                                      </SelectContent>
+                                    </Select>
                                     <FormDescription>
-                                      Stack the values on top of each other
+                                      Choose a dimension field for the X-Axis
                                     </FormDescription>
-                                  </div>
-                                  <FormControl>
-                                    <Switch
-                                      checked={field.value}
-                                      onCheckedChange={field.onChange}
-                                    />
-                                  </FormControl>
-                                </FormItem>
+                                    <FormMessage />
+                                  </FormItem>
+                                )}
+                              />
+                              
+                              <div>
+                                <FormLabel>Y-Axis Fields</FormLabel>
+                                <div className="space-y-2 mt-2">
+                                  {(form.getValues('config.metrics') || []).map((metric) => (
+                                    <div key={metric} className="flex items-center space-x-2">
+                                      <Checkbox
+                                        checked={(form.getValues('config.yAxis') || []).includes(metric)}
+                                        onCheckedChange={(checked) => {
+                                          if (checked) {
+                                            toggleAsYAxis(metric);
+                                          } else {
+                                            toggleAsYAxis(metric);
+                                          }
+                                        }}
+                                        id={`y-axis-${metric}`}
+                                      />
+                                      <label
+                                        htmlFor={`y-axis-${metric}`}
+                                        className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                                      >
+                                        {metric}
+                                      </label>
+                                    </div>
+                                  ))}
+                                </div>
+                                <FormDescription>
+                                  Select metric fields to display on the Y-Axis
+                                </FormDescription>
+                              </div>
+                              
+                              <FormField
+                                control={form.control}
+                                name="config.stacked"
+                                render={({ field }) => (
+                                  <FormItem className="flex flex-row items-center justify-between">
+                                    <div className="space-y-0.5">
+                                      <FormLabel className="text-sm">Stacked Chart</FormLabel>
+                                      <FormDescription>
+                                        Stack the values on top of each other
+                                      </FormDescription>
+                                    </div>
+                                    <FormControl>
+                                      <Switch
+                                        checked={field.value}
+                                        onCheckedChange={field.onChange}
+                                      />
+                                    </FormControl>
+                                  </FormItem>
+                                )}
+                              />
+                            </div>
+
+                            {/* Display Options section */}
+                            <h3 className="text-sm font-medium">Display Options</h3>
+                            <div className="space-y-4 border-l-2 pl-3">
+                              {/* Show/Hide Grid Lines */}
+                              <FormField
+                                control={form.control}
+                                name="config.showGrid"
+                                render={({ field }) => (
+                                  <FormItem className="flex flex-row items-center justify-between">
+                                    <div className="space-y-0.5">
+                                      <FormLabel className="text-sm">Show Grid Lines</FormLabel>
+                                      <FormDescription>
+                                        Display grid lines in the chart background
+                                      </FormDescription>
+                                    </div>
+                                    <FormControl>
+                                      <Switch
+                                        checked={field.value}
+                                        onCheckedChange={field.onChange}
+                                      />
+                                    </FormControl>
+                                  </FormItem>
+                                )}
+                              />
+
+                              {/* Show/Hide Tooltip */}
+                              <FormField
+                                control={form.control}
+                                name="config.showTooltip"
+                                render={({ field }) => (
+                                  <FormItem className="flex flex-row items-center justify-between">
+                                    <div className="space-y-0.5">
+                                      <FormLabel className="text-sm">Show Tooltip</FormLabel>
+                                      <FormDescription>
+                                        Display tooltip when hovering over data points
+                                      </FormDescription>
+                                    </div>
+                                    <FormControl>
+                                      <Switch
+                                        checked={field.value}
+                                        onCheckedChange={field.onChange}
+                                      />
+                                    </FormControl>
+                                  </FormItem>
+                                )}
+                              />
+
+                              {/* Enable Animation */}
+                              <FormField
+                                control={form.control}
+                                name="config.enableAnimation"
+                                render={({ field }) => (
+                                  <FormItem className="flex flex-row items-center justify-between">
+                                    <div className="space-y-0.5">
+                                      <FormLabel className="text-sm">Enable Animation</FormLabel>
+                                      <FormDescription>
+                                        Animate chart when loading data
+                                      </FormDescription>
+                                    </div>
+                                    <FormControl>
+                                      <Switch
+                                        checked={field.value}
+                                        onCheckedChange={field.onChange}
+                                      />
+                                    </FormControl>
+                                  </FormItem>
+                                )}
+                              />
+
+                              {/* Value Formatter */}
+                              <FormField
+                                control={form.control}
+                                name="config.valueFormatter"
+                                render={({ field }) => (
+                                  <FormItem>
+                                    <FormLabel>Value Format</FormLabel>
+                                    <Select
+                                      value={field.value}
+                                      onValueChange={field.onChange}
+                                    >
+                                      <FormControl>
+                                        <SelectTrigger>
+                                          <SelectValue placeholder="Select value format" />
+                                        </SelectTrigger>
+                                      </FormControl>
+                                      <SelectContent>
+                                        <SelectItem value="none">No formatting</SelectItem>
+                                        <SelectItem value="number">Number with commas</SelectItem>
+                                        <SelectItem value="percent">Percentage</SelectItem>
+                                        <SelectItem value="currency">Currency</SelectItem>
+                                      </SelectContent>
+                                    </Select>
+                                    <FormDescription>
+                                      Format for displaying values in the chart
+                                    </FormDescription>
+                                    <FormMessage />
+                                  </FormItem>
+                                )}
+                              />
+
+                              {/* Currency Symbol (only if valueFormatter is 'currency') */}
+                              {form.watch('config.valueFormatter') === 'currency' && (
+                                <FormField
+                                  control={form.control}
+                                  name="config.currencySymbol"
+                                  render={({ field }) => (
+                                    <FormItem>
+                                      <FormLabel>Currency Symbol</FormLabel>
+                                      <FormControl>
+                                        <Input placeholder="$" {...field} />
+                                      </FormControl>
+                                      <FormDescription>
+                                        Symbol to display before values (e.g., $, €, £)
+                                      </FormDescription>
+                                      <FormMessage />
+                                    </FormItem>
+                                  )}
+                                />
                               )}
-                            />
+                            </div>
+
+                            {/* Axis Limits */}
+                            <h3 className="text-sm font-medium">Axis Limits</h3>
+                            <div className="grid grid-cols-2 gap-3 border-l-2 pl-3">
+                              <FormField
+                                control={form.control}
+                                name="config.minValue"
+                                render={({ field }) => (
+                                  <FormItem>
+                                    <FormLabel>Min Value</FormLabel>
+                                    <FormControl>
+                                      <Input 
+                                        type="number" 
+                                        placeholder="Auto" 
+                                        value={field.value !== null ? field.value : ''}
+                                        onChange={(e) => field.onChange(e.target.value === '' ? null : Number(e.target.value))}
+                                      />
+                                    </FormControl>
+                                    <FormDescription>
+                                      Minimum value for Y-axis (optional)
+                                    </FormDescription>
+                                    <FormMessage />
+                                  </FormItem>
+                                )}
+                              />
+                              <FormField
+                                control={form.control}
+                                name="config.maxValue"
+                                render={({ field }) => (
+                                  <FormItem>
+                                    <FormLabel>Max Value</FormLabel>
+                                    <FormControl>
+                                      <Input 
+                                        type="number" 
+                                        placeholder="Auto" 
+                                        value={field.value !== null ? field.value : ''}
+                                        onChange={(e) => field.onChange(e.target.value === '' ? null : Number(e.target.value))}
+                                      />
+                                    </FormControl>
+                                    <FormDescription>
+                                      Maximum value for Y-axis (optional)
+                                    </FormDescription>
+                                    <FormMessage />
+                                  </FormItem>
+                                )}
+                              />
+                            </div>
                           </div>
                         )}
                         
