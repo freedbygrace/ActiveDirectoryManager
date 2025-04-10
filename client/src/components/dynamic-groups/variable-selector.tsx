@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { 
   Popover, 
   PopoverContent, 
@@ -16,10 +16,13 @@ import {
 } from "@/components/ui/command";
 import { PlusCircle, Database, Tag } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { useQuery } from '@tanstack/react-query';
+import { LdapConnection } from '@shared/schema';
 
 interface VariableSelectorProps {
   onSelectVariable: (variable: string) => void;
   connections: number[];
+  isForOU?: boolean;
 }
 
 // Common LDAP attributes that might be useful as variables
