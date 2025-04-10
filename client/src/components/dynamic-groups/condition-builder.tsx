@@ -83,6 +83,7 @@ const ConditionBuilder: React.FC<ConditionBuilderProps> = ({
   const addCondition = (parentId?: number | null) => {
     const newCondition: Condition = {
       ...defaultCondition,
+      id: Math.max(0, ...conditions.map(c => c.id || 0)) + 1, // Generate a new ID
       parentId
     };
     
@@ -105,8 +106,12 @@ const ConditionBuilder: React.FC<ConditionBuilderProps> = ({
 
   // Handle adding a new condition group
   const addConditionGroup = (parentId?: number | null) => {
+    // Generate a new ID for the group
+    const newId = Math.max(0, ...conditions.map(c => c.id || 0)) + 1;
+    
     const newGroup: Condition = {
       ...defaultGroup,
+      id: newId, // Assign the new ID
       parentId
     };
     
@@ -122,16 +127,14 @@ const ConditionBuilder: React.FC<ConditionBuilderProps> = ({
       const newConditions = [...conditions];
       newConditions.splice(insertIndex, 0, newGroup);
       onChange(newConditions);
-      
-      // Automatically expand the new group
-      if (newGroup.id) {
-        setExpandedGroups(prev => {
-          const expanded = new Set(prev);
-          expanded.add(newGroup.id!);
-          return expanded;
-        });
-      }
     }
+    
+    // Automatically expand the new group
+    setExpandedGroups(prev => {
+      const expanded = new Set(prev);
+      expanded.add(newId);
+      return expanded;
+    });
   };
 
   // Handle updating a condition
