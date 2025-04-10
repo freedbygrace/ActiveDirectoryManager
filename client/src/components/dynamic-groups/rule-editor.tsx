@@ -65,6 +65,7 @@ interface DynamicGroupRuleWithConnectionIds {
   createOUIfNotExists: boolean;
   createGroupForEachAttributeValue: boolean;
   createOUForEachAttributeValue: boolean;
+  autoAddRootDSE: boolean; // Add the new property
   connectionIds: number[];
 }
 
@@ -91,11 +92,11 @@ export const RuleEditor: React.FC<RuleEditorProps> = ({ rule, onSave, onCancel }
     description: rule?.description || '',
     targetGroupName: rule?.targetGroup ? rule?.targetGroup.split(',')[0].replace('CN=', '') : '',
     targetOU: rule?.targetGroup ? rule?.targetGroup.split(',').slice(1).join(',') : '',
-    createGroupIfNotExists: rule?.createGroupIfNotExists || false,
-    createOUIfNotExists: rule?.createOUIfNotExists || false,
+    createGroupIfNotExists: rule?.createGroupIfNotExists ?? true, // Default to true
+    createOUIfNotExists: rule?.createOUIfNotExists ?? true, // Default to true
     createGroupForEachAttributeValue: rule?.createGroupForEachAttributeValue || false,
     createOUForEachAttributeValue: rule?.createOUForEachAttributeValue || false,
-    autoAddRootDSE: true, // Default to true for better user experience
+    autoAddRootDSE: rule?.autoAddRootDSE ?? true, // Default to true
     enabled: rule?.enabled ?? true,
     variablePattern: rule?.variablePattern || '',
     connections: rule?.connectionIds || []
@@ -282,6 +283,7 @@ export const RuleEditor: React.FC<RuleEditorProps> = ({ rule, onSave, onCancel }
       createOUIfNotExists: formData.createOUIfNotExists,
       createGroupForEachAttributeValue: formData.createGroupForEachAttributeValue,
       createOUForEachAttributeValue: formData.createOUForEachAttributeValue,
+      autoAddRootDSE: formData.autoAddRootDSE, // Add the new property
       schedule: rule?.schedule || "0 0 * * *", // Default: daily at midnight
       useAdvancedScheduling: rule?.useAdvancedScheduling || false
     };
@@ -302,7 +304,8 @@ export const RuleEditor: React.FC<RuleEditorProps> = ({ rule, onSave, onCancel }
           createGroupIfNotExists: formData.createGroupIfNotExists,
           createOUIfNotExists: formData.createOUIfNotExists,
           createGroupForEachAttributeValue: formData.createGroupForEachAttributeValue,
-          createOUForEachAttributeValue: formData.createOUForEachAttributeValue
+          createOUForEachAttributeValue: formData.createOUForEachAttributeValue,
+          autoAddRootDSE: formData.autoAddRootDSE
         },
         conditions
       });
