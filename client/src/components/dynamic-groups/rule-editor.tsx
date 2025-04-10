@@ -47,9 +47,25 @@ interface RuleEditorProps {
   onCancel: () => void;
 }
 
-// Extend the DynamicGroupRule type to include connectionIds for frontend use
-interface ExtendedDynamicGroupRule extends DynamicGroupRule {
-  connectionIds?: number[];
+// Define a custom type matching what the onSave function expects
+interface DynamicGroupRuleWithConnectionIds {
+  id: number;
+  name: string;
+  description: string | null;
+  targetGroup: string;
+  enabled: boolean;
+  schedule: string;
+  createdAt: Date;
+  updatedAt: Date;
+  lastRun: Date | null;
+  lastRunStatus: string | null;
+  variablePattern: string | null;
+  useAdvancedScheduling: boolean;
+  createGroupIfNotExists: boolean;
+  createOUIfNotExists: boolean;
+  createGroupForEachAttributeValue: boolean;
+  createOUForEachAttributeValue: boolean;
+  connectionIds: number[];
 }
 
 export const RuleEditor: React.FC<RuleEditorProps> = ({ rule, onSave, onCancel }) => {
@@ -237,7 +253,7 @@ export const RuleEditor: React.FC<RuleEditorProps> = ({ rule, onSave, onCancel }
 
     const targetGroupDN = getTargetGroupDN();
     
-    const ruleData: ExtendedDynamicGroupRule = {
+    const ruleData: DynamicGroupRuleWithConnectionIds = {
       id: rule?.id || 0, // Default to 0 for new records
       name: formData.name,
       description: formData.description || null,
@@ -252,7 +268,9 @@ export const RuleEditor: React.FC<RuleEditorProps> = ({ rule, onSave, onCancel }
       createGroupIfNotExists: formData.createGroupIfNotExists,
       createOUIfNotExists: formData.createOUIfNotExists,
       createGroupForEachAttributeValue: formData.createGroupForEachAttributeValue,
-      createOUForEachAttributeValue: formData.createOUForEachAttributeValue
+      createOUForEachAttributeValue: formData.createOUForEachAttributeValue,
+      schedule: rule?.schedule || "0 0 * * *", // Default: daily at midnight
+      useAdvancedScheduling: rule?.useAdvancedScheduling || false
     };
 
     onSave(ruleData, schedules);
