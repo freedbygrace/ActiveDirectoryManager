@@ -186,7 +186,13 @@ export const RuleEditor: React.FC<RuleEditorProps> = ({ rule, onSave, onCancel }
     
     // Ensure targetOU has rootDSE
     const fullOU = ensureRootDSE(formData.targetOU);
-    return `CN=${formData.targetGroupName},${fullOU}`;
+    
+    // Check if the group name already has CN= prefix
+    const groupName = formData.targetGroupName.startsWith('CN=') 
+      ? formData.targetGroupName 
+      : `CN=${formData.targetGroupName}`;
+      
+    return `${groupName},${fullOU}`;
   };
 
   // Handle form submission
@@ -472,15 +478,14 @@ export const RuleEditor: React.FC<RuleEditorProps> = ({ rule, onSave, onCancel }
                 <div className="space-y-2">
                   <Label htmlFor="targetGroupName">Group Name <span className="text-destructive">*</span></Label>
                   <div className="flex gap-2">
-                    <span className="py-2 px-3 bg-muted text-muted-foreground rounded-l-md border">CN=</span>
                     <div className="relative flex-1">
                       <Input 
                         id="targetGroupName" 
                         name="targetGroupName" 
                         value={formData.targetGroupName} 
                         onChange={handleInputChange}
-                        className="rounded-l-none pr-24"
-                        placeholder="GroupName" 
+                        className="pr-24"
+                        placeholder="GroupName (CN= prefix will be added automatically)" 
                       />
                       <div className="absolute right-1 top-1">
                         <VariableSelector 
