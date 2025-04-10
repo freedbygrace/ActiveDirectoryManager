@@ -1,397 +1,547 @@
-import React, { useState, useEffect } from "react";
-import { useQuery, useMutation } from "@tanstack/react-query";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Separator } from "@/components/ui/separator";
-import { Switch } from "@/components/ui/switch";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Textarea } from "@/components/ui/textarea";
-import { useToast } from "@/hooks/use-toast";
-import { queryClient, apiRequest } from "@/lib/queryClient";
-import { Loader2, Plus, Save, Trash, Code, Filter } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { Checkbox } from "@/components/ui/checkbox";
-import { useForm, Controller } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { z } from "zod";
-import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
-import ConditionBuilder from "./condition-builder";
+import React, { useState, useEffect } from 'react';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Textarea } from '@/components/ui/textarea';
+import { Switch } from '@/components/ui/switch';
+import { Badge } from '@/components/ui/badge';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { Separator } from '@/components/ui/separator';
+import { 
+  Info, 
+  Clock, 
+  Settings, 
+  ListFilter, 
+  EyeIcon, 
+  CalendarDays,
+  RefreshCw,
+  AlertTriangle 
+} from 'lucide-react';
 
-// Define the schema for rule form
-const ruleFormSchema = z.object({
-  name: z.string().min(1, "Name is required"),
-  description: z.string().optional(),
-  targetGroup: z.string().min(1, "Target group is required"),
-  enabled: z.boolean().default(true),
-  schedule: z.string().min(1, "Schedule is required"),
-  variablePattern: z.string().optional(),
-  connectionIds: z.array(z.number()).min(1, "At least one connection is required"),
-});
+import { DynamicGroupRule, LdapConnection } from '@shared/schema';
+import CronJobBuilder, { ScheduleItem } from './cron-job-builder';
+import ConditionBuilder from './condition-builder';
+import { useToast } from '@/hooks/use-toast';
+import { queryClient, apiRequest } from '@/lib/queryClient';
+import { useMutation, useQuery } from '@tanstack/react-query';
 
-type RuleFormValues = z.infer<typeof ruleFormSchema>;
-
-interface Condition {
-  id: number;
-  type: "condition" | "group";
-  parentId: number | null;
-  operator: string;
-  attribute?: string;
-  value?: string;
-  position: number;
-  children?: Condition[];
-}
-
-interface Connection {
-  id: number;
-  name: string;
-  server: string;
-}
-
-interface DynamicGroupRule {
+export interface Condition {
   id?: number;
-  name: string;
-  description: string | null;
-  targetGroup: string;
-  enabled: boolean;
-  schedule: string;
-  variablePattern: string | null;
-  connectionIds: number[];
-  conditions: Condition[];
+  ruleId?: number;
+  parentId?: number | null;
+  attribute: string;
+  operator: string;
+  value: string;
+  logicalOperator?: string | null;
+  isGroup?: boolean;
 }
 
 interface RuleEditorProps {
-  ruleId?: number;
-  onSuccess?: () => void;
-  onCancel?: () => void;
+  rule?: DynamicGroupRule;
+  onSave: (rule: DynamicGroupRule, schedules: ScheduleItem[]) => void;
+  onCancel: () => void;
 }
 
-export default function RuleEditor({ ruleId, onSuccess, onCancel }: RuleEditorProps) {
+export const RuleEditor: React.FC<RuleEditorProps> = ({ rule, onSave, onCancel }) => {
   const { toast } = useToast();
+  const [activeTab, setActiveTab] = useState('general');
   const [conditions, setConditions] = useState<Condition[]>([]);
-  const [activeTab, setActiveTab] = useState("general");
-  const isEditMode = !!ruleId;
-
-  // Fetch connections for dropdown
-  const { data: connections, isLoading: isLoadingConnections } = useQuery({
-    queryKey: ["/api/ldap-connections"],
-    retry: false,
+  const [schedules, setSchedules] = useState<ScheduleItem[]>([]);
+  const [formData, setFormData] = useState({
+    name: rule?.name || '',
+    description: rule?.description || '',
+    targetGroup: rule?.targetGroup || '',
+    enabled: rule?.enabled ?? true,
+    variablePattern: rule?.variablePattern || '',
+    connections: rule?.connectionIds || []
+  });
+  
+  // Load LDAP connections
+  const { data: ldapConnections = [] } = useQuery<LdapConnection[]>({
+    queryKey: ['/api/ldap-connections'],
+    staleTime: 60000,
   });
 
-  // Fetch rule data if editing
-  const { data: ruleData, isLoading: isLoadingRule } = useQuery({
-    queryKey: ["/api/dynamic-group-rules", ruleId],
-    enabled: !!ruleId,
-    retry: false,
+  // Load conditions for the rule if editing
+  const { data: conditionsData } = useQuery<Condition[]>({
+    queryKey: ['/api/dynamic-group-rules', rule?.id, 'conditions'],
+    enabled: !!rule?.id,
+    staleTime: 60000,
   });
 
-  // Form setup
-  const form = useForm<RuleFormValues>({
-    resolver: zodResolver(ruleFormSchema),
-    defaultValues: {
-      name: "",
-      description: "",
-      targetGroup: "",
-      enabled: true,
-      schedule: "0 0 * * *", // Daily at midnight
-      variablePattern: "",
-      connectionIds: [],
-    },
+  // Load schedules for the rule if editing
+  const { data: schedulesData } = useQuery<ScheduleItem[]>({
+    queryKey: ['/api/dynamic-group-rules', rule?.id, 'schedules'],
+    enabled: !!rule?.id,
+    staleTime: 60000,
   });
 
-  // Update form when rule data is loaded
+  // Initialize conditions and schedules when data loads
   useEffect(() => {
-    if (ruleData) {
-      form.reset({
-        name: ruleData.name,
-        description: ruleData.description || "",
-        targetGroup: ruleData.targetGroup,
-        enabled: ruleData.enabled,
-        schedule: ruleData.schedule,
-        variablePattern: ruleData.variablePattern || "",
-        connectionIds: ruleData.connections.map((c: any) => c.id),
-      });
-      setConditions(ruleData.conditions || []);
+    if (conditionsData) {
+      setConditions(conditionsData);
     }
-  }, [ruleData, form]);
+  }, [conditionsData]);
 
-  // Create/Update rule mutation
-  const saveMutation = useMutation({
-    mutationFn: async (data: DynamicGroupRule) => {
-      const url = isEditMode 
-        ? `/api/dynamic-group-rules/${ruleId}` 
-        : `/api/dynamic-group-rules`;
-      const method = isEditMode ? "PUT" : "POST";
-      const response = await apiRequest(method, url, data);
-      return response.json();
-    },
-    onSuccess: () => {
+  useEffect(() => {
+    if (schedulesData) {
+      setSchedules(schedulesData);
+    }
+  }, [schedulesData]);
+
+  // Handle form input changes
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    const { name, value } = e.target;
+    setFormData(prev => ({ ...prev, [name]: value }));
+  };
+
+  // Handle toggle changes
+  const handleToggleChange = (field: string, value: boolean) => {
+    setFormData(prev => ({ ...prev, [field]: value }));
+  };
+
+  // Handle connection selection
+  const handleConnectionChange = (connectionIds: number[]) => {
+    setFormData(prev => ({ ...prev, connections: connectionIds }));
+  };
+
+  // Handle form submission
+  const handleSubmit = () => {
+    if (!formData.name) {
       toast({
-        title: "Success",
-        description: `Rule ${isEditMode ? "updated" : "created"} successfully`,
-        variant: "default",
+        title: "Missing Information",
+        description: "Please provide a name for the rule",
+        variant: "destructive"
       });
-      queryClient.invalidateQueries({ queryKey: ["/api/dynamic-group-rules"] });
-      if (onSuccess) onSuccess();
+      setActiveTab('general');
+      return;
+    }
+
+    if (!formData.targetGroup) {
+      toast({
+        title: "Missing Information",
+        description: "Please specify a target AD group",
+        variant: "destructive"
+      });
+      setActiveTab('general');
+      return;
+    }
+
+    if (formData.connections.length === 0) {
+      toast({
+        title: "Missing Information",
+        description: "Please select at least one LDAP connection",
+        variant: "destructive"
+      });
+      setActiveTab('general');
+      return;
+    }
+
+    if (conditions.length === 0) {
+      toast({
+        title: "Missing Information",
+        description: "Please define at least one condition",
+        variant: "destructive"
+      });
+      setActiveTab('conditions');
+      return;
+    }
+
+    if (schedules.length === 0) {
+      toast({
+        title: "Missing Information", 
+        description: "Please define at least one schedule",
+        variant: "destructive"
+      });
+      setActiveTab('schedules');
+      return;
+    }
+
+    const ruleData: DynamicGroupRule = {
+      id: rule?.id,
+      name: formData.name,
+      description: formData.description || null,
+      targetGroup: formData.targetGroup,
+      enabled: formData.enabled,
+      createdAt: rule?.createdAt || new Date(),
+      updatedAt: new Date(),
+      lastRun: rule?.lastRun || null,
+      lastRunStatus: rule?.lastRunStatus || null,
+      variablePattern: formData.variablePattern || null,
+      connectionIds: formData.connections
+    };
+
+    onSave(ruleData, schedules);
+  };
+
+  // Test the rule
+  const testRuleMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest('POST', '/api/dynamic-group-rules/test', {
+        rule: {
+          name: formData.name,
+          targetGroup: formData.targetGroup,
+          connectionIds: formData.connections,
+          variablePattern: formData.variablePattern || null
+        },
+        conditions
+      });
+      return await res.json();
+    },
+    onSuccess: (data) => {
+      toast({
+        title: "Test Results",
+        description: `The rule would match ${data.matchCount} objects`,
+      });
     },
     onError: (error: Error) => {
       toast({
-        title: "Error",
-        description: `Failed to ${isEditMode ? "update" : "create"} rule: ${error.message}`,
-        variant: "destructive",
+        title: "Test Failed",
+        description: error.message,
+        variant: "destructive"
       });
-    },
+    }
   });
 
-  // Handle form submission
-  const onSubmit = (values: RuleFormValues) => {
-    const ruleData: DynamicGroupRule = {
-      ...values,
-      conditions,
-    };
-    saveMutation.mutate(ruleData);
-  };
+  const handleTest = () => {
+    if (formData.connections.length === 0) {
+      toast({
+        title: "Missing Information",
+        description: "Please select at least one LDAP connection to test",
+        variant: "destructive"
+      });
+      return;
+    }
 
-  // Update conditions handler
-  const handleConditionsUpdate = (updatedConditions: Condition[]) => {
-    setConditions(updatedConditions);
-  };
+    if (conditions.length === 0) {
+      toast({
+        title: "Missing Information",
+        description: "Please define at least one condition to test",
+        variant: "destructive"
+      });
+      return;
+    }
 
-  // Loading state
-  const isLoading = isLoadingConnections || (isEditMode && isLoadingRule);
+    testRuleMutation.mutate();
+  };
 
   return (
     <div className="space-y-6">
-      <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="grid w-full grid-cols-3">
-          <TabsTrigger value="general">General</TabsTrigger>
-          <TabsTrigger value="conditions">Conditions</TabsTrigger>
-          <TabsTrigger value="preview">Preview</TabsTrigger>
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+        <TabsList className="grid grid-cols-4 md:w-[500px] mb-8">
+          <TabsTrigger value="general" className="flex items-center gap-2">
+            <Settings className="h-4 w-4" />
+            <span className="hidden sm:inline">General</span>
+          </TabsTrigger>
+          <TabsTrigger value="conditions" className="flex items-center gap-2">
+            <ListFilter className="h-4 w-4" />
+            <span className="hidden sm:inline">Conditions</span>
+          </TabsTrigger>
+          <TabsTrigger value="schedules" className="flex items-center gap-2">
+            <CalendarDays className="h-4 w-4" />
+            <span className="hidden sm:inline">Schedules</span>
+          </TabsTrigger>
+          <TabsTrigger value="preview" className="flex items-center gap-2">
+            <EyeIcon className="h-4 w-4" />
+            <span className="hidden sm:inline">Preview</span>
+          </TabsTrigger>
         </TabsList>
-        
-        <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)}>
-            <TabsContent value="general" className="space-y-4 mt-4">
-              {isLoading ? (
-                <div className="flex items-center justify-center py-10">
-                  <Loader2 className="h-8 w-8 animate-spin text-primary" />
-                </div>
-              ) : (
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Rule Configuration</CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    {/* Basic rule information */}
-                    <FormField
-                      control={form.control}
-                      name="name"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Rule Name</FormLabel>
-                          <FormControl>
-                            <Input placeholder="Enter rule name" {...field} />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    
-                    <FormField
-                      control={form.control}
-                      name="description"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Description</FormLabel>
-                          <FormControl>
-                            <Textarea 
-                              placeholder="Optional description of what this rule does" 
-                              {...field} 
-                              value={field.value || ""}
-                            />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    
-                    <FormField
-                      control={form.control}
-                      name="targetGroup"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Target Group (DN)</FormLabel>
-                          <FormControl>
-                            <Input 
-                              placeholder="Distinguished Name of the target group" 
-                              {...field} 
-                            />
-                          </FormControl>
-                          <FormDescription>
-                            Members matching the conditions will be added to this group
-                          </FormDescription>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    
-                    <FormField
-                      control={form.control}
-                      name="connectionIds"
-                      render={() => (
-                        <FormItem>
-                          <FormLabel>LDAP Connections</FormLabel>
-                          <div className="space-y-2">
-                            {connections && connections.map((connection: Connection) => (
-                              <div key={connection.id} className="flex items-center space-x-2">
-                                <Controller
-                                  control={form.control}
-                                  name="connectionIds"
-                                  render={({ field }) => (
-                                    <Checkbox
-                                      id={`connection-${connection.id}`}
-                                      checked={field.value?.includes(connection.id)}
-                                      onCheckedChange={(checked) => {
-                                        if (checked) {
-                                          const newValue = [...(field.value || []), connection.id];
-                                          field.onChange(newValue);
-                                        } else {
-                                          const newValue = field.value?.filter((id) => id !== connection.id);
-                                          field.onChange(newValue);
-                                        }
-                                      }}
-                                    />
-                                  )}
-                                />
-                                <Label htmlFor={`connection-${connection.id}`}>
-                                  {connection.name} <span className="text-muted-foreground">({connection.server})</span>
-                                </Label>
-                              </div>
-                            ))}
-                          </div>
-                          <FormDescription>
-                            Select the LDAP connections this rule should apply to
-                          </FormDescription>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    
-                    <Separator />
-                    
-                    <FormField
-                      control={form.control}
-                      name="schedule"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Schedule (Cron Format)</FormLabel>
-                          <FormControl>
-                            <Input {...field} />
-                          </FormControl>
-                          <FormDescription>
-                            When to run this rule (e.g., "0 0 * * *" for daily at midnight)
-                          </FormDescription>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    
-                    <FormField
-                      control={form.control}
-                      name="variablePattern"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Variable Pattern (Optional)</FormLabel>
-                          <FormControl>
-                            <Input 
-                              placeholder="{{department}}-Users" 
-                              {...field} 
-                              value={field.value || ""}
-                            />
-                          </FormControl>
-                          <FormDescription>
-                            Pattern for dynamic group naming with variable substitution
-                          </FormDescription>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    
-                    <FormField
-                      control={form.control}
-                      name="enabled"
-                      render={({ field }) => (
-                        <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
-                          <div className="space-y-0.5">
-                            <FormLabel className="text-base">
-                              Enabled
-                            </FormLabel>
-                            <FormDescription>
-                              Enable or disable this rule from running
-                            </FormDescription>
-                          </div>
-                          <FormControl>
-                            <Switch
-                              checked={field.value}
-                              onCheckedChange={field.onChange}
-                            />
-                          </FormControl>
-                        </FormItem>
-                      )}
-                    />
-                  </CardContent>
-                </Card>
-              )}
-            </TabsContent>
-            
-            <TabsContent value="conditions" className="space-y-4 mt-4">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Rule Conditions</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <ConditionBuilder 
-                    conditions={conditions}
-                    onChange={handleConditionsUpdate}
-                    connections={connections || []}
+
+        {/* General Settings Tab */}
+        <TabsContent value="general" className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-xl">Rule Settings</CardTitle>
+              <CardDescription>Configure the basic settings for your dynamic group rule</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="space-y-2">
+                  <Label htmlFor="name">Rule Name <span className="text-destructive">*</span></Label>
+                  <Input 
+                    id="name" 
+                    name="name" 
+                    value={formData.name} 
+                    onChange={handleInputChange} 
+                    placeholder="Enter rule name" 
                   />
-                </CardContent>
-              </Card>
-            </TabsContent>
-            
-            <TabsContent value="preview" className="space-y-4 mt-4">
-              <Card>
-                <CardHeader>
-                  <CardTitle>LDAP Filter Preview</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="bg-muted rounded-md p-4 font-mono text-sm overflow-x-auto">
-                    {/* This would show the actual LDAP filter generated from the conditions */}
-                    {conditions.length ? (
-                      <pre>(&(objectClass=user)(memberOf=CN=Domain Users,CN=Users,DC=example,DC=com))</pre>
+                </div>
+                
+                <div className="space-y-2">
+                  <Label htmlFor="targetGroup">Target AD Group <span className="text-destructive">*</span></Label>
+                  <Input 
+                    id="targetGroup" 
+                    name="targetGroup" 
+                    value={formData.targetGroup} 
+                    onChange={handleInputChange} 
+                    placeholder="Enter target AD group DN" 
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Full DN of the group to update (e.g., CN=Marketing,OU=Groups,DC=example,DC=com)
+                  </p>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="description">Description</Label>
+                <Textarea 
+                  id="description" 
+                  name="description" 
+                  value={formData.description} 
+                  onChange={handleInputChange} 
+                  placeholder="Enter rule description" 
+                  rows={3} 
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label>LDAP Connections <span className="text-destructive">*</span></Label>
+                <div className="border rounded-md p-4 space-y-2">
+                  {ldapConnections.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">No LDAP connections available. Please create one first.</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {ldapConnections.map((connection) => (
+                        <div key={connection.id} className="flex items-center space-x-2">
+                          <Switch 
+                            id={`connection-${connection.id}`}
+                            checked={formData.connections.includes(connection.id)}
+                            onCheckedChange={(checked) => {
+                              if (checked) {
+                                handleConnectionChange([...formData.connections, connection.id]);
+                              } else {
+                                handleConnectionChange(formData.connections.filter(id => id !== connection.id));
+                              }
+                            }}
+                          />
+                          <Label htmlFor={`connection-${connection.id}`}>
+                            {connection.name} ({connection.server})
+                          </Label>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Select one or more LDAP connections to search for objects
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="variablePattern">Variable Pattern</Label>
+                <Input 
+                  id="variablePattern" 
+                  name="variablePattern" 
+                  value={formData.variablePattern} 
+                  onChange={handleInputChange} 
+                  placeholder="e.g., {attribute} Value" 
+                />
+                <p className="text-xs text-muted-foreground">
+                  Optional pattern for generating variable values in name or description. 
+                  Use {attribute} to insert attribute values.
+                </p>
+              </div>
+
+              <div className="flex items-center space-x-2">
+                <Switch 
+                  id="enabled"
+                  checked={formData.enabled}
+                  onCheckedChange={(checked) => handleToggleChange('enabled', checked)}
+                />
+                <Label htmlFor="enabled">Enable Rule</Label>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Conditions Tab */}
+        <TabsContent value="conditions" className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-xl">Rule Conditions</CardTitle>
+              <CardDescription>
+                Define the conditions that determine which objects will be included in the dynamic group
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <ConditionBuilder 
+                conditions={conditions} 
+                onChange={setConditions}
+                connections={formData.connections}
+              />
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Schedules Tab */}
+        <TabsContent value="schedules" className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-xl">Rule Schedules</CardTitle>
+              <CardDescription>
+                Configure when this rule should run to update the dynamic group membership
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <CronJobBuilder 
+                schedules={schedules}
+                onSchedulesChange={setSchedules}
+                ruleId={rule?.id}
+              />
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Preview Tab */}
+        <TabsContent value="preview" className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-xl">Rule Preview</CardTitle>
+              <CardDescription>
+                Review your dynamic group rule configuration before saving
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="space-y-4">
+                  <div>
+                    <h3 className="text-sm font-medium">General Information</h3>
+                    <Separator className="my-2" />
+                    <dl className="space-y-2">
+                      <div className="flex justify-between">
+                        <dt className="text-sm font-medium text-muted-foreground">Name:</dt>
+                        <dd className="text-sm">{formData.name || 'Not set'}</dd>
+                      </div>
+                      <div className="flex justify-between">
+                        <dt className="text-sm font-medium text-muted-foreground">Target Group:</dt>
+                        <dd className="text-sm max-w-[250px] truncate" title={formData.targetGroup}>
+                          {formData.targetGroup || 'Not set'}
+                        </dd>
+                      </div>
+                      <div className="flex justify-between">
+                        <dt className="text-sm font-medium text-muted-foreground">Status:</dt>
+                        <dd className="text-sm">
+                          {formData.enabled ? (
+                            <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
+                              Enabled
+                            </Badge>
+                          ) : (
+                            <Badge variant="outline" className="bg-yellow-50 text-yellow-700 border-yellow-200">
+                              Disabled
+                            </Badge>
+                          )}
+                        </dd>
+                      </div>
+                      <div className="flex justify-between">
+                        <dt className="text-sm font-medium text-muted-foreground">Connections:</dt>
+                        <dd className="text-sm">
+                          {formData.connections.length === 0 ? (
+                            <span className="text-destructive">None selected</span>
+                          ) : (
+                            <span>{formData.connections.length} connection(s)</span>
+                          )}
+                        </dd>
+                      </div>
+                      <div className="flex justify-between">
+                        <dt className="text-sm font-medium text-muted-foreground">Variable Pattern:</dt>
+                        <dd className="text-sm">{formData.variablePattern || 'None'}</dd>
+                      </div>
+                    </dl>
+                  </div>
+
+                  <div>
+                    <h3 className="text-sm font-medium">Schedules</h3>
+                    <Separator className="my-2" />
+                    {schedules.length === 0 ? (
+                      <p className="text-sm text-destructive">No schedules defined</p>
                     ) : (
-                      <p className="text-muted-foreground">No conditions defined yet. Add conditions to see the preview.</p>
+                      <ul className="space-y-2">
+                        {schedules.map((schedule, index) => (
+                          <li key={index} className="text-sm flex items-center space-x-2">
+                            <Clock className="h-3 w-3 text-muted-foreground" />
+                            <span>
+                              {schedule.name}: {schedule.description}
+                              {!schedule.enabled && (
+                                <Badge variant="outline" className="ml-2 text-xs">Disabled</Badge>
+                              )}
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
                     )}
                   </div>
-                </CardContent>
-              </Card>
-            </TabsContent>
-            
-            <div className="flex justify-end space-x-2 mt-6">
-              <Button variant="outline" type="button" onClick={onCancel}>
-                Cancel
-              </Button>
-              <Button type="submit" disabled={saveMutation.isPending}>
-                {saveMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                {isEditMode ? "Update Rule" : "Create Rule"}
-              </Button>
-            </div>
-          </form>
-        </Form>
+                </div>
+
+                <div className="space-y-4">
+                  <div>
+                    <h3 className="text-sm font-medium">Conditions</h3>
+                    <Separator className="my-2" />
+                    {conditions.length === 0 ? (
+                      <p className="text-sm text-destructive">No conditions defined</p>
+                    ) : (
+                      <div className="border rounded-md p-3 bg-muted/50">
+                        <p className="text-sm font-mono overflow-auto whitespace-pre-wrap">
+                          {/* Simplified visualization - in a real implementation, you'd want to render the actual LDAP filter */}
+                          {`(& ${conditions.map((c) => 
+                            c.isGroup 
+                              ? `(${c.logicalOperator === 'AND' ? '&' : '|'} ...)`
+                              : `(${c.attribute} ${c.operator} ${c.value})`
+                          ).join(' ')})`}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+
+                  <div>
+                    <h3 className="text-sm font-medium">Description</h3>
+                    <Separator className="my-2" />
+                    <p className="text-sm">{formData.description || 'No description provided'}</p>
+                  </div>
+
+                  <div className="pt-4">
+                    <Button
+                      variant="outline"
+                      className="w-full"
+                      onClick={handleTest}
+                      disabled={
+                        testRuleMutation.isPending || 
+                        conditions.length === 0 || 
+                        formData.connections.length === 0
+                      }
+                    >
+                      {testRuleMutation.isPending ? (
+                        <>
+                          <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                          Testing...
+                        </>
+                      ) : (
+                        <>
+                          <RefreshCw className="mr-2 h-4 w-4" />
+                          Test Rule
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
       </Tabs>
+
+      <div className="flex justify-end space-x-2">
+        <Button variant="outline" onClick={onCancel}>
+          Cancel
+        </Button>
+        <Button onClick={handleSubmit}>
+          {rule ? 'Update Rule' : 'Create Rule'}
+        </Button>
+      </div>
     </div>
   );
-}
+};
+
+export default RuleEditor;
