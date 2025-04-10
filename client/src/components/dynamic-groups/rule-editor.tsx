@@ -211,7 +211,8 @@ export const RuleEditor: React.FC<RuleEditorProps> = ({ rule, onSave, onCancel }
       connectionIds: formData.connections,
       createGroupIfNotExists: formData.createGroupIfNotExists,
       createOUIfNotExists: formData.createOUIfNotExists,
-      createGroupForEachAttributeValue: formData.createGroupForEachAttributeValue
+      createGroupForEachAttributeValue: formData.createGroupForEachAttributeValue,
+      createOUForEachAttributeValue: formData.createOUForEachAttributeValue
     };
 
     onSave(ruleData, schedules);
@@ -229,7 +230,8 @@ export const RuleEditor: React.FC<RuleEditorProps> = ({ rule, onSave, onCancel }
           variablePattern: formData.variablePattern || null,
           createGroupIfNotExists: formData.createGroupIfNotExists,
           createOUIfNotExists: formData.createOUIfNotExists,
-          createGroupForEachAttributeValue: formData.createGroupForEachAttributeValue
+          createGroupForEachAttributeValue: formData.createGroupForEachAttributeValue,
+          createOUForEachAttributeValue: formData.createOUForEachAttributeValue
         },
         conditions
       });
