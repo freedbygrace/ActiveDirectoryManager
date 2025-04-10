@@ -24,6 +24,7 @@ import {
 import { DynamicGroupRule, LdapConnection } from '@shared/schema';
 import CronJobBuilder, { ScheduleItem } from './cron-job-builder';
 import ConditionBuilder from './condition-builder';
+import VariableSelector from './variable-selector';
 import { useToast } from '@/hooks/use-toast';
 import { queryClient, apiRequest } from '@/lib/queryClient';
 import { useMutation, useQuery } from '@tanstack/react-query';
@@ -349,17 +350,30 @@ export const RuleEditor: React.FC<RuleEditorProps> = ({ rule, onSave, onCancel }
                   <Label htmlFor="targetGroupName">Group Name <span className="text-destructive">*</span></Label>
                   <div className="flex gap-2">
                     <span className="py-2 px-3 bg-muted text-muted-foreground rounded-l-md border">CN=</span>
-                    <Input 
-                      id="targetGroupName" 
-                      name="targetGroupName" 
-                      value={formData.targetGroupName} 
-                      onChange={handleInputChange}
-                      className="rounded-l-none flex-1"
-                      placeholder="GroupName" 
-                    />
+                    <div className="relative flex-1">
+                      <Input 
+                        id="targetGroupName" 
+                        name="targetGroupName" 
+                        value={formData.targetGroupName} 
+                        onChange={handleInputChange}
+                        className="rounded-l-none pr-24"
+                        placeholder="GroupName" 
+                      />
+                      <div className="absolute right-1 top-1">
+                        <VariableSelector 
+                          onSelectVariable={(variable) => {
+                            const variableText = `{${variable}}`;
+                            const currentValue = formData.targetGroupName || '';
+                            const newValue = currentValue + variableText;
+                            setFormData({ ...formData, targetGroupName: newValue });
+                          }}
+                          connections={formData.connections}
+                        />
+                      </div>
+                    </div>
                   </div>
                   <p className="text-xs text-muted-foreground">
-                    Name of the group (can include variables)
+                    Name of the group (can include variables like {'{attributeName}'})
                   </p>
                 </div>
                 
@@ -385,51 +399,6 @@ export const RuleEditor: React.FC<RuleEditorProps> = ({ rule, onSave, onCancel }
                   onCheckedChange={(checked) => handleToggleChange('createGroupIfNotExists', checked)}
                 />
                 <Label htmlFor="createGroupIfNotExists">Create group if it doesn't exist</Label>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="description">Description</Label>
-                <Textarea 
-                  id="description" 
-                  name="description" 
-                  value={formData.description} 
-                  onChange={handleInputChange} 
-                  placeholder="Enter rule description" 
-                  rows={3} 
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label>LDAP Connections <span className="text-destructive">*</span></Label>
-                <div className="border rounded-md p-4 space-y-2">
-                  {ldapConnections.length === 0 ? (
-                    <p className="text-sm text-muted-foreground">No LDAP connections available. Please create one first.</p>
-                  ) : (
-                    <div className="space-y-2">
-                      {ldapConnections.map((connection) => (
-                        <div key={connection.id} className="flex items-center space-x-2">
-                          <Switch 
-                            id={`connection-${connection.id}`}
-                            checked={formData.connections.includes(connection.id)}
-                            onCheckedChange={(checked) => {
-                              if (checked) {
-                                handleConnectionChange([...formData.connections, connection.id]);
-                              } else {
-                                handleConnectionChange(formData.connections.filter(id => id !== connection.id));
-                              }
-                            }}
-                          />
-                          <Label htmlFor={`connection-${connection.id}`}>
-                            {connection.name} ({connection.server})
-                          </Label>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  Select one or more LDAP connections to search for objects
-                </p>
               </div>
 
               <div className="space-y-2">
@@ -519,8 +488,14 @@ export const RuleEditor: React.FC<RuleEditorProps> = ({ rule, onSave, onCancel }
                       </div>
                       <div className="flex justify-between">
                         <dt className="text-sm font-medium text-muted-foreground">Target Group:</dt>
-                        <dd className="text-sm max-w-[250px] truncate" title={formData.targetGroup}>
-                          {formData.targetGroup || 'Not set'}
+                        <dd className="text-sm max-w-[250px] truncate" title={getTargetGroupDN()}>
+                          {getTargetGroupDN() || 'Not set'}
+                        </dd>
+                      </div>
+                      <div className="flex justify-between">
+                        <dt className="text-sm font-medium text-muted-foreground">Create if not exists:</dt>
+                        <dd className="text-sm">
+                          {formData.createGroupIfNotExists ? 'Yes' : 'No'}
                         </dd>
                       </div>
                       <div className="flex justify-between">
