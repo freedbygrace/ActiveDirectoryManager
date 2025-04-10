@@ -1,4 +1,4 @@
-import { createContext, ReactNode, useContext } from "react";
+import { createContext, ReactNode, useContext, useEffect, useState } from "react";
 import {
   useQuery,
   useMutation,
@@ -17,6 +17,8 @@ type AuthContextType = {
   initiateOidcLogin: () => void;
   logoutMutation: UseMutationResult<void, Error, void>;
   registerMutation: UseMutationResult<SelectUser, Error, InsertUser>;
+  ldapEnabled: boolean;
+  oidcEnabled: boolean;
 };
 
 type LoginData = Pick<InsertUser, "username" | "password">;
@@ -26,6 +28,9 @@ export const AuthContext = createContext<AuthContextType | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const { toast } = useToast();
+  const [ldapEnabled, setLdapEnabled] = useState(false);
+  const [oidcEnabled, setOidcEnabled] = useState(false);
+  
   const {
     data: user,
     error,
@@ -34,6 +39,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     queryKey: ["/api/user"],
     queryFn: getQueryFn({ on401: "returnNull" }),
   });
+  
+  // Get auth provider configurations
+  useEffect(() => {
+    const fetchAuthProviders = async () => {
+      try {
+        const response = await fetch('/api/auth/providers');
+        if (response.ok) {
+          const providers = await response.json();
+          setLdapEnabled(providers.ldap?.enabled || false);
+          setOidcEnabled(providers.oidc?.enabled || false);
+        }
+      } catch (err) {
+        // Silently fail - default is disabled
+        console.error('Failed to fetch auth providers:', err);
+      }
+    };
+    
+    fetchAuthProviders();
+  }, []);
 
   const loginMutation = useMutation({
     mutationFn: async (credentials: LoginData) => {
@@ -133,6 +157,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     initiateOidcLogin,
     logoutMutation,
     registerMutation,
+    ldapEnabled,
+    oidcEnabled,
   };
 
   return (
