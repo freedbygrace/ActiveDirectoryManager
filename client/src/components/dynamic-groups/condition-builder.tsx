@@ -383,7 +383,99 @@ const ConditionBuilder: React.FC<ConditionBuilderProps> = ({
         {...attributes}
       >
         {condition.isGroup ? (
-          renderConditionGroup(condition, index, level)
+          <div 
+            key={`group-${index}`} 
+            className="border border-border rounded-md p-3 mb-3"
+          >
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center space-x-2">
+                <button
+                  type="button"
+                  onClick={() => condition.id && toggleGroupExpand(condition.id)}
+                  className="p-1 hover:bg-accent rounded-sm"
+                >
+                  {condition.id && expandedGroups.has(condition.id) ? (
+                    <ChevronDown className="h-4 w-4" />
+                  ) : (
+                    <ChevronRight className="h-4 w-4" />
+                  )}
+                </button>
+                
+                <span className="text-sm font-medium">
+                  Condition Group ({condition.logicalOperator})
+                </span>
+              </div>
+              
+              <div className="flex items-center space-x-2" {...listeners}>
+                <Move className="h-4 w-4 text-muted-foreground mr-2 cursor-grab" />
+                
+                <Select
+                  value={condition.logicalOperator || 'AND'}
+                  onValueChange={(value) => updateCondition(index, 'logicalOperator', value)}
+                >
+                  <SelectTrigger className="w-20 h-8">
+                    <SelectValue placeholder="Operator" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {logicalOperators.map((op) => (
+                      <SelectItem key={op.value} value={op.value}>
+                        {op.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => addCondition(condition.id)}
+                  title="Add Condition"
+                >
+                  <Plus className="h-4 w-4" />
+                </Button>
+                
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => addConditionGroup(condition.id)}
+                  title="Add Group"
+                >
+                  <FolderPlus className="h-4 w-4" />
+                </Button>
+                
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => removeCondition(index)}
+                  title="Remove Group"
+                >
+                  <Trash className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+            
+            {condition.id && expandedGroups.has(condition.id) && (
+              <div className="pl-2">
+                {condition.id ? (
+                  (() => {
+                    const childConditions = getConditionsForParent(condition.id);
+                    return childConditions.length === 0 ? (
+                      <div className="text-sm text-muted-foreground p-2">
+                        No conditions in this group. Add one using the buttons above.
+                      </div>
+                    ) : (
+                      childConditions.map((child, childIndex) => {
+                        const originalIndex = conditions.findIndex(c => c === child);
+                        return child.isGroup 
+                          ? <SortableItem key={`child-${originalIndex}`} condition={child} index={originalIndex} level={level + 1} /> 
+                          : <SortableItem key={`child-${originalIndex}`} condition={child} index={originalIndex} level={level + 1} />;
+                      })
+                    );
+                  })()
+                ) : null}
+              </div>
+            )}
+          </div>
         ) : (
           renderConditionContent(condition, index, level, listeners)
         )}
@@ -539,9 +631,11 @@ const ConditionBuilder: React.FC<ConditionBuilderProps> = ({
               <div className="space-y-2">
                 {conditions.map((condition, index) => (
                   condition.parentId === null || condition.parentId === undefined ? (
-                    condition.isGroup ? 
-                      renderConditionGroup(condition, index) : 
-                      <SortableItem condition={condition} index={index} />
+                    <SortableItem 
+                      key={`root-${index}`} 
+                      condition={condition} 
+                      index={index} 
+                    />
                   ) : null
                 ))}
               </div>
