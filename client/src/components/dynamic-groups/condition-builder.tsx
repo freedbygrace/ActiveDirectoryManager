@@ -448,8 +448,8 @@ const ConditionBuilder: React.FC<ConditionBuilderProps> = ({
             <Input
               className="mt-1"
               placeholder="Enter custom attribute"
-              value={condition.attribute === 'custom' ? '' : condition.attribute}
-              onChange={(e) => updateCondition(index, 'attribute', e.target.value)}
+              value={condition.customAttribute || ''}
+              onChange={(e) => updateCondition(index, 'customAttribute', e.target.value)}
             />
           )}
         </div>
