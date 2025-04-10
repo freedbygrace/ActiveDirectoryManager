@@ -10,7 +10,7 @@ import { promisify } from "util";
 import jwt from "jsonwebtoken";
 import { storage } from "./storage";
 import { ldapClient } from "./ldap";
-import { User as SelectUser, loginSchema } from "@shared/schema";
+import { User as SelectUser, loginSchema, PERMISSIONS } from "@shared/schema";
 
 declare global {
   namespace Express {
