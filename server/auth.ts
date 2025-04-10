@@ -1,12 +1,15 @@
 import passport from "passport";
 import { Strategy as LocalStrategy } from "passport-local";
 import { Strategy as JwtStrategy, ExtractJwt } from "passport-jwt";
+import LdapStrategy from "passport-ldapauth";
+import { Strategy as OpenIDStrategy } from "passport-openidconnect";
 import { Express } from "express";
 import session from "express-session";
 import { scrypt, randomBytes, timingSafeEqual } from "crypto";
 import { promisify } from "util";
 import jwt from "jsonwebtoken";
 import { storage } from "./storage";
+import { ldapClient } from "./ldap";
 import { User as SelectUser, loginSchema } from "@shared/schema";
 
 declare global {
@@ -84,6 +87,102 @@ export function setupAuth(app: Express) {
       }
     )
   );
+  
+  // LDAP authentication strategy
+  if (process.env.LDAP_ENABLED === "true") {
+    passport.use(
+      new LdapStrategy(
+        {
+          server: {
+            url: process.env.LDAP_URL || "ldap://localhost:389",
+            bindDN: process.env.LDAP_BIND_DN || "",
+            bindCredentials: process.env.LDAP_BIND_PASSWORD || "",
+            searchBase: process.env.LDAP_SEARCH_BASE || "",
+            searchFilter: process.env.LDAP_SEARCH_FILTER || "(uid={{username}})",
+            searchAttributes: ["dn", "cn", "uid", "mail", "memberOf"],
+            tlsOptions: {
+              rejectUnauthorized: process.env.LDAP_TLS_REJECT_UNAUTHORIZED === "true",
+            },
+          },
+          usernameField: "username",
+          passwordField: "password",
+        },
+        async (user, done) => {
+          try {
+            // Find user in our database or create one if it doesn't exist
+            let existingUser = await storage.getUserByUsername(user.uid);
+            
+            if (!existingUser) {
+              // Create a new user in our local database
+              const defaultRole = await storage.getDefaultRole();
+              
+              existingUser = await storage.createUser({
+                username: user.uid,
+                // Create a random password that won't be used (LDAP auth will be used instead)
+                password: await hashPassword(randomBytes(32).toString("hex")),
+                email: user.mail || null,
+                fullName: user.cn || null,
+                roleId: defaultRole?.id || null,
+                authProvider: "ldap",
+                providerUserId: user.dn,
+              });
+            }
+            
+            return done(null, existingUser);
+          } catch (error) {
+            return done(error);
+          }
+        }
+      )
+    );
+  }
+  
+  // OpenID Connect authentication strategy
+  if (process.env.OIDC_ENABLED === "true") {
+    passport.use(
+      new OpenIDConnectStrategy(
+        {
+          issuer: process.env.OIDC_ISSUER,
+          authorizationURL: process.env.OIDC_AUTHORIZATION_URL,
+          tokenURL: process.env.OIDC_TOKEN_URL,
+          userInfoURL: process.env.OIDC_USERINFO_URL,
+          clientID: process.env.OIDC_CLIENT_ID || "",
+          clientSecret: process.env.OIDC_CLIENT_SECRET || "",
+          callbackURL: process.env.OIDC_CALLBACK_URL || "http://localhost:3000/api/auth/oidc/callback",
+          scope: ["openid", "profile", "email"],
+        },
+        async (issuer, profile, done) => {
+          try {
+            const { id, displayName, emails } = profile;
+            
+            // Find user in our database or create one if it doesn't exist
+            let existingUser = await storage.getUserByProviderUserId("oidc", id);
+            
+            if (!existingUser) {
+              // Create a new user in our local database
+              const defaultRole = await storage.getDefaultRole();
+              const email = emails && emails.length > 0 ? emails[0].value : null;
+              
+              existingUser = await storage.createUser({
+                username: profile.username || `user_${id.substring(0, 8)}`,
+                // Create a random password that won't be used (OIDC auth will be used instead)
+                password: await hashPassword(randomBytes(32).toString("hex")),
+                email,
+                fullName: displayName || null,
+                roleId: defaultRole?.id || null,
+                authProvider: "oidc",
+                providerUserId: id,
+              });
+            }
+            
+            return done(null, existingUser);
+          } catch (error) {
+            return done(error);
+          }
+        }
+      )
+    );
+  }
 
   passport.serializeUser((user, done) => done(null, user.id));
   passport.deserializeUser(async (id: number, done) => {
