@@ -159,24 +159,31 @@ const ConditionBuilder: React.FC<ConditionBuilderProps> = ({
         }
       }
       
-      // Find just this group's children (not all groups with the same parent)
-      const childrenToRemove = getAllDescendants(conditionToRemove.id);
-      
-      // Create a list of IDs to remove (the group and all its descendants)
-      const idsToRemove = new Set([
-        conditionToRemove.id, 
-        ...childrenToRemove.map(c => c.id).filter(Boolean)
-      ]);
-      
-      // Only remove this specific group and its descendants
-      const newConditions = conditions.filter(c => {
-        // Keep the condition if its ID is not in our removal list
-        // and its parent ID is not in our removal list
-        return !idsToRemove.has(c.id) && 
-               !idsToRemove.has(c.parentId);
-      });
-      
-      onChange(newConditions);
+      // Make sure we have a valid ID before proceeding
+      if (conditionToRemove.id !== undefined) {
+        // Find just this group's children (not all groups with the same parent)
+        const childrenToRemove = getAllDescendants(conditionToRemove.id);
+        
+        // Create a list of IDs to remove (the group and all its descendants)
+        const idsToRemove = new Set<number | undefined>([
+          conditionToRemove.id, 
+          ...childrenToRemove.map(c => c.id).filter((id): id is number => id !== undefined)
+        ]);
+        
+        // Only remove this specific group and its descendants
+        const newConditions = conditions.filter(c => {
+          // Keep the condition if its ID is not in our removal list
+          // and its parent ID is not in our removal list
+          return !idsToRemove.has(c.id) && 
+                 !idsToRemove.has(c.parentId);
+        });
+        
+        onChange(newConditions);
+      } else {
+        // No valid ID, just remove the condition at this index
+        const newConditions = conditions.filter((c, i) => i !== index);
+        onChange(newConditions);
+      }
     } else {
       // Just remove the single condition, more carefully
       const newConditions = conditions.filter((c, i) => i !== index);
@@ -185,13 +192,15 @@ const ConditionBuilder: React.FC<ConditionBuilderProps> = ({
   };
   
   // Helper function to get all descendants of a condition group
-  const getAllDescendants = (parentId: number): Condition[] => {
+  const getAllDescendants = (parentId: number | undefined): Condition[] => {
+    if (parentId === undefined) return [];
+    
     const directChildren = conditions.filter(c => c.parentId === parentId);
     
     // Get all children of groups within this group (recursively)
     const groupChildren = directChildren
-      .filter(c => c.isGroup && c.id)
-      .flatMap(group => getAllDescendants(group.id!));
+      .filter(c => c.isGroup && c.id !== undefined)
+      .flatMap(group => getAllDescendants(group.id));
     
     return [...directChildren, ...groupChildren];
   };
@@ -386,7 +395,15 @@ const ConditionBuilder: React.FC<ConditionBuilderProps> = ({
                 className="mt-1"
                 placeholder="Enter custom attribute"
                 value={condition.customAttribute || ''}
-                onChange={(e) => updateCondition(index, 'customAttribute', e.target.value)}
+                onChange={(e) => {
+                  // Use direct update to prevent focus loss
+                  const newConditions = [...conditions];
+                  newConditions[index] = { 
+                    ...newConditions[index], 
+                    customAttribute: e.target.value 
+                  };
+                  onChange(newConditions);
+                }}
               />
             )}
           </div>
@@ -413,8 +430,16 @@ const ConditionBuilder: React.FC<ConditionBuilderProps> = ({
             {condition.operator !== 'present' && condition.operator !== 'notPresent' && (
               <Input
                 placeholder="Value"
-                value={condition.value}
-                onChange={(e) => updateCondition(index, 'value', e.target.value)}
+                value={condition.value || ''}
+                onChange={(e) => {
+                  // Use a direct update approach for text inputs to prevent focus loss
+                  const newConditions = [...conditions];
+                  newConditions[index] = { 
+                    ...newConditions[index], 
+                    value: e.target.value 
+                  };
+                  onChange(newConditions);
+                }}
               />
             )}
           </div>
