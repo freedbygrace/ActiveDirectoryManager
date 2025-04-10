@@ -85,9 +85,11 @@ const ConditionBuilder: React.FC<ConditionBuilderProps> = ({
   // Update available attributes when data is loaded
   useEffect(() => {
     if (attributesData.length > 0) {
-      setAvailableAttributes([
-        ...new Set(attributesData.map(attr => attr.name))
-      ]);
+      // Extract unique attribute names
+      const uniqueAttributes = Array.from(
+        new Set(attributesData.map(attr => attr.name))
+      );
+      setAvailableAttributes(uniqueAttributes);
     }
   }, [attributesData]);
 
@@ -137,7 +139,11 @@ const ConditionBuilder: React.FC<ConditionBuilderProps> = ({
       
       // Automatically expand the new group
       if (newGroup.id) {
-        setExpandedGroups(prev => new Set([...prev, newGroup.id!]));
+        setExpandedGroups(prev => {
+          const expanded = new Set(prev);
+          expanded.add(newGroup.id!);
+          return expanded;
+        });
       }
     }
   };
@@ -591,24 +597,29 @@ const generateLdapFilter = (conditions: Condition[]): string => {
       
       return `(${operator}${childFilters})`;
     } else {
+      // Get actual attribute name (custom or selected)
+      const attributeName = condition.attribute === 'custom' && condition.customAttribute 
+        ? condition.customAttribute 
+        : condition.attribute;
+      
       // Regular condition
       switch (condition.operator) {
         case '=':
-          return `(${condition.attribute}=${condition.value})`;
+          return `(${attributeName}=${condition.value})`;
         case '!=':
-          return `(!(${condition.attribute}=${condition.value}))`;
+          return `(!(${attributeName}=${condition.value}))`;
         case 'contains':
-          return `(${condition.attribute}=*${condition.value}*)`;
+          return `(${attributeName}=*${condition.value}*)`;
         case 'startsWith':
-          return `(${condition.attribute}=${condition.value}*)`;
+          return `(${attributeName}=${condition.value}*)`;
         case 'endsWith':
-          return `(${condition.attribute}=*${condition.value})`;
+          return `(${attributeName}=*${condition.value})`;
         case 'present':
-          return `(${condition.attribute}=*)`;
+          return `(${attributeName}=*)`;
         case 'notPresent':
-          return `(!(${condition.attribute}=*))`;
+          return `(!(${attributeName}=*))`;
         default:
-          return `(${condition.attribute}=${condition.value})`;
+          return `(${attributeName}=${condition.value})`;
       }
     }
   };

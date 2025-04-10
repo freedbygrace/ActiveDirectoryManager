@@ -33,6 +33,7 @@ export interface Condition {
   ruleId?: number;
   parentId?: number | null;
   attribute: string;
+  customAttribute?: string;
   operator: string;
   value: string;
   logicalOperator?: string | null;
@@ -337,11 +338,11 @@ export const RuleEditor: React.FC<RuleEditorProps> = ({ rule, onSave, onCancel }
                   name="variablePattern" 
                   value={formData.variablePattern} 
                   onChange={handleInputChange} 
-                  placeholder="e.g., {attribute} Value" 
+                  placeholder="e.g., &#123;attributeName&#125; Value" 
                 />
                 <p className="text-xs text-muted-foreground">
                   Optional pattern for generating variable values in name or description. 
-                  Use {attribute} to insert attribute values.
+                  Use &#123;attributeName&#125; to insert attribute values.
                 </p>
               </div>
 
