@@ -34,7 +34,7 @@ import {
   parseFilter, 
   parsePagination 
 } from "./query-parser";
-import { eq, sql } from "drizzle-orm";
+import { eq, sql, count } from "drizzle-orm";
 import { v4 as uuidv4 } from "uuid";
 
 // Extend Express Request to include user property
