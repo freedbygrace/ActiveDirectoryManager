@@ -33,6 +33,8 @@ interface DynamicGroupRule {
   }[];
 }
 
+// Helper functions are defined inside the component
+
 export default function DynamicGroupsPage() {
   const { toast } = useToast();
   const [activeTab, setActiveTab] = React.useState("active");
