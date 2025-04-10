@@ -1,11 +1,12 @@
 import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
+import { useLocation } from "wouter";
 import { DashboardLayout, DashboardConfig } from "@/components/dashboard/dashboard-layout";
 import { ShareDashboardDialog } from "@/components/dashboard/share-dashboard-dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
-import { Plus, RefreshCw, Share2 } from "lucide-react";
+import { Plus, RefreshCw, Share2, Trash2, ArrowLeft } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -14,6 +15,16 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import {
   Form,
   FormControl,
@@ -37,9 +48,12 @@ type DashboardFormValues = z.infer<typeof dashboardSchema>;
 
 export default function DashboardPage() {
   const { toast } = useToast();
+  const [, setLocation] = useLocation();
   const [dashboards, setDashboards] = useState<DashboardConfig[]>([]);
   const [activeTab, setActiveTab] = useState<string>("dashboard-overview");
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [dashboardToDelete, setDashboardToDelete] = useState<string | null>(null);
   const [dataSourcesLoading, setDataSourcesLoading] = useState(true);
   const [dataSources, setDataSources] = useState<Array<{
     id: string;
@@ -345,14 +359,52 @@ export default function DashboardPage() {
     });
   };
 
+  // Start delete dialog
+  const confirmDelete = (dashboardId: string) => {
+    setDashboardToDelete(dashboardId);
+    setDeleteDialogOpen(true);
+  };
+
+  // Execute deletion when confirmed
+  const executeDelete = () => {
+    if (dashboardToDelete) {
+      handleDeleteDashboard(dashboardToDelete);
+      setDeleteDialogOpen(false);
+      setDashboardToDelete(null);
+    }
+  };
+
   return (
     <div className="container mx-auto py-6">
       <div className="flex justify-between items-center mb-6">
-        <h1 className="text-3xl font-bold">Dashboards</h1>
-        <Button onClick={() => setIsCreateDialogOpen(true)}>
-          <Plus className="h-4 w-4 mr-2" />
-          New Dashboard
-        </Button>
+        <div className="flex items-center gap-4">
+          <Button 
+            variant="outline" 
+            size="sm" 
+            onClick={() => setLocation("/")}
+            className="mr-2"
+          >
+            <ArrowLeft className="h-4 w-4 mr-2" />
+            Back
+          </Button>
+          <h1 className="text-3xl font-bold">Dashboards</h1>
+        </div>
+        <div className="flex gap-2">
+          {dashboards.length > 0 && activeTab !== "dashboard-overview" && (
+            <Button 
+              variant="outline" 
+              onClick={() => confirmDelete(activeTab)}
+              className="text-destructive hover:bg-destructive/10"
+            >
+              <Trash2 className="h-4 w-4 mr-2" />
+              Delete Dashboard
+            </Button>
+          )}
+          <Button onClick={() => setIsCreateDialogOpen(true)}>
+            <Plus className="h-4 w-4 mr-2" />
+            New Dashboard
+          </Button>
+        </div>
       </div>
       
       <Tabs value={activeTab} onValueChange={setActiveTab}>
@@ -364,22 +416,33 @@ export default function DashboardPage() {
           ))}
         </TabsList>
         
-        {dashboards.map((dashboard) => (
-          <TabsContent key={dashboard.id} value={dashboard.id}>
-            {dataSourcesLoading ? (
-              <div className="flex justify-center items-center min-h-[60vh]">
-                <RefreshCw className="h-8 w-8 animate-spin text-primary" />
-                <span className="ml-2">Loading data sources...</span>
-              </div>
-            ) : (
-              <DashboardLayout
-                config={dashboard}
-                onSave={handleSaveDashboard}
-                dataSources={dataSources}
-              />
-            )}
-          </TabsContent>
-        ))}
+        {dashboards.length === 0 ? (
+          <div className="text-center py-12 border rounded-lg bg-card">
+            <h3 className="text-lg font-semibold mb-2">No Dashboards Created</h3>
+            <p className="text-muted-foreground mb-6">Create your first dashboard to start visualizing data</p>
+            <Button onClick={() => setIsCreateDialogOpen(true)}>
+              <Plus className="h-4 w-4 mr-2" />
+              Create Dashboard
+            </Button>
+          </div>
+        ) : (
+          dashboards.map((dashboard) => (
+            <TabsContent key={dashboard.id} value={dashboard.id}>
+              {dataSourcesLoading ? (
+                <div className="flex justify-center items-center min-h-[60vh]">
+                  <RefreshCw className="h-8 w-8 animate-spin text-primary" />
+                  <span className="ml-2">Loading data sources...</span>
+                </div>
+              ) : (
+                <DashboardLayout
+                  config={dashboard}
+                  onSave={handleSaveDashboard}
+                  dataSources={dataSources}
+                />
+              )}
+            </TabsContent>
+          ))
+        )}
       </Tabs>
       
       {/* Create Dashboard Dialog */}
@@ -420,6 +483,30 @@ export default function DashboardPage() {
           </Form>
         </DialogContent>
       </Dialog>
+
+      {/* Delete Dashboard Confirmation */}
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This action cannot be undone. This will permanently delete the dashboard
+              and all its widgets.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setDashboardToDelete(null)}>
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={executeDelete}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
