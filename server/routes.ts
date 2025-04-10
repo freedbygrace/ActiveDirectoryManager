@@ -5293,6 +5293,215 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Dynamic Group Rules routes
+  app.get("/api/dynamic-group-rules", requirePermission(PERMISSIONS.VIEW_DYNAMIC_GROUPS, { allowApiToken: true }), async (req, res) => {
+    try {
+      const rules = await storage.listDynamicGroupRules();
+      res.json(rules);
+    } catch (error) {
+      console.error('Error fetching dynamic group rules:', error);
+      res.status(500).json({ error: 'Failed to fetch dynamic group rules' });
+    }
+  });
+
+  app.get("/api/dynamic-group-rules/:id", requirePermission(PERMISSIONS.VIEW_DYNAMIC_GROUPS, { allowApiToken: true }), async (req, res) => {
+    try {
+      const id = Number(req.params.id);
+      const rule = await storage.getDynamicGroupRule(id);
+      
+      if (!rule) {
+        return res.status(404).json({ error: 'Dynamic group rule not found' });
+      }
+      
+      res.json(rule);
+    } catch (error) {
+      console.error('Error fetching dynamic group rule:', error);
+      res.status(500).json({ error: 'Failed to fetch dynamic group rule' });
+    }
+  });
+
+  app.post("/api/dynamic-group-rules", requirePermission(PERMISSIONS.MANAGE_DYNAMIC_GROUPS, { allowApiToken: true }), async (req, res) => {
+    try {
+      const rule = await storage.createDynamicGroupRule(req.body);
+      res.status(201).json(rule);
+    } catch (error) {
+      console.error('Error creating dynamic group rule:', error);
+      res.status(500).json({ error: 'Failed to create dynamic group rule' });
+    }
+  });
+
+  app.put("/api/dynamic-group-rules/:id", requirePermission(PERMISSIONS.MANAGE_DYNAMIC_GROUPS, { allowApiToken: true }), async (req, res) => {
+    try {
+      const id = Number(req.params.id);
+      const updatedRule = await storage.updateDynamicGroupRule(id, req.body);
+      
+      if (!updatedRule) {
+        return res.status(404).json({ error: 'Dynamic group rule not found' });
+      }
+      
+      res.json(updatedRule);
+    } catch (error) {
+      console.error('Error updating dynamic group rule:', error);
+      res.status(500).json({ error: 'Failed to update dynamic group rule' });
+    }
+  });
+
+  app.delete("/api/dynamic-group-rules/:id", requirePermission(PERMISSIONS.MANAGE_DYNAMIC_GROUPS, { allowApiToken: true }), async (req, res) => {
+    try {
+      const id = Number(req.params.id);
+      const deleted = await storage.deleteDynamicGroupRule(id);
+      
+      if (!deleted) {
+        return res.status(404).json({ error: 'Dynamic group rule not found' });
+      }
+      
+      res.status(204).send();
+    } catch (error) {
+      console.error('Error deleting dynamic group rule:', error);
+      res.status(500).json({ error: 'Failed to delete dynamic group rule' });
+    }
+  });
+
+  // Dynamic Group Conditions routes
+  app.get("/api/dynamic-group-rules/:ruleId/conditions", requirePermission(PERMISSIONS.VIEW_DYNAMIC_GROUPS, { allowApiToken: true }), async (req, res) => {
+    try {
+      const ruleId = Number(req.params.ruleId);
+      const conditions = await storage.getConditionsByRuleId(ruleId);
+      res.json(conditions);
+    } catch (error) {
+      console.error('Error fetching conditions for dynamic group rule:', error);
+      res.status(500).json({ error: 'Failed to fetch conditions' });
+    }
+  });
+
+  app.post("/api/dynamic-group-rules/:ruleId/conditions", requirePermission(PERMISSIONS.MANAGE_DYNAMIC_GROUPS, { allowApiToken: true }), async (req, res) => {
+    try {
+      const ruleId = Number(req.params.ruleId);
+      const conditionData = { ...req.body, ruleId };
+      const condition = await storage.createDynamicGroupCondition(conditionData);
+      res.status(201).json(condition);
+    } catch (error) {
+      console.error('Error creating condition for dynamic group rule:', error);
+      res.status(500).json({ error: 'Failed to create condition' });
+    }
+  });
+
+  // Dynamic Group Rule Connections routes
+  app.get("/api/dynamic-group-rules/:ruleId/connections", requirePermission(PERMISSIONS.VIEW_DYNAMIC_GROUPS, { allowApiToken: true }), async (req, res) => {
+    try {
+      const ruleId = Number(req.params.ruleId);
+      const connections = await storage.getRuleConnectionsByRuleId(ruleId);
+      res.json(connections);
+    } catch (error) {
+      console.error('Error fetching connections for dynamic group rule:', error);
+      res.status(500).json({ error: 'Failed to fetch connections' });
+    }
+  });
+
+  app.post("/api/dynamic-group-rules/:ruleId/connections", requirePermission(PERMISSIONS.MANAGE_DYNAMIC_GROUPS, { allowApiToken: true }), async (req, res) => {
+    try {
+      const ruleId = Number(req.params.ruleId);
+      const connectionData = { ...req.body, ruleId };
+      const connection = await storage.createDynamicGroupRuleConnection(connectionData);
+      res.status(201).json(connection);
+    } catch (error) {
+      console.error('Error creating connection for dynamic group rule:', error);
+      res.status(500).json({ error: 'Failed to create connection' });
+    }
+  });
+
+  // Schedule Rules routes
+  app.get("/api/schedule-rules", requirePermission(PERMISSIONS.VIEW_DYNAMIC_GROUPS, { allowApiToken: true }), async (req, res) => {
+    try {
+      const scheduleRules = await storage.getAllScheduleRules();
+      res.json(scheduleRules);
+    } catch (error) {
+      console.error('Error fetching schedule rules:', error);
+      res.status(500).json({ error: 'Failed to fetch schedule rules' });
+    }
+  });
+
+  app.get("/api/schedule-rules/:id", requirePermission(PERMISSIONS.VIEW_DYNAMIC_GROUPS, { allowApiToken: true }), async (req, res) => {
+    try {
+      const id = Number(req.params.id);
+      const scheduleRule = await storage.getScheduleRule(id);
+      
+      if (!scheduleRule) {
+        return res.status(404).json({ error: 'Schedule rule not found' });
+      }
+      
+      res.json(scheduleRule);
+    } catch (error) {
+      console.error('Error fetching schedule rule:', error);
+      res.status(500).json({ error: 'Failed to fetch schedule rule' });
+    }
+  });
+
+  app.get("/api/dynamic-group-rules/:ruleId/schedules", requirePermission(PERMISSIONS.VIEW_DYNAMIC_GROUPS, { allowApiToken: true }), async (req, res) => {
+    try {
+      const ruleId = Number(req.params.ruleId);
+      const schedules = await storage.getScheduleRulesByRuleId(ruleId);
+      res.json(schedules);
+    } catch (error) {
+      console.error('Error fetching schedules for dynamic group rule:', error);
+      res.status(500).json({ error: 'Failed to fetch schedules' });
+    }
+  });
+
+  app.post("/api/schedule-rules", requirePermission(PERMISSIONS.MANAGE_DYNAMIC_GROUPS, { allowApiToken: true }), async (req, res) => {
+    try {
+      const scheduleRule = await storage.createScheduleRule(req.body);
+      res.status(201).json(scheduleRule);
+    } catch (error) {
+      console.error('Error creating schedule rule:', error);
+      res.status(500).json({ error: 'Failed to create schedule rule' });
+    }
+  });
+
+  app.post("/api/dynamic-group-rules/:ruleId/schedules", requirePermission(PERMISSIONS.MANAGE_DYNAMIC_GROUPS, { allowApiToken: true }), async (req, res) => {
+    try {
+      const ruleId = Number(req.params.ruleId);
+      const scheduleData = { ...req.body, ruleId };
+      const schedule = await storage.createScheduleRule(scheduleData);
+      res.status(201).json(schedule);
+    } catch (error) {
+      console.error('Error creating schedule for dynamic group rule:', error);
+      res.status(500).json({ error: 'Failed to create schedule' });
+    }
+  });
+
+  app.put("/api/schedule-rules/:id", requirePermission(PERMISSIONS.MANAGE_DYNAMIC_GROUPS, { allowApiToken: true }), async (req, res) => {
+    try {
+      const id = Number(req.params.id);
+      const updatedRule = await storage.updateScheduleRule(id, req.body);
+      
+      if (!updatedRule) {
+        return res.status(404).json({ error: 'Schedule rule not found' });
+      }
+      
+      res.json(updatedRule);
+    } catch (error) {
+      console.error('Error updating schedule rule:', error);
+      res.status(500).json({ error: 'Failed to update schedule rule' });
+    }
+  });
+
+  app.delete("/api/schedule-rules/:id", requirePermission(PERMISSIONS.MANAGE_DYNAMIC_GROUPS, { allowApiToken: true }), async (req, res) => {
+    try {
+      const id = Number(req.params.id);
+      const deleted = await storage.deleteScheduleRule(id);
+      
+      if (!deleted) {
+        return res.status(404).json({ error: 'Schedule rule not found' });
+      }
+      
+      res.status(204).send();
+    } catch (error) {
+      console.error('Error deleting schedule rule:', error);
+      res.status(500).json({ error: 'Failed to delete schedule rule' });
+    }
+  });
+
   const httpServer = createServer(app);
 
   return httpServer;
