@@ -141,11 +141,11 @@ const ConditionBuilder: React.FC<ConditionBuilderProps> = ({
     onChange(newConditions);
   };
 
-  // Handle removing a condition
+  // Handle removing a condition or group
   const removeCondition = (index: number) => {
     const conditionToRemove = conditions[index];
     
-    // If it's a group, also remove all child conditions
+    // If it's a group, also check for child conditions
     if (conditionToRemove.isGroup) {
       const childConditions = conditions.filter(c => c.parentId === conditionToRemove.id);
       
@@ -160,28 +160,40 @@ const ConditionBuilder: React.FC<ConditionBuilderProps> = ({
       }
       
       // Find just this group's children (not all groups with the same parent)
-      const childrenToRemove = conditions.filter(c => c.parentId === conditionToRemove.id);
+      const childrenToRemove = getAllDescendants(conditionToRemove.id);
       
-      // Create a list of IDs to remove (the group and its direct children)
+      // Create a list of IDs to remove (the group and all its descendants)
       const idsToRemove = new Set([
         conditionToRemove.id, 
         ...childrenToRemove.map(c => c.id).filter(Boolean)
       ]);
       
-      // Only remove this specific group and its direct children
+      // Only remove this specific group and its descendants
       const newConditions = conditions.filter(c => {
         // Keep the condition if its ID is not in our removal list
-        // and its parent ID is not the ID of the group we're removing
-        return !idsToRemove.has(c.id) && c.parentId !== conditionToRemove.id;
+        // and its parent ID is not in our removal list
+        return !idsToRemove.has(c.id) && 
+               !idsToRemove.has(c.parentId);
       });
       
       onChange(newConditions);
     } else {
-      // Just remove the single condition
-      const newConditions = [...conditions];
-      newConditions.splice(index, 1);
+      // Just remove the single condition, more carefully
+      const newConditions = conditions.filter((c, i) => i !== index);
       onChange(newConditions);
     }
+  };
+  
+  // Helper function to get all descendants of a condition group
+  const getAllDescendants = (parentId: number): Condition[] => {
+    const directChildren = conditions.filter(c => c.parentId === parentId);
+    
+    // Get all children of groups within this group (recursively)
+    const groupChildren = directChildren
+      .filter(c => c.isGroup && c.id)
+      .flatMap(group => getAllDescendants(group.id!));
+    
+    return [...directChildren, ...groupChildren];
   };
 
   // Toggle group expansion
