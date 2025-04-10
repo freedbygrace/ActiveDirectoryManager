@@ -4939,6 +4939,185 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  /**
+   * @swagger
+   * /api/user-dashboard-data:
+   *   get:
+   *     summary: Get user data for dashboard visualizations
+   *     tags: [Dashboard]
+   *     security:
+   *       - cookieAuth: []
+   *       - bearerAuth: []
+   *     responses:
+   *       200:
+   *         description: User data for dashboard
+   *       401:
+   *         $ref: '#/components/responses/UnauthorizedError'
+   */
+  app.get("/api/user-dashboard-data", requireAuth({ allowApiToken: true }), async (req, res, next) => {
+    try {
+      // Get data from the first available LDAP connection
+      const connections = await storage.listLdapConnections();
+      
+      if (connections.length === 0) {
+        return res.status(200).json({ data: [], message: "No LDAP connections available" });
+      }
+      
+      const connectionId = connections[0].id;
+      const users = await storage.listAdUsers(connectionId);
+      
+      // Add objectType to make filtering easier in the dashboard
+      const result = users.map(user => ({
+        ...user,
+        objectType: 'user'
+      }));
+      
+      res.json({ data: result });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  /**
+   * @swagger
+   * /api/computer-dashboard-data:
+   *   get:
+   *     summary: Get computer data for dashboard visualizations
+   *     tags: [Dashboard]
+   *     security:
+   *       - cookieAuth: []
+   *       - bearerAuth: []
+   *     responses:
+   *       200:
+   *         description: Computer data for dashboard
+   *       401:
+   *         $ref: '#/components/responses/UnauthorizedError'
+   */
+  app.get("/api/computer-dashboard-data", requireAuth({ allowApiToken: true }), async (req, res, next) => {
+    try {
+      // Get data from the first available LDAP connection
+      const connections = await storage.listLdapConnections();
+      
+      if (connections.length === 0) {
+        return res.status(200).json({ data: [], message: "No LDAP connections available" });
+      }
+      
+      const connectionId = connections[0].id;
+      const computers = await storage.listAdComputers(connectionId);
+      
+      // Add objectType to make filtering easier in the dashboard
+      const result = computers.map(computer => ({
+        ...computer,
+        objectType: 'computer'
+      }));
+      
+      res.json({ data: result });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  /**
+   * @swagger
+   * /api/group-dashboard-data:
+   *   get:
+   *     summary: Get group data for dashboard visualizations
+   *     tags: [Dashboard]
+   *     security:
+   *       - cookieAuth: []
+   *       - bearerAuth: []
+   *     responses:
+   *       200:
+   *         description: Group data for dashboard
+   *       401:
+   *         $ref: '#/components/responses/UnauthorizedError'
+   */
+  app.get("/api/group-dashboard-data", requireAuth({ allowApiToken: true }), async (req, res, next) => {
+    try {
+      // Get data from the first available LDAP connection
+      const connections = await storage.listLdapConnections();
+      
+      if (connections.length === 0) {
+        return res.status(200).json({ data: [], message: "No LDAP connections available" });
+      }
+      
+      const connectionId = connections[0].id;
+      const groups = await storage.listAdGroups(connectionId);
+      
+      // Add objectType to make filtering easier in the dashboard
+      const result = groups.map(group => ({
+        ...group,
+        objectType: 'group'
+      }));
+      
+      res.json({ data: result });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  /**
+   * @swagger
+   * /api/dashboard-summary:
+   *   get:
+   *     summary: Get summary statistics for the dashboard
+   *     tags: [Dashboard]
+   *     security:
+   *       - cookieAuth: []
+   *       - bearerAuth: []
+   *     responses:
+   *       200:
+   *         description: Summary statistics for the dashboard
+   *       401:
+   *         $ref: '#/components/responses/UnauthorizedError'
+   */
+  app.get("/api/dashboard-summary", requireAuth({ allowApiToken: true }), async (req, res, next) => {
+    try {
+      // Get data from the first available LDAP connection
+      const connections = await storage.listLdapConnections();
+      
+      if (connections.length === 0) {
+        return res.status(200).json({
+          userCount: 0,
+          computerCount: 0,
+          groupCount: 0,
+          sitesCount: 0,
+          domainsCount: 0,
+          message: "No LDAP connections available"
+        });
+      }
+      
+      const connectionId = connections[0].id;
+      
+      // Get counts from all AD objects
+      const usersCount = await db.select({ count: sql`count(*)` }).from(adUsers)
+        .where(eq(adUsers.connectionId, connectionId));
+      
+      const computersCount = await db.select({ count: sql`count(*)` }).from(adComputers)
+        .where(eq(adComputers.connectionId, connectionId));
+      
+      const groupsCount = await db.select({ count: sql`count(*)` }).from(adGroups)
+        .where(eq(adGroups.connectionId, connectionId));
+      
+      const sitesCount = await db.select({ count: sql`count(*)` }).from(adSites)
+        .where(eq(adSites.connectionId, connectionId));
+      
+      const domainsCount = await db.select({ count: sql`count(*)` }).from(adDomains)
+        .where(eq(adDomains.connectionId, connectionId));
+      
+      // Return the counts
+      res.json({
+        userCount: Number(usersCount[0]?.count || 0),
+        computerCount: Number(computersCount[0]?.count || 0),
+        groupCount: Number(groupsCount[0]?.count || 0),
+        sitesCount: Number(sitesCount[0]?.count || 0),
+        domainsCount: Number(domainsCount[0]?.count || 0)
+      });
+    } catch (error) {
+      next(error);
+    }
+  });
+
   const httpServer = createServer(app);
 
   return httpServer;
