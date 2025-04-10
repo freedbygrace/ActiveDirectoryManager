@@ -125,6 +125,7 @@ export function DashboardWidget({ id, title, type, data, config, onEdit, onDelet
     if (!data || data.length === 0) return <p className="text-muted-foreground text-center py-4">No data available</p>;
     
     const { xAxis, yAxis, dimensions, metrics, colors = COLORS, showLegend = true, stacked = false } = config;
+    const xAxisKey = xAxis as string;
     
     switch (type) {
       case 'bar':
@@ -132,7 +133,7 @@ export function DashboardWidget({ id, title, type, data, config, onEdit, onDelet
           <ResponsiveContainer width="100%" height={300}>
             <BarChart data={data} margin={{ top: 20, right: 30, left: 20, bottom: 30 }}>
               <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey={xAxis} />
+              <XAxis dataKey={xAxisKey} />
               <YAxis />
               <Tooltip />
               {showLegend && <Legend />}
@@ -140,12 +141,12 @@ export function DashboardWidget({ id, title, type, data, config, onEdit, onDelet
                 ? yAxis.map((axis, index) => (
                     <Bar 
                       key={axis} 
-                      dataKey={axis} 
+                      dataKey={axis as string} 
                       stackId={stacked ? "a" : undefined} 
                       fill={colors[index % colors.length]}
                     />
                   ))
-                : yAxis ? <Bar dataKey={yAxis} fill={colors[0]} /> : null
+                : yAxis ? <Bar dataKey={yAxis as string} fill={colors[0]} /> : null
               }
             </BarChart>
           </ResponsiveContainer>
@@ -156,7 +157,7 @@ export function DashboardWidget({ id, title, type, data, config, onEdit, onDelet
           <ResponsiveContainer width="100%" height={300}>
             <LineChart data={data} margin={{ top: 20, right: 30, left: 20, bottom: 30 }}>
               <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey={xAxis} />
+              <XAxis dataKey={xAxisKey} />
               <YAxis />
               <Tooltip />
               {showLegend && <Legend />}
@@ -165,12 +166,12 @@ export function DashboardWidget({ id, title, type, data, config, onEdit, onDelet
                     <Line 
                       key={axis} 
                       type="monotone" 
-                      dataKey={axis} 
+                      dataKey={axis as string} 
                       stroke={colors[index % colors.length]}
                       activeDot={{ r: 8 }}
                     />
                   ))
-                : yAxis ? <Line type="monotone" dataKey={yAxis} stroke={colors[0]} activeDot={{ r: 8 }} /> : null
+                : yAxis ? <Line type="monotone" dataKey={yAxis as string} stroke={colors[0]} activeDot={{ r: 8 }} /> : null
               }
             </LineChart>
           </ResponsiveContainer>
@@ -181,7 +182,7 @@ export function DashboardWidget({ id, title, type, data, config, onEdit, onDelet
           <ResponsiveContainer width="100%" height={300}>
             <AreaChart data={data} margin={{ top: 20, right: 30, left: 20, bottom: 30 }}>
               <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey={xAxis} />
+              <XAxis dataKey={xAxisKey} />
               <YAxis />
               <Tooltip />
               {showLegend && <Legend />}
@@ -190,13 +191,13 @@ export function DashboardWidget({ id, title, type, data, config, onEdit, onDelet
                     <Area 
                       key={axis} 
                       type="monotone" 
-                      dataKey={axis} 
+                      dataKey={axis as string} 
                       stackId={stacked ? "a" : `${index}`}
                       fill={colors[index % colors.length]}
                       stroke={colors[index % colors.length]}
                     />
                   ))
-                : yAxis ? <Area type="monotone" dataKey={yAxis} fill={colors[0]} stroke={colors[0]} /> : null
+                : yAxis ? <Area type="monotone" dataKey={yAxis as string} fill={colors[0]} stroke={colors[0]} /> : null
               }
             </AreaChart>
           </ResponsiveContainer>
@@ -210,8 +211,8 @@ export function DashboardWidget({ id, title, type, data, config, onEdit, onDelet
                             (Array.isArray(yAxis) && yAxis.length > 0 ? yAxis[0] : 
                             (typeof yAxis === 'string' ? yAxis : "value"));
                             
-          const name = item[dimensionField];
-          const value = item[metricField];
+          const name = item[dimensionField as string];
+          const value = item[metricField as string];
           return { name, value: Number(value) };
         }).filter(item => !isNaN(item.value));
         

@@ -84,10 +84,12 @@ export function DashboardLayout({
         type: widget.type,
         dataSource: widget.data[0]?.dataSource || "",
         config: {
-          xAxis: widget.config.xAxis,
-          yAxis: Array.isArray(widget.config.yAxis) ? widget.config.yAxis : [widget.config.yAxis].filter(Boolean),
-          dimensions: widget.config.dimensions || [],
-          metrics: widget.config.metrics || [],
+          xAxis: widget.config.xAxis || "",
+          yAxis: Array.isArray(widget.config.yAxis) 
+            ? widget.config.yAxis.filter(Boolean) as string[] 
+            : (widget.config.yAxis ? [widget.config.yAxis as string] : []),
+          dimensions: (widget.config.dimensions || []).filter(Boolean) as string[],
+          metrics: (widget.config.metrics || []).filter(Boolean) as string[],
           showLegend: widget.config.showLegend ?? true,
           stacked: widget.config.stacked ?? false,
           precision: widget.config.precision ?? 2,
