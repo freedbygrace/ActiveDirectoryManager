@@ -57,6 +57,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Initialize Role Based Access Control system
   await initializeRBAC();
   
+  // Authentication info and providers
+  app.get("/api/auth/providers", (req, res) => {
+    const ldapEnabled = process.env.LDAP_ENABLED === "true";
+    const oidcEnabled = process.env.OIDC_ENABLED === "true";
+    
+    res.json({
+      ldap: {
+        enabled: ldapEnabled,
+        connectionName: ldapEnabled ? process.env.LDAP_CONNECTION_NAME || "LDAP Authentication" : null
+      },
+      oidc: {
+        enabled: oidcEnabled,
+        providerName: oidcEnabled ? process.env.OIDC_PROVIDER_NAME || "Single Sign-On" : null
+      },
+      localEnabled: process.env.DISABLE_LOCAL_AUTH !== "true",
+      registrationEnabled: process.env.DISABLE_REGISTRATION !== "true"
+    });
+  });
+  
   // Apply rate limiting middleware for API routes
   const apiLimiter = rateLimit({
     windowMs: 15 * 60 * 1000, // 15 minutes

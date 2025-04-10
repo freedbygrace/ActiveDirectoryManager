@@ -82,6 +82,7 @@ export default function SettingsPage() {
           <TabsTrigger value="general">General</TabsTrigger>
           <TabsTrigger value="security">Security</TabsTrigger>
           <TabsTrigger value="api">API</TabsTrigger>
+          <TabsTrigger value="authentication">Authentication</TabsTrigger>
           <TabsTrigger value="notifications">Notifications</TabsTrigger>
         </TabsList>
         
@@ -266,6 +267,182 @@ export default function SettingsPage() {
                   <p className="text-xs text-muted-foreground">
                     Comma-separated list of allowed origins, or * for all origins
                   </p>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </TabsContent>
+        
+        <TabsContent value="authentication">
+          <div className="grid gap-6">
+            <Card>
+              <CardHeader>
+                <CardTitle>Authentication Methods</CardTitle>
+                <CardDescription>
+                  Configure login methods for your application
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                <div className="flex items-center justify-between">
+                  <div className="space-y-0.5">
+                    <Label>Local Authentication</Label>
+                    <div className="text-sm text-muted-foreground">
+                      Enable username and password login
+                    </div>
+                  </div>
+                  <Switch defaultChecked />
+                </div>
+                
+                <div className="flex items-center justify-between">
+                  <div className="space-y-0.5">
+                    <Label>Allow User Registration</Label>
+                    <div className="text-sm text-muted-foreground">
+                      Allow new users to register accounts
+                    </div>
+                  </div>
+                  <Switch defaultChecked />
+                </div>
+                
+                <Separator className="my-4" />
+                
+                <div className="space-y-4">
+                  <h3 className="text-sm font-medium">LDAP Authentication</h3>
+                  
+                  <div className="flex items-center justify-between">
+                    <div className="space-y-0.5">
+                      <Label>Enable LDAP Login</Label>
+                      <div className="text-sm text-muted-foreground">
+                        Allow users to login via LDAP
+                      </div>
+                    </div>
+                    <Switch id="enable-ldap" />
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <Label htmlFor="ldap-connection-name">Connection Display Name</Label>
+                    <Input id="ldap-connection-name" placeholder="LDAP Authentication" />
+                    <p className="text-xs text-muted-foreground">
+                      Name shown to users on the login screen
+                    </p>
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <Label htmlFor="ldap-url">LDAP Server URL</Label>
+                    <Input id="ldap-url" placeholder="ldap://ldap.example.com:389" />
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <Label htmlFor="ldap-bind-dn">Bind DN</Label>
+                    <Input id="ldap-bind-dn" placeholder="cn=admin,dc=example,dc=com" />
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <Label htmlFor="ldap-bind-password">Bind Password</Label>
+                    <Input id="ldap-bind-password" type="password" />
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <Label htmlFor="ldap-search-base">Search Base</Label>
+                    <Input id="ldap-search-base" placeholder="ou=users,dc=example,dc=com" />
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <Label htmlFor="ldap-search-filter">Search Filter</Label>
+                    <Input id="ldap-search-filter" placeholder="(uid={{username}})" />
+                    <p className="text-xs text-muted-foreground">
+                      Use {{username}} as a placeholder for the user's input
+                    </p>
+                  </div>
+                  
+                  <div className="flex items-center justify-between">
+                    <div className="space-y-0.5">
+                      <Label>TLS/SSL</Label>
+                      <div className="text-sm text-muted-foreground">
+                        Require secure connection
+                      </div>
+                    </div>
+                    <Switch id="ldap-tls" defaultChecked />
+                  </div>
+                </div>
+                
+                <Separator className="my-4" />
+                
+                <div className="space-y-4">
+                  <h3 className="text-sm font-medium">OpenID Connect Authentication</h3>
+                  
+                  <div className="flex items-center justify-between">
+                    <div className="space-y-0.5">
+                      <Label>Enable OIDC Login</Label>
+                      <div className="text-sm text-muted-foreground">
+                        Allow users to login via OpenID Connect
+                      </div>
+                    </div>
+                    <Switch id="enable-oidc" />
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <Label htmlFor="oidc-provider-name">Provider Display Name</Label>
+                    <Input id="oidc-provider-name" placeholder="Single Sign-On" />
+                    <p className="text-xs text-muted-foreground">
+                      Name shown to users on the login screen
+                    </p>
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <Label htmlFor="oidc-issuer">Issuer</Label>
+                    <Input id="oidc-issuer" placeholder="https://accounts.google.com" />
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <Label htmlFor="oidc-auth-url">Authorization URL</Label>
+                    <Input id="oidc-auth-url" placeholder="https://accounts.google.com/o/oauth2/v2/auth" />
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <Label htmlFor="oidc-token-url">Token URL</Label>
+                    <Input id="oidc-token-url" placeholder="https://oauth2.googleapis.com/token" />
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <Label htmlFor="oidc-userinfo-url">UserInfo URL</Label>
+                    <Input id="oidc-userinfo-url" placeholder="https://openidconnect.googleapis.com/v1/userinfo" />
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <Label htmlFor="oidc-client-id">Client ID</Label>
+                    <Input id="oidc-client-id" />
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <Label htmlFor="oidc-client-secret">Client Secret</Label>
+                    <Input id="oidc-client-secret" type="password" />
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <Label htmlFor="oidc-callback-url">Callback URL</Label>
+                    <Input id="oidc-callback-url" placeholder="http://localhost:3000/api/auth/oidc/callback" />
+                    <p className="text-xs text-muted-foreground">
+                      Must match the redirect URI configured with your OIDC provider
+                    </p>
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <Label>Requested Scopes</Label>
+                    <div className="flex flex-wrap gap-2">
+                      <div className="flex items-center space-x-2">
+                        <Switch id="scope-openid" defaultChecked disabled />
+                        <Label htmlFor="scope-openid" className="text-sm font-normal">openid</Label>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <Switch id="scope-profile" defaultChecked />
+                        <Label htmlFor="scope-profile" className="text-sm font-normal">profile</Label>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <Switch id="scope-email" defaultChecked />
+                        <Label htmlFor="scope-email" className="text-sm font-normal">email</Label>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </CardContent>
             </Card>
