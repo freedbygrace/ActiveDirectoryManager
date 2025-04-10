@@ -7,7 +7,8 @@ import { queryClient } from "./lib/queryClient";
 import ProtectedRoute from "./lib/protected-route";
 import NotFound from "@/pages/not-found";
 import AuthPage from "@/pages/auth-page";
-import DashboardPage from "@/pages/dashboard-page";
+import MainDashboardPage from "@/pages/main-dashboard-page";
+import CustomDashboardsPage from "@/pages/custom-dashboards-page";
 import UsersPage from "@/pages/users-page";
 import GroupsPage from "@/pages/groups-page";
 import OUsPage from "@/pages/ous-page";
@@ -31,7 +32,7 @@ export default function App() {
               <Route path="/auth">
                 <AuthPage />
               </Route>
-              <ProtectedRoute path="/" component={DashboardPage} />
+              <ProtectedRoute path="/" component={MainDashboardPage} />
               <ProtectedRoute path="/users" component={UsersPage} />
               <ProtectedRoute path="/groups" component={GroupsPage} />
               <ProtectedRoute path="/organizational-units" component={OUsPage} />
@@ -44,7 +45,7 @@ export default function App() {
               <ProtectedRoute path="/settings" component={SettingsPage} />
               <ProtectedRoute path="/user-management" component={UserManagementPage} />
               <ProtectedRoute path="/sites" component={SitesPage} />
-              <ProtectedRoute path="/reporting/dashboards" component={DashboardPage} />
+              <ProtectedRoute path="/reporting/dashboards" component={CustomDashboardsPage} />
               <Route>
                 <NotFound />
               </Route>
