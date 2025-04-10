@@ -159,10 +159,22 @@ const ConditionBuilder: React.FC<ConditionBuilderProps> = ({
         }
       }
       
-      // Remove the group and all its children
-      const newConditions = conditions.filter(
-        c => c.id !== conditionToRemove.id && c.parentId !== conditionToRemove.id
-      );
+      // Find just this group's children (not all groups with the same parent)
+      const childrenToRemove = conditions.filter(c => c.parentId === conditionToRemove.id);
+      
+      // Create a list of IDs to remove (the group and its direct children)
+      const idsToRemove = new Set([
+        conditionToRemove.id, 
+        ...childrenToRemove.map(c => c.id).filter(Boolean)
+      ]);
+      
+      // Only remove this specific group and its direct children
+      const newConditions = conditions.filter(c => {
+        // Keep the condition if its ID is not in our removal list
+        // and its parent ID is not the ID of the group we're removing
+        return !idsToRemove.has(c.id) && c.parentId !== conditionToRemove.id;
+      });
+      
       onChange(newConditions);
     } else {
       // Just remove the single condition
