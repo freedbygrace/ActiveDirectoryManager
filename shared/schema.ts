@@ -146,6 +146,40 @@ export const ldapConnections = pgTable("ldap_connections", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
+// Dynamic Group Membership Rules
+export const dynamicGroupRules = pgTable("dynamic_group_rules", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull(),
+  description: text("description"),
+  targetGroup: text("target_group").notNull(), // DN of the target AD group
+  enabled: boolean("enabled").default(true),
+  schedule: text("schedule").default("0 0 * * *"), // Cron format (default: daily at midnight)
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+  lastRun: timestamp("last_run"),
+  lastRunStatus: text("last_run_status"),
+  variablePattern: text("variable_pattern"), // Pattern for dynamic group name, e.g. "{{department}}-Users"
+});
+
+// Rule conditions (filter logic)
+export const dynamicGroupConditions = pgTable("dynamic_group_conditions", {
+  id: serial("id").primaryKey(), 
+  ruleId: integer("rule_id").references(() => dynamicGroupRules.id, { onDelete: "cascade" }).notNull(),
+  parentId: integer("parent_id").references(() => dynamicGroupConditions.id, { onDelete: "cascade" }),
+  type: text("type").notNull(), // "condition", "group"
+  operator: text("operator"), // "and", "or", "not" for groups; "equals", "contains", "startsWith", etc. for conditions
+  attribute: text("attribute"), // LDAP attribute name (e.g., "department", "title")
+  value: text("value"), // Value to compare against
+  position: integer("position").default(0), // For ordering conditions within a group
+});
+
+// Many-to-many relationship between rules and connections
+export const dynamicGroupRuleConnections = pgTable("dynamic_group_rule_connections", {
+  id: serial("id").primaryKey(),
+  ruleId: integer("rule_id").references(() => dynamicGroupRules.id, { onDelete: "cascade" }).notNull(),
+  connectionId: integer("connection_id").references(() => ldapConnections.id, { onDelete: "cascade" }).notNull(),
+});
+
 // Active Directory schemas
 export const adUsers = pgTable("ad_users", {
   id: serial("id").primaryKey(),
@@ -295,6 +329,37 @@ export const apiTokensRelations = relations(apiTokens, ({ one }) => ({
   }),
 }));
 
+// Dynamic Group Rules Relations
+export const dynamicGroupRulesRelations = relations(dynamicGroupRules, ({ many }) => ({
+  conditions: many(dynamicGroupConditions),
+  connections: many(dynamicGroupRuleConnections),
+}));
+
+export const dynamicGroupConditionsRelations = relations(dynamicGroupConditions, ({ one, many }) => ({
+  rule: one(dynamicGroupRules, {
+    fields: [dynamicGroupConditions.ruleId],
+    references: [dynamicGroupRules.id],
+  }),
+  parent: one(dynamicGroupConditions, {
+    fields: [dynamicGroupConditions.parentId],
+    references: [dynamicGroupConditions.id],
+  }),
+  children: many(dynamicGroupConditions, {
+    relationName: 'parent-child-conditions'
+  }),
+}));
+
+export const dynamicGroupRuleConnectionsRelations = relations(dynamicGroupRuleConnections, ({ one }) => ({
+  rule: one(dynamicGroupRules, {
+    fields: [dynamicGroupRuleConnections.ruleId],
+    references: [dynamicGroupRules.id],
+  }),
+  connection: one(ldapConnections, {
+    fields: [dynamicGroupRuleConnections.connectionId],
+    references: [ldapConnections.id],
+  }),
+}));
+
 // Generate insertion schemas
 export const insertRoleSchema = createInsertSchema(roles).omit({ id: true, createdAt: true });
 export const insertRolePermissionSchema = createInsertSchema(rolePermissions);
@@ -308,6 +373,9 @@ export const insertAdComputerSchema = createInsertSchema(adComputers).omit({ id:
 export const insertAdDomainSchema = createInsertSchema(adDomains).omit({ id: true });
 export const insertAdSiteSchema = createInsertSchema(adSites).omit({ id: true });
 export const insertAdSubnetSchema = createInsertSchema(adSubnets).omit({ id: true });
+export const insertDynamicGroupRuleSchema = createInsertSchema(dynamicGroupRules).omit({ id: true, createdAt: true, updatedAt: true, lastRun: true, lastRunStatus: true });
+export const insertDynamicGroupConditionSchema = createInsertSchema(dynamicGroupConditions).omit({ id: true });
+export const insertDynamicGroupRuleConnectionSchema = createInsertSchema(dynamicGroupRuleConnections).omit({ id: true });
 
 // Login schema
 export const loginSchema = z.object({
