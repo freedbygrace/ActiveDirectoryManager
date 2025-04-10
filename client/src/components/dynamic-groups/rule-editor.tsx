@@ -52,14 +52,27 @@ export const RuleEditor: React.FC<RuleEditorProps> = ({ rule, onSave, onCancel }
   const [activeTab, setActiveTab] = useState('general');
   const [conditions, setConditions] = useState<Condition[]>([]);
   const [schedules, setSchedules] = useState<ScheduleItem[]>([]);
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<{
+    name: string;
+    description: string;
+    targetGroupName: string;
+    targetOU: string;
+    createGroupIfNotExists: boolean;
+    createOUIfNotExists: boolean;
+    createGroupForEachAttributeValue: boolean;
+    createOUForEachAttributeValue: boolean;
+    enabled: boolean;
+    variablePattern: string;
+    connections: number[];
+  }>({
     name: rule?.name || '',
     description: rule?.description || '',
     targetGroupName: rule?.targetGroup ? rule?.targetGroup.split(',')[0].replace('CN=', '') : '',
     targetOU: rule?.targetGroup ? rule?.targetGroup.split(',').slice(1).join(',') : '',
     createGroupIfNotExists: rule?.createGroupIfNotExists || false,
-    createOUIfNotExists: false,
-    createGroupForEachAttributeValue: false,
+    createOUIfNotExists: rule?.createOUIfNotExists || false,
+    createGroupForEachAttributeValue: rule?.createGroupForEachAttributeValue || false,
+    createOUForEachAttributeValue: rule?.createOUForEachAttributeValue || false,
     enabled: rule?.enabled ?? true,
     variablePattern: rule?.variablePattern || '',
     connections: rule?.connectionIds || []
@@ -443,8 +456,23 @@ export const RuleEditor: React.FC<RuleEditorProps> = ({ rule, onSave, onCancel }
                   </Label>
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  When enabled, the system will automatically create separate groups for each distinct value 
-                  of the attribute variables used in the group name or OU
+                  When enabled, the system will automatically create separate groups for each distinct attribute value
+                  used in the group name variables
+                </p>
+                
+                <div className="flex items-center space-x-2 mt-4">
+                  <Switch 
+                    id="createOUForEachAttributeValue"
+                    checked={formData.createOUForEachAttributeValue}
+                    onCheckedChange={(checked) => handleToggleChange('createOUForEachAttributeValue', checked)}
+                  />
+                  <Label htmlFor="createOUForEachAttributeValue">
+                    Automatically create OUs for each distinct attribute value
+                  </Label>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  When enabled, the system will automatically create separate organizational units for each distinct attribute value
+                  used in the OU path variables
                 </p>
               </div>
 
@@ -540,6 +568,12 @@ export const RuleEditor: React.FC<RuleEditorProps> = ({ rule, onSave, onCancel }
                         <dt className="text-sm font-medium text-muted-foreground">Create groups per attribute value:</dt>
                         <dd className="text-sm">
                           {formData.createGroupForEachAttributeValue ? 'Yes' : 'No'}
+                        </dd>
+                      </div>
+                      <div className="flex justify-between">
+                        <dt className="text-sm font-medium text-muted-foreground">Create OUs per attribute value:</dt>
+                        <dd className="text-sm">
+                          {formData.createOUForEachAttributeValue ? 'Yes' : 'No'}
                         </dd>
                       </div>
                       <div className="flex justify-between">

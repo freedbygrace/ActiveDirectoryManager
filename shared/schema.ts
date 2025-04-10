@@ -204,6 +204,7 @@ export const dynamicGroupRules = pgTable("dynamic_group_rules", {
   createGroupIfNotExists: boolean("create_group_if_not_exists").default(false),
   createOUIfNotExists: boolean("create_ou_if_not_exists").default(false),
   createGroupForEachAttributeValue: boolean("create_group_for_each_attribute_value").default(false),
+  createOUForEachAttributeValue: boolean("create_ou_for_each_attribute_value").default(false),
 });
 
 // Rule conditions (filter logic)
