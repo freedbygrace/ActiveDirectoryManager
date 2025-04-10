@@ -45,6 +45,29 @@ export interface IStorage {
   getRole(id: number): Promise<Role | undefined>;
   getDefaultRole(): Promise<Role | undefined>;
   
+  // Dynamic Group Rules
+  listDynamicGroupRules(): Promise<DynamicGroupRule[]>;
+  getDynamicGroupRule(id: number): Promise<DynamicGroupRule | undefined>;
+  createDynamicGroupRule(rule: InsertDynamicGroupRule): Promise<DynamicGroupRule>;
+  updateDynamicGroupRule(id: number, rule: Partial<DynamicGroupRule>): Promise<DynamicGroupRule | undefined>;
+  deleteDynamicGroupRule(id: number): Promise<boolean>;
+  
+  // Dynamic Group Conditions
+  listConditionsForRule(ruleId: number): Promise<DynamicGroupCondition[]>;
+  createDynamicGroupCondition(condition: InsertDynamicGroupCondition): Promise<DynamicGroupCondition>;
+  updateDynamicGroupCondition(id: number, condition: Partial<DynamicGroupCondition>): Promise<DynamicGroupCondition | undefined>;
+  deleteDynamicGroupCondition(id: number): Promise<boolean>;
+  
+  // Dynamic Group Rule Connections
+  linkRuleToConnections(ruleId: number, connectionIds: number[]): Promise<void>;
+  getConnectionsForRule(ruleId: number): Promise<number[]>;
+  
+  // Schedule Rules
+  getSchedulesForRule(ruleId: number): Promise<ScheduleRule[]>;
+  createScheduleRule(schedule: InsertScheduleRule): Promise<ScheduleRule>;
+  updateScheduleRule(id: number, schedule: Partial<ScheduleRule>): Promise<ScheduleRule | undefined>;
+  deleteScheduleRule(id: number): Promise<boolean>;
+  
   // API Token management
   getApiToken(id: number): Promise<ApiToken | undefined>;
   getApiTokenByToken(token: string): Promise<ApiToken | undefined>;
@@ -1214,6 +1237,132 @@ export class DatabaseStorage implements IStorage {
     };
     
     return { data, metadata };
+  }
+  
+  // Dynamic Group Rules methods
+  async listDynamicGroupRules(): Promise<DynamicGroupRule[]> {
+    return db.select().from(dynamicGroupRules).orderBy(dynamicGroupRules.name);
+  }
+  
+  async getDynamicGroupRule(id: number): Promise<DynamicGroupRule | undefined> {
+    const result = await db.select().from(dynamicGroupRules).where(eq(dynamicGroupRules.id, id));
+    return result.length > 0 ? result[0] : undefined;
+  }
+  
+  async createDynamicGroupRule(rule: InsertDynamicGroupRule): Promise<DynamicGroupRule> {
+    const result = await db.insert(dynamicGroupRules).values({
+      ...rule,
+      createdAt: new Date(),
+      updatedAt: new Date()
+    }).returning();
+    return result[0];
+  }
+  
+  async updateDynamicGroupRule(id: number, rule: Partial<DynamicGroupRule>): Promise<DynamicGroupRule | undefined> {
+    const result = await db.update(dynamicGroupRules)
+      .set({
+        ...rule,
+        updatedAt: new Date()
+      })
+      .where(eq(dynamicGroupRules.id, id))
+      .returning();
+    return result.length > 0 ? result[0] : undefined;
+  }
+  
+  async deleteDynamicGroupRule(id: number): Promise<boolean> {
+    const result = await db.delete(dynamicGroupRules)
+      .where(eq(dynamicGroupRules.id, id))
+      .returning({ id: dynamicGroupRules.id });
+    return result.length > 0;
+  }
+  
+  // Dynamic Group Conditions methods
+  async listConditionsForRule(ruleId: number): Promise<DynamicGroupCondition[]> {
+    return db.select()
+      .from(dynamicGroupConditions)
+      .where(eq(dynamicGroupConditions.ruleId, ruleId))
+      .orderBy(dynamicGroupConditions.position);
+  }
+  
+  async createDynamicGroupCondition(condition: InsertDynamicGroupCondition): Promise<DynamicGroupCondition> {
+    const result = await db.insert(dynamicGroupConditions).values(condition).returning();
+    return result[0];
+  }
+  
+  async updateDynamicGroupCondition(id: number, condition: Partial<DynamicGroupCondition>): Promise<DynamicGroupCondition | undefined> {
+    const result = await db.update(dynamicGroupConditions)
+      .set(condition)
+      .where(eq(dynamicGroupConditions.id, id))
+      .returning();
+    return result.length > 0 ? result[0] : undefined;
+  }
+  
+  async deleteDynamicGroupCondition(id: number): Promise<boolean> {
+    const result = await db.delete(dynamicGroupConditions)
+      .where(eq(dynamicGroupConditions.id, id))
+      .returning({ id: dynamicGroupConditions.id });
+    return result.length > 0;
+  }
+  
+  // Dynamic Group Rule Connections methods
+  async linkRuleToConnections(ruleId: number, connectionIds: number[]): Promise<void> {
+    // First delete existing connections
+    await db.delete(dynamicGroupRuleConnections)
+      .where(eq(dynamicGroupRuleConnections.ruleId, ruleId));
+    
+    // Then insert new connections
+    if (connectionIds.length > 0) {
+      await db.insert(dynamicGroupRuleConnections)
+        .values(connectionIds.map(connectionId => ({
+          ruleId,
+          connectionId
+        })));
+    }
+  }
+  
+  async getConnectionsForRule(ruleId: number): Promise<number[]> {
+    const connections = await db.select({ connectionId: dynamicGroupRuleConnections.connectionId })
+      .from(dynamicGroupRuleConnections)
+      .where(eq(dynamicGroupRuleConnections.ruleId, ruleId));
+    
+    return connections.map(c => c.connectionId);
+  }
+  
+  // Schedule Rules methods
+  async getSchedulesForRule(ruleId: number): Promise<ScheduleRule[]> {
+    return db.select()
+      .from(scheduleRules)
+      .where(eq(scheduleRules.ruleId, ruleId))
+      .orderBy(scheduleRules.id);
+  }
+  
+  async createScheduleRule(schedule: InsertScheduleRule): Promise<ScheduleRule> {
+    const result = await db.insert(scheduleRules)
+      .values({
+        ...schedule,
+        createdAt: new Date(),
+        updatedAt: new Date()
+      })
+      .returning();
+    return result[0];
+  }
+  
+  async updateScheduleRule(id: number, schedule: Partial<ScheduleRule>): Promise<ScheduleRule | undefined> {
+    const result = await db.update(scheduleRules)
+      .set({
+        ...schedule,
+        updatedAt: new Date()
+      })
+      .where(eq(scheduleRules.id, id))
+      .returning();
+    return result.length > 0 ? result[0] : undefined;
+  }
+  
+  async deleteScheduleRule(id: number): Promise<boolean> {
+    const result = await db.delete(scheduleRules)
+      .where(eq(scheduleRules.id, id))
+      .returning({ id: scheduleRules.id });
+    return result.length > 0;
   }
 }
 
