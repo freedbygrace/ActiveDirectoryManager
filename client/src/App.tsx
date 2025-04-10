@@ -21,6 +21,7 @@ import SettingsPage from "@/pages/settings-page";
 import UserManagementPage from "@/pages/user-management-page";
 import AuditLogsPage from "@/pages/audit-logs-page";
 import SitesPage from "@/pages/sites-page";
+import DynamicGroupsPage from "@/pages/dynamic-groups-page";
 
 export default function App() {
   return (
@@ -45,6 +46,7 @@ export default function App() {
               <ProtectedRoute path="/settings" component={SettingsPage} />
               <ProtectedRoute path="/user-management" component={UserManagementPage} />
               <ProtectedRoute path="/sites" component={SitesPage} />
+              <ProtectedRoute path="/dynamic-groups" component={DynamicGroupsPage} />
               <ProtectedRoute path="/reporting/dashboards" component={CustomDashboardsPage} />
               <Route>
                 <NotFound />
