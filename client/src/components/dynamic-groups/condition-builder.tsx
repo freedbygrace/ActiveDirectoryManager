@@ -175,7 +175,7 @@ const ConditionBuilder: React.FC<ConditionBuilderProps> = ({
           // Keep the condition if its ID is not in our removal list
           // and its parent ID is not in our removal list
           return !idsToRemove.has(c.id) && 
-                 !idsToRemove.has(c.parentId);
+                 !(c.parentId !== null && idsToRemove.has(c.parentId));
         });
         
         onChange(newConditions);
@@ -242,7 +242,7 @@ const ConditionBuilder: React.FC<ConditionBuilderProps> = ({
         return (
           <div className="mb-3">
             <div 
-              className="border border-border rounded-md p-3"
+              className={`border ${isExpanded ? 'bg-background/50' : 'bg-accent/10'} border-border rounded-md p-3`}
               style={{ marginLeft: level > 0 ? `${level * 20}px` : '0' }}
             >
               <div className="flex items-center justify-between mb-2">
@@ -341,7 +341,7 @@ const ConditionBuilder: React.FC<ConditionBuilderProps> = ({
       // Regular condition
       return (
         <div 
-          className="grid grid-cols-13 gap-2 items-center mb-2 border border-transparent hover:border-border p-2 rounded-md"
+          className="grid grid-cols-13 gap-2 items-center mb-2 border border-transparent hover:border-border p-2 rounded-md bg-background/50 hover:bg-background"
           style={{ marginLeft: level > 0 ? `${level * 20}px` : '0' }}
         >
           <div className="col-span-1 flex items-center justify-center">
@@ -603,21 +603,28 @@ const generateLdapFilter = (conditions: Condition[]): string => {
     const operator = logicalOp === 'AND' ? '&' : '|';
     let groupFilter = `(${operator}`;
     
+    // Track if we've added any conditions to this group
+    let hasAddedCondition = false;
+    
     // Process regular conditions in this group
     for (const condition of childConditions) {
       if (!condition.isGroup) {
         const filter = generateRegularFilter(condition);
-        if (filter) groupFilter += filter;
+        if (filter) {
+          groupFilter += filter;
+          hasAddedCondition = true;
+        }
       }
     }
     
     // Process subgroups in this group
     for (const condition of childConditions) {
-      if (condition.isGroup && condition.id) {
+      if (condition.isGroup && condition.id !== undefined) {
         // Use another group filter here
         const subGroupFilter = generateGroupFilter(condition.id);
         if (subGroupFilter !== '(objectClass=*)') {
           groupFilter += subGroupFilter;
+          hasAddedCondition = true;
         }
       }
     }
@@ -625,7 +632,7 @@ const generateLdapFilter = (conditions: Condition[]): string => {
     groupFilter += ')';
     
     // If there are no actual conditions, return a default
-    if (groupFilter === `(${operator})`) {
+    if (!hasAddedCondition) {
       return '(objectClass=*)';
     }
     
