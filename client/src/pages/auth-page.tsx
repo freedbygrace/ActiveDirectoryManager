@@ -98,13 +98,36 @@ export default function AuthPage() {
       }
     );
   };
+  
+  // Handle LDAP login form submission
+  const onLdapLoginSubmit = (data: LoginFormValues) => {
+    const { username, password } = data;
+    auth.ldapLoginMutation.mutate(
+      { username, password },
+      {
+        onSuccess: () => {
+          navigate("/");
+        }
+      }
+    );
+  };
+  
+  // Handle OIDC login
+  const handleOidcLogin = () => {
+    auth.initiateOidcLogin();
+  };
 
   // Handle register form submission
   const onRegisterSubmit = (data: RegisterFormValues) => {
     // Remove confirmPassword and acceptTerms which aren't part of the API request
     const { confirmPassword, acceptTerms, ...registerData } = data;
+    
+    // Add authProvider as 'local' for new registrations
     auth.registerMutation.mutate(
-      registerData,
+      {
+        ...registerData,
+        authProvider: 'local' // Explicitly set this for new users
+      },
       {
         onSuccess: () => {
           navigate("/");
