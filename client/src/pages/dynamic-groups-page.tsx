@@ -33,7 +33,7 @@ interface DynamicGroupRule {
   }[];
 }
 
-// Helper functions are defined inside the component
+// Helper functions are defined and used in their respective components
 
 export default function DynamicGroupsPage() {
   const { toast } = useToast();
@@ -41,7 +41,7 @@ export default function DynamicGroupsPage() {
   const [modalOpen, setModalOpen] = React.useState(false);
   const [selectedRuleId, setSelectedRuleId] = React.useState<number | undefined>(undefined);
 
-  const { data: dynamicGroupRules, isLoading } = useQuery({
+  const { data: dynamicGroupRules = [], isLoading } = useQuery<DynamicGroupRule[]>({
     queryKey: ["/api/dynamic-group-rules"],
     retry: false,
   });
@@ -137,7 +137,7 @@ export default function DynamicGroupsPage() {
 
   // Filter the rules based on the active tab
   const filteredRules = React.useMemo(() => {
-    if (!dynamicGroupRules) return [];
+    if (!dynamicGroupRules || !Array.isArray(dynamicGroupRules)) return [];
     return activeTab === "active"
       ? dynamicGroupRules.filter((rule: DynamicGroupRule) => rule.enabled)
       : dynamicGroupRules.filter((rule: DynamicGroupRule) => !rule.enabled);
@@ -206,6 +206,8 @@ export default function DynamicGroupsPage() {
               onToggle={handleToggleRule}
               onEdit={handleEditRule}
               onCreateNew={handleCreateRule}
+              formatLastRunTime={formatLastRunTime}
+              getStatusBadge={getStatusBadge}
             />
           </TabsContent>
           
@@ -218,6 +220,8 @@ export default function DynamicGroupsPage() {
               onToggle={handleToggleRule}
               onEdit={handleEditRule}
               onCreateNew={handleCreateRule}
+              formatLastRunTime={formatLastRunTime}
+              getStatusBadge={getStatusBadge}
             />
           </TabsContent>
         </Tabs>
@@ -244,9 +248,21 @@ interface RulesListProps {
   onToggle: (id: number, currentStatus: boolean) => void;
   onEdit: (id: number) => void;
   onCreateNew: () => void;
+  formatLastRunTime: (lastRun: string | null) => string;
+  getStatusBadge: (status: string | null) => React.ReactNode;
 }
 
-function RulesList({ rules, isLoading, onDelete, onRunNow, onToggle, onEdit, onCreateNew }: RulesListProps) {
+function RulesList({ 
+  rules, 
+  isLoading, 
+  onDelete, 
+  onRunNow, 
+  onToggle, 
+  onEdit, 
+  onCreateNew,
+  formatLastRunTime,
+  getStatusBadge
+}: RulesListProps) {
   if (isLoading) {
     return (
       <div className="space-y-4">
