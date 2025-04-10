@@ -93,6 +93,15 @@ export function DashboardLayout({
           showLegend: widget.config.showLegend ?? true,
           stacked: widget.config.stacked ?? false,
           precision: widget.config.precision ?? 2,
+          // Add new chart options with defaults
+          colors: widget.config.colors || [],
+          showGrid: widget.config.showGrid ?? true,
+          showTooltip: widget.config.showTooltip ?? true,
+          enableAnimation: widget.config.enableAnimation ?? true,
+          valueFormatter: widget.config.valueFormatter ?? "none",
+          currencySymbol: widget.config.currencySymbol ?? "$",
+          minValue: widget.config.minValue ?? null,
+          maxValue: widget.config.maxValue ?? null,
         },
       };
       
@@ -146,7 +155,15 @@ export function DashboardLayout({
         showLegend: values.config.showLegend,
         stacked: values.config.stacked,
         precision: values.config.precision,
-        colors: ['#8884d8', '#82ca9d', '#ffc658', '#ff8042', '#0088fe'],
+        colors: values.config.colors || ['#8884d8', '#82ca9d', '#ffc658', '#ff8042', '#0088fe'],
+        // New chart options
+        showGrid: values.config.showGrid,
+        showTooltip: values.config.showTooltip,
+        enableAnimation: values.config.enableAnimation,
+        valueFormatter: values.config.valueFormatter,
+        currencySymbol: values.config.currencySymbol,
+        minValue: values.config.minValue,
+        maxValue: values.config.maxValue,
       },
       onEdit: handleEditWidget,
       onDelete: handleDeleteWidget,
