@@ -5058,6 +5058,162 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   /**
    * @swagger
+   * /api/ou-dashboard-data:
+   *   get:
+   *     summary: Get Organizational Unit data for dashboard visualizations
+   *     tags: [Dashboard]
+   *     security:
+   *       - cookieAuth: []
+   *       - bearerAuth: []
+   *     responses:
+   *       200:
+   *         description: Organizational Unit data for dashboard
+   *       401:
+   *         $ref: '#/components/responses/UnauthorizedError'
+   */
+  app.get("/api/ou-dashboard-data", requireAuth({ allowApiToken: true }), async (req, res, next) => {
+    try {
+      // Get data from the first available LDAP connection
+      const connections = await storage.listLdapConnections();
+      
+      if (connections.length === 0) {
+        return res.status(200).json({ data: [], message: "No LDAP connections available" });
+      }
+      
+      const connectionId = connections[0].id;
+      const ous = await storage.listAdOrgUnits(connectionId);
+      
+      // Add objectType to make filtering easier in the dashboard
+      const result = ous.map(ou => ({
+        ...ou,
+        objectType: 'organizationalUnit'
+      }));
+      
+      res.json({ data: result });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  /**
+   * @swagger
+   * /api/domain-dashboard-data:
+   *   get:
+   *     summary: Get domain data for dashboard visualizations
+   *     tags: [Dashboard]
+   *     security:
+   *       - cookieAuth: []
+   *       - bearerAuth: []
+   *     responses:
+   *       200:
+   *         description: Domain data for dashboard
+   *       401:
+   *         $ref: '#/components/responses/UnauthorizedError'
+   */
+  app.get("/api/domain-dashboard-data", requireAuth({ allowApiToken: true }), async (req, res, next) => {
+    try {
+      // Get data from the first available LDAP connection
+      const connections = await storage.listLdapConnections();
+      
+      if (connections.length === 0) {
+        return res.status(200).json({ data: [], message: "No LDAP connections available" });
+      }
+      
+      const connectionId = connections[0].id;
+      const domains = await storage.listAdDomains(connectionId);
+      
+      // Add objectType to make filtering easier in the dashboard
+      const result = domains.map(domain => ({
+        ...domain,
+        objectType: 'domain'
+      }));
+      
+      res.json({ data: result });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  /**
+   * @swagger
+   * /api/site-dashboard-data:
+   *   get:
+   *     summary: Get site data for dashboard visualizations
+   *     tags: [Dashboard]
+   *     security:
+   *       - cookieAuth: []
+   *       - bearerAuth: []
+   *     responses:
+   *       200:
+   *         description: Site data for dashboard
+   *       401:
+   *         $ref: '#/components/responses/UnauthorizedError'
+   */
+  app.get("/api/site-dashboard-data", requireAuth({ allowApiToken: true }), async (req, res, next) => {
+    try {
+      // Get data from the first available LDAP connection
+      const connections = await storage.listLdapConnections();
+      
+      if (connections.length === 0) {
+        return res.status(200).json({ data: [], message: "No LDAP connections available" });
+      }
+      
+      const connectionId = connections[0].id;
+      const sites = await storage.listAdSites(connectionId);
+      
+      // Add objectType to make filtering easier in the dashboard
+      const result = sites.map(site => ({
+        ...site,
+        objectType: 'site'
+      }));
+      
+      res.json({ data: result });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  /**
+   * @swagger
+   * /api/subnet-dashboard-data:
+   *   get:
+   *     summary: Get subnet data for dashboard visualizations
+   *     tags: [Dashboard]
+   *     security:
+   *       - cookieAuth: []
+   *       - bearerAuth: []
+   *     responses:
+   *       200:
+   *         description: Subnet data for dashboard
+   *       401:
+   *         $ref: '#/components/responses/UnauthorizedError'
+   */
+  app.get("/api/subnet-dashboard-data", requireAuth({ allowApiToken: true }), async (req, res, next) => {
+    try {
+      // Get data from the first available LDAP connection
+      const connections = await storage.listLdapConnections();
+      
+      if (connections.length === 0) {
+        return res.status(200).json({ data: [], message: "No LDAP connections available" });
+      }
+      
+      const connectionId = connections[0].id;
+      const subnets = await storage.listAdSubnets(connectionId);
+      
+      // Add objectType to make filtering easier in the dashboard
+      const result = subnets.map(subnet => ({
+        ...subnet,
+        objectType: 'subnet'
+      }));
+      
+      res.json({ data: result });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  /**
+   * @swagger
    * /api/dashboard-summary:
    *   get:
    *     summary: Get summary statistics for the dashboard

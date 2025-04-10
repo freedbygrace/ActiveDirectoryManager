@@ -2,9 +2,10 @@ import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { DashboardLayout, DashboardConfig } from "@/components/dashboard/dashboard-layout";
+import { ShareDashboardDialog } from "@/components/dashboard/share-dashboard-dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
-import { Plus, RefreshCw } from "lucide-react";
+import { Plus, RefreshCw, Share2 } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -60,75 +61,72 @@ export default function DashboardPage() {
     queryKey: ['/api/ldap-connections'],
   });
 
+  // Generic function to fetch and prepare dashboard data
+  const fetchDashboardData = async (endpoint: string, id: string, displayName: string) => {
+    const response = await fetch(endpoint);
+    if (!response.ok) throw new Error(`Failed to fetch ${displayName}`);
+    const responseData = await response.json();
+    
+    // Get the structure of the data to determine field types
+    const data = responseData.data || [];
+    const fields = getFieldTypes(data);
+    
+    console.log(`${displayName} data fields:`, fields);
+    
+    return {
+      id,
+      name: displayName,
+      data,
+      fields,
+    };
+  };
+
   // Get users as a data source
   const { data: usersData, isLoading: isLoadingUsers } = useQuery<any>({
     queryKey: ['/api/user-dashboard-data'],
-    queryFn: async () => {
-      const response = await fetch('/api/user-dashboard-data');
-      if (!response.ok) throw new Error('Failed to fetch users');
-      const users = await response.json();
-      
-      // Get the structure of the data to determine field types
-      const userData = users.data || [];
-      const fields = getFieldTypes(userData);
-      
-      console.log('User data fields:', fields);
-      
-      return {
-        id: 'users',
-        name: 'Active Directory Users',
-        data: userData,
-        fields,
-      };
-    },
+    queryFn: () => fetchDashboardData('/api/user-dashboard-data', 'users', 'Active Directory Users'),
     enabled: true,
   });
 
   // Get computers as a data source
   const { data: computersData, isLoading: isLoadingComputers } = useQuery<any>({
     queryKey: ['/api/computer-dashboard-data'],
-    queryFn: async () => {
-      const response = await fetch('/api/computer-dashboard-data');
-      if (!response.ok) throw new Error('Failed to fetch computers');
-      const computers = await response.json();
-      
-      // Get the structure of the data to determine field types
-      const computerData = computers.data || [];
-      const fields = getFieldTypes(computerData);
-      
-      console.log('Computer data fields:', fields);
-      
-      return {
-        id: 'computers',
-        name: 'Active Directory Computers',
-        data: computerData,
-        fields,
-      };
-    },
+    queryFn: () => fetchDashboardData('/api/computer-dashboard-data', 'computers', 'Active Directory Computers'),
     enabled: true,
   });
 
   // Get groups as a data source
   const { data: groupsData, isLoading: isLoadingGroups } = useQuery<any>({
     queryKey: ['/api/group-dashboard-data'],
-    queryFn: async () => {
-      const response = await fetch('/api/group-dashboard-data');
-      if (!response.ok) throw new Error('Failed to fetch groups');
-      const groups = await response.json();
-      
-      // Get the structure of the data to determine field types
-      const groupData = groups.data || [];
-      const fields = getFieldTypes(groupData);
-      
-      console.log('Group data fields:', fields);
-      
-      return {
-        id: 'groups',
-        name: 'Active Directory Groups',
-        data: groupData,
-        fields,
-      };
-    },
+    queryFn: () => fetchDashboardData('/api/group-dashboard-data', 'groups', 'Active Directory Groups'),
+    enabled: true,
+  });
+  
+  // Get OUs as a data source
+  const { data: ousData, isLoading: isLoadingOUs } = useQuery<any>({
+    queryKey: ['/api/ou-dashboard-data'],
+    queryFn: () => fetchDashboardData('/api/ou-dashboard-data', 'ous', 'Organizational Units'),
+    enabled: true,
+  });
+  
+  // Get domains as a data source
+  const { data: domainsData, isLoading: isLoadingDomains } = useQuery<any>({
+    queryKey: ['/api/domain-dashboard-data'],
+    queryFn: () => fetchDashboardData('/api/domain-dashboard-data', 'domains', 'Active Directory Domains'),
+    enabled: true,
+  });
+  
+  // Get sites as a data source
+  const { data: sitesData, isLoading: isLoadingSites } = useQuery<any>({
+    queryKey: ['/api/site-dashboard-data'],
+    queryFn: () => fetchDashboardData('/api/site-dashboard-data', 'sites', 'Active Directory Sites'),
+    enabled: true,
+  });
+  
+  // Get subnets as a data source
+  const { data: subnetsData, isLoading: isLoadingSubnets } = useQuery<any>({
+    queryKey: ['/api/subnet-dashboard-data'],
+    queryFn: () => fetchDashboardData('/api/subnet-dashboard-data', 'subnets', 'Active Directory Subnets'),
     enabled: true,
   });
 
@@ -152,14 +150,25 @@ export default function DashboardPage() {
 
   // Update data sources when API data is loaded
   useEffect(() => {
-    if (!isLoadingUsers && !isLoadingComputers && !isLoadingGroups) {
+    if (!isLoadingUsers && 
+        !isLoadingComputers && 
+        !isLoadingGroups && 
+        !isLoadingOUs && 
+        !isLoadingDomains && 
+        !isLoadingSites && 
+        !isLoadingSubnets) {
       const sources = [];
       
+      // Add all AD object types as data sources
       if (usersData) sources.push(usersData);
       if (computersData) sources.push(computersData);
       if (groupsData) sources.push(groupsData);
+      if (ousData) sources.push(ousData);
+      if (domainsData) sources.push(domainsData);
+      if (sitesData) sources.push(sitesData);
+      if (subnetsData) sources.push(subnetsData);
       
-      // Add a mock audit logs data source
+      // Add audit logs data source
       sources.push({
         id: 'audit-logs',
         name: 'Audit Logs',
@@ -178,7 +187,22 @@ export default function DashboardPage() {
       setDataSources(sources);
       setDataSourcesLoading(false);
     }
-  }, [isLoadingUsers, isLoadingComputers, isLoadingGroups, usersData, computersData, groupsData]);
+  }, [
+    isLoadingUsers, 
+    isLoadingComputers, 
+    isLoadingGroups, 
+    isLoadingOUs, 
+    isLoadingDomains, 
+    isLoadingSites, 
+    isLoadingSubnets,
+    usersData, 
+    computersData, 
+    groupsData,
+    ousData,
+    domainsData,
+    sitesData,
+    subnetsData
+  ]);
 
   // Helper function to determine field types from data
   function getFieldTypes(data: any[]): Array<{ name: string; type: string }> {
