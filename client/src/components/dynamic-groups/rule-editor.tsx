@@ -54,7 +54,9 @@ export const RuleEditor: React.FC<RuleEditorProps> = ({ rule, onSave, onCancel }
   const [formData, setFormData] = useState({
     name: rule?.name || '',
     description: rule?.description || '',
-    targetGroup: rule?.targetGroup || '',
+    targetGroupName: rule?.targetGroup ? rule?.targetGroup.split(',')[0].replace('CN=', '') : '',
+    targetOU: rule?.targetGroup ? rule?.targetGroup.split(',').slice(1).join(',') : '',
+    createGroupIfNotExists: false,
     enabled: rule?.enabled ?? true,
     variablePattern: rule?.variablePattern || '',
     connections: rule?.connectionIds || []
@@ -109,6 +111,12 @@ export const RuleEditor: React.FC<RuleEditorProps> = ({ rule, onSave, onCancel }
     setFormData(prev => ({ ...prev, connections: connectionIds }));
   };
 
+  // Compute the full target group DN
+  const getTargetGroupDN = () => {
+    if (!formData.targetGroupName || !formData.targetOU) return '';
+    return `CN=${formData.targetGroupName},${formData.targetOU}`;
+  };
+
   // Handle form submission
   const handleSubmit = () => {
     if (!formData.name) {
@@ -121,10 +129,20 @@ export const RuleEditor: React.FC<RuleEditorProps> = ({ rule, onSave, onCancel }
       return;
     }
 
-    if (!formData.targetGroup) {
+    if (!formData.targetGroupName) {
       toast({
         title: "Missing Information",
-        description: "Please specify a target AD group",
+        description: "Please specify a target AD group name",
+        variant: "destructive"
+      });
+      setActiveTab('general');
+      return;
+    }
+
+    if (!formData.targetOU) {
+      toast({
+        title: "Missing Information",
+        description: "Please specify the organizational unit for the target group",
         variant: "destructive"
       });
       setActiveTab('general');
@@ -161,18 +179,21 @@ export const RuleEditor: React.FC<RuleEditorProps> = ({ rule, onSave, onCancel }
       return;
     }
 
+    const targetGroupDN = getTargetGroupDN();
+    
     const ruleData: DynamicGroupRule = {
       id: rule?.id,
       name: formData.name,
       description: formData.description || null,
-      targetGroup: formData.targetGroup,
+      targetGroup: targetGroupDN,
       enabled: formData.enabled,
       createdAt: rule?.createdAt || new Date(),
       updatedAt: new Date(),
       lastRun: rule?.lastRun || null,
       lastRunStatus: rule?.lastRunStatus || null,
       variablePattern: formData.variablePattern || null,
-      connectionIds: formData.connections
+      connectionIds: formData.connections,
+      createGroupIfNotExists: formData.createGroupIfNotExists
     };
 
     onSave(ruleData, schedules);
@@ -181,12 +202,14 @@ export const RuleEditor: React.FC<RuleEditorProps> = ({ rule, onSave, onCancel }
   // Test the rule
   const testRuleMutation = useMutation({
     mutationFn: async () => {
+      const targetGroupDN = getTargetGroupDN();
       const res = await apiRequest('POST', '/api/dynamic-group-rules/test', {
         rule: {
           name: formData.name,
-          targetGroup: formData.targetGroup,
+          targetGroup: targetGroupDN,
           connectionIds: formData.connections,
-          variablePattern: formData.variablePattern || null
+          variablePattern: formData.variablePattern || null,
+          createGroupIfNotExists: formData.createGroupIfNotExists
         },
         conditions
       });
@@ -259,6 +282,39 @@ export const RuleEditor: React.FC<RuleEditorProps> = ({ rule, onSave, onCancel }
               <CardDescription>Configure the basic settings for your dynamic group rule</CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
+              <div className="space-y-2">
+                <Label>LDAP Connections <span className="text-destructive">*</span></Label>
+                <div className="border rounded-md p-4 space-y-2">
+                  {ldapConnections.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">No LDAP connections available. Please create one first.</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {ldapConnections.map((connection) => (
+                        <div key={connection.id} className="flex items-center space-x-2">
+                          <Switch 
+                            id={`connection-${connection.id}`}
+                            checked={formData.connections.includes(connection.id)}
+                            onCheckedChange={(checked) => {
+                              if (checked) {
+                                handleConnectionChange([...formData.connections, connection.id]);
+                              } else {
+                                handleConnectionChange(formData.connections.filter(id => id !== connection.id));
+                              }
+                            }}
+                          />
+                          <Label htmlFor={`connection-${connection.id}`}>
+                            {connection.name} ({connection.server})
+                          </Label>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Select one or more LDAP connections to search for objects
+                </p>
+              </div>
+
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="space-y-2">
                   <Label htmlFor="name">Rule Name <span className="text-destructive">*</span></Label>
@@ -272,18 +328,63 @@ export const RuleEditor: React.FC<RuleEditorProps> = ({ rule, onSave, onCancel }
                 </div>
                 
                 <div className="space-y-2">
-                  <Label htmlFor="targetGroup">Target AD Group <span className="text-destructive">*</span></Label>
-                  <Input 
-                    id="targetGroup" 
-                    name="targetGroup" 
-                    value={formData.targetGroup} 
+                  <Label htmlFor="description">Description</Label>
+                  <Textarea 
+                    id="description" 
+                    name="description" 
+                    value={formData.description} 
                     onChange={handleInputChange} 
-                    placeholder="Enter target AD group DN" 
+                    placeholder="Enter rule description" 
+                    rows={2} 
                   />
+                </div>
+              </div>
+              
+              <Separator className="my-4" />
+              
+              <h3 className="text-md font-medium mb-2">Target AD Group</h3>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="space-y-2">
+                  <Label htmlFor="targetGroupName">Group Name <span className="text-destructive">*</span></Label>
+                  <div className="flex gap-2">
+                    <span className="py-2 px-3 bg-muted text-muted-foreground rounded-l-md border">CN=</span>
+                    <Input 
+                      id="targetGroupName" 
+                      name="targetGroupName" 
+                      value={formData.targetGroupName} 
+                      onChange={handleInputChange}
+                      className="rounded-l-none flex-1"
+                      placeholder="GroupName" 
+                    />
+                  </div>
                   <p className="text-xs text-muted-foreground">
-                    Full DN of the group to update (e.g., CN=Marketing,OU=Groups,DC=example,DC=com)
+                    Name of the group (can include variables)
                   </p>
                 </div>
+                
+                <div className="space-y-2">
+                  <Label htmlFor="targetOU">Organizational Unit <span className="text-destructive">*</span></Label>
+                  <Input 
+                    id="targetOU" 
+                    name="targetOU" 
+                    value={formData.targetOU} 
+                    onChange={handleInputChange} 
+                    placeholder="OU=Groups,DC=example,DC=com" 
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    The OU where the group belongs
+                  </p>
+                </div>
+              </div>
+              
+              <div className="flex items-center space-x-2 mt-2">
+                <Switch 
+                  id="createGroupIfNotExists"
+                  checked={formData.createGroupIfNotExists}
+                  onCheckedChange={(checked) => handleToggleChange('createGroupIfNotExists', checked)}
+                />
+                <Label htmlFor="createGroupIfNotExists">Create group if it doesn't exist</Label>
               </div>
 
               <div className="space-y-2">
