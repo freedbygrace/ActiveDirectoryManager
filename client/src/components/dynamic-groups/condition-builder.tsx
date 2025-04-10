@@ -325,7 +325,7 @@ const ConditionBuilder: React.FC<ConditionBuilderProps> = ({
                 const originalIndex = conditions.findIndex(c => c === child);
                 return child.isGroup 
                   ? renderConditionGroup(child, originalIndex, level + 1) 
-                  : renderCondition(child, originalIndex, level + 1);
+                  : <SortableItem condition={child} index={originalIndex} level={level + 1} />;
               })
             )}
           </div>
@@ -394,8 +394,14 @@ const ConditionBuilder: React.FC<ConditionBuilderProps> = ({
   ) => {
     return (
       <div 
-        className="grid grid-cols-12 gap-2 items-center mb-2 border border-transparent hover:border-border p-2 rounded-md"
+        className="grid grid-cols-13 gap-2 items-center mb-2 border border-transparent hover:border-border p-2 rounded-md"
       >
+        <div 
+          className="col-span-1 cursor-grab flex items-center justify-center" 
+          {...listeners}
+        >
+          <Move className="h-4 w-4 text-muted-foreground" />
+        </div>
         {index > 0 && !condition.isGroup && condition.parentId === conditions[index-1].parentId && (
           <div className="col-span-1">
             <Select
@@ -529,7 +535,7 @@ const ConditionBuilder: React.FC<ConditionBuilderProps> = ({
                   condition.parentId === null || condition.parentId === undefined ? (
                     condition.isGroup ? 
                       renderConditionGroup(condition, index) : 
-                      renderCondition(condition, index)
+                      <SortableItem condition={condition} index={index} />
                   ) : null
                 ))}
               </div>
