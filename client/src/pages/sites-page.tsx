@@ -552,7 +552,7 @@ export default function SitesPage() {
               <div>
                 <CardTitle>Active Directory Sites</CardTitle>
                 <CardDescription>
-                  Manage physical locations in your Active Directory infrastructure.
+                  View and manage sites in your Active Directory environment.
                 </CardDescription>
               </div>
               <div className="flex gap-2">
@@ -579,104 +579,108 @@ export default function SitesPage() {
               </div>
             </CardHeader>
             <CardContent>
-              {!selectedConnection ? (
-                <div className="text-center py-10">
-                  <p className="text-muted-foreground">Please select a connection to view sites.</p>
-                </div>
-              ) : isLoadingSites ? (
-                <div className="space-y-3">
-                  {[...Array(5)].map((_, i) => (
-                    <div key={i} className="flex items-center space-x-4">
-                      <Skeleton className="h-12 w-full" />
-                    </div>
-                  ))}
-                </div>
-              ) : sitesError ? (
-                <div className="text-center py-10">
-                  <p className="text-destructive font-medium">Error loading sites</p>
-                  <p className="text-muted-foreground">{sitesError.message || "Unknown error occurred"}</p>
-                </div>
-              ) : (
-                <Table>
-                  <TableHeader>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Name</TableHead>
+                    <TableHead>Description</TableHead>
+                    <TableHead>Location</TableHead>
+                    <TableHead>Associated Subnets</TableHead>
+                    <TableHead>Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {!selectedConnection ? (
                     <TableRow>
-                      <TableHead>Name</TableHead>
-                      <TableHead>Description</TableHead>
-                      <TableHead>Location</TableHead>
-                      <TableHead>Associated Subnets</TableHead>
-                      <TableHead>Actions</TableHead>
+                      <TableCell colSpan={5} className="text-center py-6">
+                        <p className="text-muted-foreground">Please select a connection to view sites.</p>
+                      </TableCell>
                     </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {sitesData?.data && sitesData.data.length > 0 ? (
-                      sitesData.data.map((site: AdSite) => (
-                        <TableRow key={site.objectGUID}>
-                          <TableCell className="font-medium">{site.name}</TableCell>
-                          <TableCell>{site.description || '—'}</TableCell>
-                          <TableCell>{site.location || '—'}</TableCell>
-                          <TableCell>
-                            {site.subnets && site.subnets.length > 0 
-                              ? site.subnets.map((subnet, idx) => (
-                                  <Badge key={idx} variant="outline" className="mr-1">
-                                    {subnet.split(',')[0].replace('CN=', '')}
-                                  </Badge>
-                                ))
-                              : '—'}
-                          </TableCell>
-                          <TableCell>
-                            <div className="flex space-x-2">
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => setEditingSite(site)}
-                              >
-                                <Edit className="h-4 w-4" />
-                              </Button>
-                              <AlertDialog>
-                                <AlertDialogTrigger asChild>
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    className="text-destructive"
+                  ) : isLoadingSites ? (
+                    <TableRow>
+                      <TableCell colSpan={5} className="p-0 border-0">
+                        <div className="space-y-3 p-4">
+                          {[...Array(5)].map((_, i) => (
+                            <Skeleton key={i} className="h-12 w-full" />
+                          ))}
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ) : sitesError ? (
+                    <TableRow>
+                      <TableCell colSpan={5} className="text-center py-6">
+                        <p className="text-destructive font-medium">Error loading sites</p>
+                        <p className="text-muted-foreground">{sitesError.message || "Unknown error occurred"}</p>
+                      </TableCell>
+                    </TableRow>
+                  ) : sitesData?.data && sitesData.data.length > 0 ? (
+                    sitesData.data.map((site: AdSite) => (
+                      <TableRow key={site.objectGUID}>
+                        <TableCell className="font-medium">{site.name}</TableCell>
+                        <TableCell>{site.description || '—'}</TableCell>
+                        <TableCell>{site.location || '—'}</TableCell>
+                        <TableCell>
+                          {site.subnets && site.subnets.length > 0 
+                            ? site.subnets.map((subnet, idx) => (
+                                <Badge key={idx} variant="outline" className="mr-1">
+                                  {subnet.split(',')[0].replace('CN=', '')}
+                                </Badge>
+                              ))
+                            : '—'}
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex space-x-2">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => setEditingSite(site)}
+                            >
+                              <Edit className="h-4 w-4" />
+                            </Button>
+                            <AlertDialog>
+                              <AlertDialogTrigger asChild>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="text-destructive"
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              </AlertDialogTrigger>
+                              <AlertDialogContent>
+                                <AlertDialogHeader>
+                                  <AlertDialogTitle>
+                                    Are you sure you want to delete this site?
+                                  </AlertDialogTitle>
+                                  <AlertDialogDescription>
+                                    This action cannot be undone. This will permanently delete the
+                                    site "{site.name}" and all of its data from the server.
+                                  </AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter>
+                                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                  <AlertDialogAction
+                                    onClick={() => deleteSiteMutation.mutate(site.objectGUID)}
+                                    className="bg-destructive text-destructive-foreground"
                                   >
-                                    <Trash2 className="h-4 w-4" />
-                                  </Button>
-                                </AlertDialogTrigger>
-                                <AlertDialogContent>
-                                  <AlertDialogHeader>
-                                    <AlertDialogTitle>
-                                      Are you sure you want to delete this site?
-                                    </AlertDialogTitle>
-                                    <AlertDialogDescription>
-                                      This action cannot be undone. This will permanently delete the
-                                      site "{site.name}" and all of its data from the server.
-                                    </AlertDialogDescription>
-                                  </AlertDialogHeader>
-                                  <AlertDialogFooter>
-                                    <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                    <AlertDialogAction
-                                      onClick={() => deleteSiteMutation.mutate(site.objectGUID)}
-                                      className="bg-destructive text-destructive-foreground"
-                                    >
-                                      Delete
-                                    </AlertDialogAction>
-                                  </AlertDialogFooter>
-                                </AlertDialogContent>
-                              </AlertDialog>
-                            </div>
-                          </TableCell>
-                        </TableRow>
-                      ))
-                    ) : (
-                      <TableRow>
-                        <TableCell colSpan={5} className="text-center py-6">
-                          <p className="text-muted-foreground">No sites found for this connection.</p>
+                                    Delete
+                                  </AlertDialogAction>
+                                </AlertDialogFooter>
+                              </AlertDialogContent>
+                            </AlertDialog>
+                          </div>
                         </TableCell>
                       </TableRow>
-                    )}
-                  </TableBody>
-                </Table>
-              )}
+                    ))
+                  ) : (
+                    <TableRow>
+                      <TableCell colSpan={5} className="text-center py-6">
+                        <p className="text-muted-foreground">No sites found for this connection.</p>
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
 
               {/* Pagination for sites */}
               {sitesData?.data && sitesData.data.length > 0 && totalSitePages > 1 && (
@@ -840,106 +844,110 @@ export default function SitesPage() {
               </div>
             </CardHeader>
             <CardContent>
-              {!selectedConnection ? (
-                <div className="text-center py-10">
-                  <p className="text-muted-foreground">Please select a connection to view subnets.</p>
-                </div>
-              ) : isLoadingSubnets ? (
-                <div className="space-y-3">
-                  {[...Array(5)].map((_, i) => (
-                    <div key={i} className="flex items-center space-x-4">
-                      <Skeleton className="h-12 w-full" />
-                    </div>
-                  ))}
-                </div>
-              ) : subnetsError ? (
-                <div className="text-center py-10">
-                  <p className="text-destructive font-medium">Error loading subnets</p>
-                  <p className="text-muted-foreground">{subnetsError.message || "Unknown error occurred"}</p>
-                </div>
-              ) : (
-                <Table>
-                  <TableHeader>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Name</TableHead>
+                    <TableHead>CIDR</TableHead>
+                    <TableHead>Description</TableHead>
+                    <TableHead>Location</TableHead>
+                    <TableHead>Site</TableHead>
+                    <TableHead>Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {!selectedConnection ? (
                     <TableRow>
-                      <TableHead>Name</TableHead>
-                      <TableHead>CIDR</TableHead>
-                      <TableHead>Description</TableHead>
-                      <TableHead>Location</TableHead>
-                      <TableHead>Site</TableHead>
-                      <TableHead>Actions</TableHead>
+                      <TableCell colSpan={6} className="text-center py-6">
+                        <p className="text-muted-foreground">Please select a connection to view subnets.</p>
+                      </TableCell>
                     </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {subnetsData?.data && subnetsData.data.length > 0 ? (
-                      subnetsData.data.map((subnet: AdSubnet) => (
-                        <TableRow key={subnet.objectGUID}>
-                          <TableCell className="font-medium">{subnet.name}</TableCell>
-                          <TableCell>{subnet.cidr || '—'}</TableCell>
-                          <TableCell>{subnet.description || '—'}</TableCell>
-                          <TableCell>{subnet.location || '—'}</TableCell>
-                          <TableCell>
-                            {subnet.siteObject ? (
-                              <Badge variant="outline">
-                                {subnet.siteObject.split(',')[0].replace('CN=', '')}
-                              </Badge>
-                            ) : (
-                              '—'
-                            )}
-                          </TableCell>
-                          <TableCell>
-                            <div className="flex space-x-2">
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => setEditingSubnet(subnet)}
-                              >
-                                <Edit className="h-4 w-4" />
-                              </Button>
-                              <AlertDialog>
-                                <AlertDialogTrigger asChild>
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    className="text-destructive"
+                  ) : isLoadingSubnets ? (
+                    <TableRow>
+                      <TableCell colSpan={6} className="p-0 border-0">
+                        <div className="space-y-3 p-4">
+                          {[...Array(5)].map((_, i) => (
+                            <Skeleton key={i} className="h-12 w-full" />
+                          ))}
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ) : subnetsError ? (
+                    <TableRow>
+                      <TableCell colSpan={6} className="text-center py-6">
+                        <p className="text-destructive font-medium">Error loading subnets</p>
+                        <p className="text-muted-foreground">{subnetsError.message || "Unknown error occurred"}</p>
+                      </TableCell>
+                    </TableRow>
+                  ) : subnetsData?.data && subnetsData.data.length > 0 ? (
+                    subnetsData.data.map((subnet: AdSubnet) => (
+                      <TableRow key={subnet.objectGUID}>
+                        <TableCell className="font-medium">{subnet.name}</TableCell>
+                        <TableCell>{subnet.cidr || '—'}</TableCell>
+                        <TableCell>{subnet.description || '—'}</TableCell>
+                        <TableCell>{subnet.location || '—'}</TableCell>
+                        <TableCell>
+                          {subnet.siteObject ? (
+                            <Badge variant="outline">
+                              {subnet.siteObject.split(',')[0].replace('CN=', '')}
+                            </Badge>
+                          ) : (
+                            '—'
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex space-x-2">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => setEditingSubnet(subnet)}
+                            >
+                              <Edit className="h-4 w-4" />
+                            </Button>
+                            <AlertDialog>
+                              <AlertDialogTrigger asChild>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="text-destructive"
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              </AlertDialogTrigger>
+                              <AlertDialogContent>
+                                <AlertDialogHeader>
+                                  <AlertDialogTitle>
+                                    Are you sure you want to delete this subnet?
+                                  </AlertDialogTitle>
+                                  <AlertDialogDescription>
+                                    This action cannot be undone. This will permanently delete the
+                                    subnet "{subnet.name}" and all of its data from the server.
+                                  </AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter>
+                                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                  <AlertDialogAction
+                                    onClick={() => deleteSubnetMutation.mutate(subnet.objectGUID)}
+                                    className="bg-destructive text-destructive-foreground"
                                   >
-                                    <Trash2 className="h-4 w-4" />
-                                  </Button>
-                                </AlertDialogTrigger>
-                                <AlertDialogContent>
-                                  <AlertDialogHeader>
-                                    <AlertDialogTitle>
-                                      Are you sure you want to delete this subnet?
-                                    </AlertDialogTitle>
-                                    <AlertDialogDescription>
-                                      This action cannot be undone. This will permanently delete the
-                                      subnet "{subnet.name}" and all of its data from the server.
-                                    </AlertDialogDescription>
-                                  </AlertDialogHeader>
-                                  <AlertDialogFooter>
-                                    <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                    <AlertDialogAction
-                                      onClick={() => deleteSubnetMutation.mutate(subnet.objectGUID)}
-                                      className="bg-destructive text-destructive-foreground"
-                                    >
-                                      Delete
-                                    </AlertDialogAction>
-                                  </AlertDialogFooter>
-                                </AlertDialogContent>
-                              </AlertDialog>
-                            </div>
-                          </TableCell>
-                        </TableRow>
-                      ))
-                    ) : (
-                      <TableRow>
-                        <TableCell colSpan={6} className="text-center py-6">
-                          <p className="text-muted-foreground">No subnets found for this connection.</p>
+                                    Delete
+                                  </AlertDialogAction>
+                                </AlertDialogFooter>
+                              </AlertDialogContent>
+                            </AlertDialog>
+                          </div>
                         </TableCell>
                       </TableRow>
-                    )}
-                  </TableBody>
-                </Table>
-              )}
+                    ))
+                  ) : (
+                    <TableRow>
+                      <TableCell colSpan={6} className="text-center py-6">
+                        <p className="text-muted-foreground">No subnets found for this connection.</p>
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
 
               {/* Pagination for subnets */}
               {subnetsData?.data && subnetsData.data.length > 0 && totalSubnetPages > 1 && (
