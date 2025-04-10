@@ -507,6 +507,14 @@ export type MoveComputer = z.infer<typeof moveComputerSchema>;
 export type MoveUser = z.infer<typeof moveUserSchema>;
 export type AddToGroup = z.infer<typeof addToGroupSchema>;
 export type RemoveFromGroup = z.infer<typeof removeFromGroupSchema>;
+export type DynamicGroupRule = typeof dynamicGroupRules.$inferSelect;
+export type InsertDynamicGroupRule = z.infer<typeof insertDynamicGroupRuleSchema>;
+export type DynamicGroupCondition = typeof dynamicGroupConditions.$inferSelect;
+export type InsertDynamicGroupCondition = z.infer<typeof insertDynamicGroupConditionSchema>;
+export type ScheduleRule = typeof scheduleRules.$inferSelect;
+export type InsertScheduleRule = z.infer<typeof insertScheduleRuleSchema>;
+export type ScheduleFrequency = typeof scheduleFrequencies[number];
+export type Weekday = typeof weekdays[number];
 
 
 // LDAP Query Builder schemas
