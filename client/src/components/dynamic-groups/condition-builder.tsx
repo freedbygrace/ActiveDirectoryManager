@@ -194,135 +194,22 @@ const ConditionBuilder: React.FC<ConditionBuilderProps> = ({
     );
   };
 
-  // Render all conditions with a flat approach to avoid recursion
+  // Render all conditions with a safer, iterative approach
   const renderAllConditions = () => {
-    // First, build a map of parentId to array of children conditions
-    const conditionsByParent = new Map<number | null | undefined, Condition[]>();
-    
-    // Group conditions by parentId
-    for (const condition of conditions) {
-      const parentId = condition.parentId;
-      if (!conditionsByParent.has(parentId)) {
-        conditionsByParent.set(parentId, []);
-      }
-      conditionsByParent.get(parentId)!.push(condition);
-    }
-    
-    // Render a single condition
-    const renderSingleCondition = (condition: Condition, index: number, level = 0) => {
-      if (!condition.isGroup) {
-        // Render regular condition (not a group)
+    // Create a separate component for rendering conditions
+    const ConditionItem = ({ condition, index, level = 0 }: { condition: Condition, index: number, level?: number }) => {
+      // Get all child conditions if this is a group
+      const childConditions = condition.isGroup && condition.id 
+        ? conditions.filter(c => c.parentId === condition.id)
+        : [];
+      
+      const isExpanded = condition.id ? expandedGroups.has(condition.id) : false;
+      
+      if (condition.isGroup) {
         return (
-          <div 
-            key={`condition-${index}`} 
-            className="grid grid-cols-13 gap-2 items-center mb-2 border border-transparent hover:border-border p-2 rounded-md"
-            style={{ marginLeft: level > 0 ? `${level * 20}px` : '0' }}
-          >
-            <div className="col-span-1 flex items-center justify-center">
-              <Move className="h-4 w-4 text-muted-foreground" />
-            </div>
-            
-            {index > 0 && !condition.isGroup && condition.parentId === conditions[index-1].parentId && (
-              <div className="col-span-1">
-                <Select
-                  value={condition.logicalOperator || 'AND'}
-                  onValueChange={(value) => updateCondition(index, 'logicalOperator', value)}
-                >
-                  <SelectTrigger className="h-8">
-                    <SelectValue placeholder="AND" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {logicalOperators.map((op) => (
-                      <SelectItem key={op.value} value={op.value}>
-                        {op.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
-            
-            {(index === 0 || condition.parentId !== conditions[index-1].parentId) && (
-              <div className="col-span-1"></div>
-            )}
-            
-            <div className="col-span-4">
-              <Select
-                value={condition.attribute}
-                onValueChange={(value) => updateCondition(index, 'attribute', value)}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select attribute" />
-                </SelectTrigger>
-                <SelectContent>
-                  {availableAttributes.map((attr) => (
-                    <SelectItem key={attr} value={attr}>
-                      {attr}
-                    </SelectItem>
-                  ))}
-                  <SelectItem value="custom">Custom Attribute</SelectItem>
-                </SelectContent>
-              </Select>
-              
-              {condition.attribute === 'custom' && (
-                <Input
-                  className="mt-1"
-                  placeholder="Enter custom attribute"
-                  value={condition.customAttribute || ''}
-                  onChange={(e) => updateCondition(index, 'customAttribute', e.target.value)}
-                />
-              )}
-            </div>
-            
-            <div className="col-span-3">
-              <Select
-                value={condition.operator}
-                onValueChange={(value) => updateCondition(index, 'operator', value)}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select operator" />
-                </SelectTrigger>
-                <SelectContent>
-                  {operators.map((op) => (
-                    <SelectItem key={op.value} value={op.value}>
-                      {op.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            
-            <div className="col-span-3">
-              {condition.operator !== 'present' && condition.operator !== 'notPresent' && (
-                <Input
-                  placeholder="Value"
-                  value={condition.value}
-                  onChange={(e) => updateCondition(index, 'value', e.target.value)}
-                />
-              )}
-            </div>
-            
-            <div className="col-span-1 flex justify-end">
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => removeCondition(index)}
-                title="Remove Condition"
-              >
-                <Trash className="h-4 w-4" />
-              </Button>
-            </div>
-          </div>
-        );
-      } else {
-        // Render condition group
-        const hasChildren = condition.id && conditionsByParent.has(condition.id);
-        const isExpanded = condition.id && expandedGroups.has(condition.id);
-        
-        return (
-          <div key={`group-${index}`}>
+          <div className="mb-3">
             <div 
-              className="border border-border rounded-md p-3 mb-3"
+              className="border border-border rounded-md p-3"
               style={{ marginLeft: level > 0 ? `${level * 20}px` : '0' }}
             >
               <div className="flex items-center justify-between mb-2">
@@ -392,15 +279,20 @@ const ConditionBuilder: React.FC<ConditionBuilderProps> = ({
               
               {isExpanded && (
                 <div className="pl-2">
-                  {hasChildren ? (
-                    conditionsByParent.get(condition.id)!.map((childCondition) => {
-                      const childIndex = conditions.indexOf(childCondition);
-                      return (
-                        <div key={`child-${childIndex}`}>
-                          {renderSingleCondition(childCondition, childIndex, level + 1)}
-                        </div>
-                      );
-                    })
+                  {childConditions.length > 0 ? (
+                    <div>
+                      {childConditions.map(childCondition => {
+                        const childIndex = conditions.indexOf(childCondition);
+                        return (
+                          <ConditionItem 
+                            key={`child-${childIndex}`}
+                            condition={childCondition} 
+                            index={childIndex} 
+                            level={level + 1} 
+                          />
+                        );
+                      })}
+                    </div>
                   ) : (
                     <div className="text-sm text-muted-foreground p-2">
                       No conditions in this group. Add one using the buttons above.
@@ -412,14 +304,130 @@ const ConditionBuilder: React.FC<ConditionBuilderProps> = ({
           </div>
         );
       }
+      
+      // Regular condition
+      return (
+        <div 
+          className="grid grid-cols-13 gap-2 items-center mb-2 border border-transparent hover:border-border p-2 rounded-md"
+          style={{ marginLeft: level > 0 ? `${level * 20}px` : '0' }}
+        >
+          <div className="col-span-1 flex items-center justify-center">
+            <Move className="h-4 w-4 text-muted-foreground" />
+          </div>
+          
+          {index > 0 && !condition.isGroup && condition.parentId === conditions[index-1].parentId && (
+            <div className="col-span-1">
+              <Select
+                value={condition.logicalOperator || 'AND'}
+                onValueChange={(value) => updateCondition(index, 'logicalOperator', value)}
+              >
+                <SelectTrigger className="h-8">
+                  <SelectValue placeholder="AND" />
+                </SelectTrigger>
+                <SelectContent>
+                  {logicalOperators.map((op) => (
+                    <SelectItem key={op.value} value={op.value}>
+                      {op.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+          
+          {(index === 0 || condition.parentId !== conditions[index-1].parentId) && (
+            <div className="col-span-1"></div>
+          )}
+          
+          <div className="col-span-4">
+            <Select
+              value={condition.attribute}
+              onValueChange={(value) => updateCondition(index, 'attribute', value)}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Select attribute" />
+              </SelectTrigger>
+              <SelectContent>
+                {availableAttributes.map((attr) => (
+                  <SelectItem key={attr} value={attr}>
+                    {attr}
+                  </SelectItem>
+                ))}
+                <SelectItem value="custom">Custom Attribute</SelectItem>
+              </SelectContent>
+            </Select>
+            
+            {condition.attribute === 'custom' && (
+              <Input
+                className="mt-1"
+                placeholder="Enter custom attribute"
+                value={condition.customAttribute || ''}
+                onChange={(e) => updateCondition(index, 'customAttribute', e.target.value)}
+              />
+            )}
+          </div>
+          
+          <div className="col-span-3">
+            <Select
+              value={condition.operator}
+              onValueChange={(value) => updateCondition(index, 'operator', value)}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Select operator" />
+              </SelectTrigger>
+              <SelectContent>
+                {operators.map((op) => (
+                  <SelectItem key={op.value} value={op.value}>
+                    {op.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          
+          <div className="col-span-3">
+            {condition.operator !== 'present' && condition.operator !== 'notPresent' && (
+              <Input
+                placeholder="Value"
+                value={condition.value}
+                onChange={(e) => updateCondition(index, 'value', e.target.value)}
+              />
+            )}
+          </div>
+          
+          <div className="col-span-1 flex justify-end">
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => removeCondition(index)}
+              title="Remove Condition"
+            >
+              <Trash className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+      );
     };
     
-    // Render only root conditions (those without a parent)
-    const rootConditions = conditionsByParent.get(null) || [];
-    return rootConditions.map((condition) => {
-      const index = conditions.indexOf(condition);
-      return renderSingleCondition(condition, index, 0);
-    });
+    // Get top-level conditions
+    const rootConditions = conditions.filter(c => 
+      c.parentId === null || c.parentId === undefined
+    );
+    
+    return (
+      <div>
+        {rootConditions.map(condition => {
+          const index = conditions.indexOf(condition);
+          return (
+            <ConditionItem 
+              key={`root-${index}`}
+              condition={condition} 
+              index={index} 
+            />
+          );
+        })}
+      </div>
+    );
   };
 
   return (
@@ -498,6 +506,8 @@ const generateLdapFilter = (conditions: Condition[]): string => {
       ? condition.customAttribute 
       : condition.attribute;
     
+    if (!attributeName) return '';
+    
     // Regular condition
     switch (condition.operator) {
       case '=':
@@ -519,27 +529,62 @@ const generateLdapFilter = (conditions: Condition[]): string => {
     }
   };
   
-  // Find all root conditions first (those without parents)
-  const rootConditions = conditions.filter(c => 
-    c.parentId === null || c.parentId === undefined
-  );
+  // Build a map of parent IDs to their child conditions
+  const childrenByParentId = new Map<number | null | undefined, Condition[]>();
   
-  // Simple version that just concatenates all conditions without proper nesting
-  // This avoids recursion completely, but doesn't handle nested groups properly
-  let allFilters = '';
-  
+  // Organize conditions by their parent
   for (const condition of conditions) {
-    if (!condition.isGroup) {
-      allFilters += generateRegularFilter(condition);
+    const parentId = condition.parentId;
+    if (!childrenByParentId.has(parentId)) {
+      childrenByParentId.set(parentId, []);
     }
+    childrenByParentId.get(parentId)!.push(condition);
   }
   
-  if (allFilters === '') {
-    return '(objectClass=*)';
-  }
+  // Generate filter for a group using an iterative approach with a stack
+  const generateGroupFilter = (parentId: number | null | undefined): string => {
+    const childConditions = childrenByParentId.get(parentId) || [];
+    if (childConditions.length === 0) return '(objectClass=*)';
+    
+    // Find the logical operator for this group
+    const logicalOp = parentId === null || parentId === undefined
+      ? 'AND' // Default for root level
+      : conditions.find(c => c.id === parentId)?.logicalOperator || 'AND';
+    
+    const operator = logicalOp === 'AND' ? '&' : '|';
+    let groupFilter = `(${operator}`;
+    
+    // Process regular conditions in this group
+    for (const condition of childConditions) {
+      if (!condition.isGroup) {
+        const filter = generateRegularFilter(condition);
+        if (filter) groupFilter += filter;
+      }
+    }
+    
+    // Process subgroups in this group
+    for (const condition of childConditions) {
+      if (condition.isGroup && condition.id) {
+        // Use another group filter here
+        const subGroupFilter = generateGroupFilter(condition.id);
+        if (subGroupFilter !== '(objectClass=*)') {
+          groupFilter += subGroupFilter;
+        }
+      }
+    }
+    
+    groupFilter += ')';
+    
+    // If there are no actual conditions, return a default
+    if (groupFilter === `(${operator})`) {
+      return '(objectClass=*)';
+    }
+    
+    return groupFilter;
+  };
   
-  // Wrap all filters in an AND operator for simplicity
-  return `(&${allFilters})`;
+  // Start with the root level conditions
+  return generateGroupFilter(null);
 };
 
 export default ConditionBuilder;
