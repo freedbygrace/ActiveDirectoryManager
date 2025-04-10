@@ -348,9 +348,9 @@ export default function SettingsPage() {
                   
                   <div className="space-y-2">
                     <Label htmlFor="ldap-search-filter">Search Filter</Label>
-                    <Input id="ldap-search-filter" placeholder="(uid={{username}})" />
+                    <Input id="ldap-search-filter" placeholder="(uid=&#123;&#123;username&#125;&#125;)" />
                     <p className="text-xs text-muted-foreground">
-                      Use {{username}} as a placeholder for the user's input
+                      Use &#123;&#123;username&#125;&#125; as a placeholder for the user's input
                     </p>
                   </div>
                   
