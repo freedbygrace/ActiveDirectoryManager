@@ -82,6 +82,7 @@ export const RuleEditor: React.FC<RuleEditorProps> = ({ rule, onSave, onCancel }
     createOUIfNotExists: boolean;
     createGroupForEachAttributeValue: boolean;
     createOUForEachAttributeValue: boolean;
+    autoAddRootDSE: boolean;
     enabled: boolean;
     variablePattern: string;
     connections: number[];
@@ -94,6 +95,7 @@ export const RuleEditor: React.FC<RuleEditorProps> = ({ rule, onSave, onCancel }
     createOUIfNotExists: rule?.createOUIfNotExists || false,
     createGroupForEachAttributeValue: rule?.createGroupForEachAttributeValue || false,
     createOUForEachAttributeValue: rule?.createOUForEachAttributeValue || false,
+    autoAddRootDSE: true, // Default to true for better user experience
     enabled: rule?.enabled ?? true,
     variablePattern: rule?.variablePattern || '',
     connections: rule?.connectionIds || []
@@ -167,9 +169,14 @@ export const RuleEditor: React.FC<RuleEditorProps> = ({ rule, onSave, onCancel }
     return domainParts.map(part => `DC=${part}`).join(',');
   };
   
-  // Ensure OU path has rootDSE appended
+  // Ensure OU path has rootDSE appended if autoAddRootDSE is enabled
   const ensureRootDSE = (ouPath: string) => {
     if (!ouPath) return '';
+    
+    // If autoAddRootDSE is disabled, return the path as is
+    if (!formData.autoAddRootDSE) {
+      return ouPath;
+    }
     
     // Check if the path already contains DC=
     if (ouPath.includes('DC=')) {
@@ -474,6 +481,15 @@ export const RuleEditor: React.FC<RuleEditorProps> = ({ rule, onSave, onCancel }
                   />
                   <Label htmlFor="createOUIfNotExists">Create OU if it doesn't exist</Label>
                 </div>
+
+                <div className="flex items-center space-x-2">
+                  <Switch 
+                    id="autoAddRootDSE"
+                    checked={formData.autoAddRootDSE}
+                    onCheckedChange={(checked) => handleToggleChange('autoAddRootDSE', checked)}
+                  />
+                  <Label htmlFor="autoAddRootDSE">Automatically add root DSE to OU path</Label>
+                </div>
                 
                 <div className="space-y-2">
                   <Label htmlFor="targetGroupName">Group Name <span className="text-destructive">*</span></Label>
@@ -634,6 +650,12 @@ export const RuleEditor: React.FC<RuleEditorProps> = ({ rule, onSave, onCancel }
                         <dt className="text-sm font-medium text-muted-foreground">Create OU if not exists:</dt>
                         <dd className="text-sm">
                           {formData.createOUIfNotExists ? 'Yes' : 'No'}
+                        </dd>
+                      </div>
+                      <div className="flex justify-between">
+                        <dt className="text-sm font-medium text-muted-foreground">Auto-add root DSE:</dt>
+                        <dd className="text-sm">
+                          {formData.autoAddRootDSE ? 'Yes' : 'No'}
                         </dd>
                       </div>
                       <div className="flex justify-between">
