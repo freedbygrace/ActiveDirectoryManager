@@ -439,12 +439,15 @@ export const RuleEditor: React.FC<RuleEditorProps> = ({ rule, onSave, onCancel }
                     <div className="absolute right-1 top-1">
                       <VariableSelector 
                         onSelectVariable={(variable) => {
-                          // Direct insertion of variable or prefixed OU segment
+                          // Direct insertion of variable which should already be properly formatted 
+                          // with OU= or DC= prefix by the VariableSelector
                           const currentValue = formData.targetOU || '';
-                          // Check if this is a variable or a direct DC value
-                          const newValue = variable.startsWith("DC=") || variable.startsWith("OU=") 
-                            ? (currentValue && !currentValue.endsWith(",") ? currentValue + "," : currentValue) + variable 
+                          
+                          // Add a comma if needed before adding the variable
+                          const newValue = (currentValue && !currentValue.endsWith(",") && variable !== '') 
+                            ? currentValue + "," + variable 
                             : currentValue + variable;
+                            
                           setFormData({ ...formData, targetOU: newValue });
                         }}
                         connections={formData.connections}
@@ -482,9 +485,9 @@ export const RuleEditor: React.FC<RuleEditorProps> = ({ rule, onSave, onCancel }
                       <div className="absolute right-1 top-1">
                         <VariableSelector 
                           onSelectVariable={(variable) => {
-                            const variableText = `{${variable}}`;
+                            // Variable was already formatted with CN= prefix by the VariableSelector
                             const currentValue = formData.targetGroupName || '';
-                            const newValue = currentValue + variableText;
+                            const newValue = currentValue + variable;
                             setFormData({ ...formData, targetGroupName: newValue });
                           }}
                           connections={formData.connections}
