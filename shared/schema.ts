@@ -146,6 +146,47 @@ export const ldapConnections = pgTable("ldap_connections", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
+// Define schedule type for human-readable schedule descriptions
+export const scheduleFrequencies = [
+  "once",
+  "minutely",
+  "hourly", 
+  "daily", 
+  "weekly", 
+  "monthly", 
+  "yearly", 
+  "custom"
+] as const;
+
+export const weekdays = [
+  "sunday",
+  "monday",
+  "tuesday",
+  "wednesday",
+  "thursday",
+  "friday",
+  "saturday"
+] as const;
+
+// Schedule rules for dynamic group membership updates
+export const scheduleRules = pgTable("schedule_rules", {
+  id: serial("id").primaryKey(),
+  ruleId: integer("rule_id").references(() => dynamicGroupRules.id, { onDelete: "cascade" }).notNull(),
+  frequency: text("frequency").notNull(), // once, minutely, hourly, daily, weekly, monthly, yearly, custom
+  minute: integer("minute"), // 0-59
+  hour: integer("hour"), // 0-23
+  dayOfMonth: integer("day_of_month"), // 1-31
+  month: integer("month"), // 1-12
+  dayOfWeek: text("day_of_week"), // sunday-saturday
+  cronExpression: text("cron_expression"), // Raw cron expression for custom schedules
+  description: text("description"), // Human-readable description
+  enabled: boolean("enabled").default(true),
+  priority: integer("priority").default(0), // For ordering multiple schedules
+  nextRunTime: timestamp("next_run_time"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
 // Dynamic Group Membership Rules
 export const dynamicGroupRules = pgTable("dynamic_group_rules", {
   id: serial("id").primaryKey(),
@@ -153,12 +194,13 @@ export const dynamicGroupRules = pgTable("dynamic_group_rules", {
   description: text("description"),
   targetGroup: text("target_group").notNull(), // DN of the target AD group
   enabled: boolean("enabled").default(true),
-  schedule: text("schedule").default("0 0 * * *"), // Cron format (default: daily at midnight)
+  schedule: text("schedule").default("0 0 * * *"), // Legacy cron format (default: daily at midnight)
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
   lastRun: timestamp("last_run"),
   lastRunStatus: text("last_run_status"),
   variablePattern: text("variable_pattern"), // Pattern for dynamic group name, e.g. "{{department}}-Users"
+  useAdvancedScheduling: boolean("use_advanced_scheduling").default(false),
 });
 
 // Rule conditions (filter logic)
@@ -333,6 +375,7 @@ export const apiTokensRelations = relations(apiTokens, ({ one }) => ({
 export const dynamicGroupRulesRelations = relations(dynamicGroupRules, ({ many }) => ({
   conditions: many(dynamicGroupConditions),
   connections: many(dynamicGroupRuleConnections),
+  schedules: many(scheduleRules),
 }));
 
 export const dynamicGroupConditionsRelations = relations(dynamicGroupConditions, ({ one, many }) => ({
@@ -360,6 +403,14 @@ export const dynamicGroupRuleConnectionsRelations = relations(dynamicGroupRuleCo
   }),
 }));
 
+// Schedule Rule Relations
+export const scheduleRulesRelations = relations(scheduleRules, ({ one }) => ({
+  rule: one(dynamicGroupRules, {
+    fields: [scheduleRules.ruleId],
+    references: [dynamicGroupRules.id],
+  }),
+}));
+
 // Generate insertion schemas
 export const insertRoleSchema = createInsertSchema(roles).omit({ id: true, createdAt: true });
 export const insertRolePermissionSchema = createInsertSchema(rolePermissions);
@@ -376,6 +427,7 @@ export const insertAdSubnetSchema = createInsertSchema(adSubnets).omit({ id: tru
 export const insertDynamicGroupRuleSchema = createInsertSchema(dynamicGroupRules).omit({ id: true, createdAt: true, updatedAt: true, lastRun: true, lastRunStatus: true });
 export const insertDynamicGroupConditionSchema = createInsertSchema(dynamicGroupConditions).omit({ id: true });
 export const insertDynamicGroupRuleConnectionSchema = createInsertSchema(dynamicGroupRuleConnections).omit({ id: true });
+export const insertScheduleRuleSchema = createInsertSchema(scheduleRules).omit({ id: true, createdAt: true, updatedAt: true, nextRunTime: true });
 
 // Login schema
 export const loginSchema = z.object({
