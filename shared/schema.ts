@@ -201,10 +201,11 @@ export const dynamicGroupRules = pgTable("dynamic_group_rules", {
   lastRunStatus: text("last_run_status"),
   variablePattern: text("variable_pattern"), // Pattern for dynamic group name, e.g. "{{department}}-Users"
   useAdvancedScheduling: boolean("use_advanced_scheduling").default(false),
-  createGroupIfNotExists: boolean("create_group_if_not_exists").default(false),
-  createOUIfNotExists: boolean("create_ou_if_not_exists").default(false),
+  createGroupIfNotExists: boolean("create_group_if_not_exists").default(true), // Changed default to true
+  createOUIfNotExists: boolean("create_ou_if_not_exists").default(true), // Changed default to true
   createGroupForEachAttributeValue: boolean("create_group_for_each_attribute_value").default(false),
   createOUForEachAttributeValue: boolean("create_ou_for_each_attribute_value").default(false),
+  autoAddRootDSE: boolean("auto_add_root_dse").default(true), // Added with default true
 });
 
 // Rule conditions (filter logic)
