@@ -34,10 +34,11 @@ import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Slider } from "@/components/ui/slider";
 import { Checkbox } from "@/components/ui/checkbox";
+import { ColorPicker } from "@/components/ui/color-picker";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
-import { X, Plus } from "lucide-react";
+import { X, Plus, Palette } from "lucide-react";
 
 const chartTypeOptions = [
   { value: "bar", label: "Bar Chart" },
@@ -138,6 +139,15 @@ export function WidgetEditor({
           showLegend: editWidget.config.showLegend ?? true,
           stacked: editWidget.config.stacked ?? false,
           precision: editWidget.config.precision ?? 2,
+          // Add new chart options with defaults if not provided
+          colors: editWidget.config.colors || [],
+          showGrid: editWidget.config.showGrid ?? true,
+          showTooltip: editWidget.config.showTooltip ?? true,
+          enableAnimation: editWidget.config.enableAnimation ?? true,
+          valueFormatter: editWidget.config.valueFormatter || "none",
+          currencySymbol: editWidget.config.currencySymbol || "$",
+          minValue: editWidget.config.minValue ?? null,
+          maxValue: editWidget.config.maxValue ?? null,
         },
       });
       
@@ -161,6 +171,15 @@ export function WidgetEditor({
           showLegend: true,
           stacked: false,
           precision: 2,
+          // New chart options with defaults
+          colors: [],
+          showGrid: true,
+          showTooltip: true,
+          enableAnimation: true,
+          valueFormatter: "none",
+          currencySymbol: "$",
+          minValue: null,
+          maxValue: null,
         },
       });
       setSelectedFields([]);
@@ -678,6 +697,159 @@ export function WidgetEditor({
                                   </FormItem>
                                 )}
                               />
+                            </div>
+                            
+                            {/* Visualization Options */}
+                            <h3 className="text-sm font-medium mt-4">Visualization Options</h3>
+                            <div className="space-y-3 border-l-2 pl-3">
+                              <FormField
+                                control={form.control}
+                                name="config.showGrid"
+                                render={({ field }) => (
+                                  <FormItem className="flex flex-row items-center justify-between">
+                                    <div className="space-y-0.5">
+                                      <FormLabel className="text-sm">Show Grid Lines</FormLabel>
+                                      <FormDescription>
+                                        Display grid lines on the chart
+                                      </FormDescription>
+                                    </div>
+                                    <FormControl>
+                                      <Switch
+                                        checked={field.value}
+                                        onCheckedChange={field.onChange}
+                                      />
+                                    </FormControl>
+                                  </FormItem>
+                                )}
+                              />
+                              
+                              <FormField
+                                control={form.control}
+                                name="config.showTooltip"
+                                render={({ field }) => (
+                                  <FormItem className="flex flex-row items-center justify-between">
+                                    <div className="space-y-0.5">
+                                      <FormLabel className="text-sm">Show Tooltips</FormLabel>
+                                      <FormDescription>
+                                        Display tooltips on hover
+                                      </FormDescription>
+                                    </div>
+                                    <FormControl>
+                                      <Switch
+                                        checked={field.value}
+                                        onCheckedChange={field.onChange}
+                                      />
+                                    </FormControl>
+                                  </FormItem>
+                                )}
+                              />
+                              
+                              <FormField
+                                control={form.control}
+                                name="config.enableAnimation"
+                                render={({ field }) => (
+                                  <FormItem className="flex flex-row items-center justify-between">
+                                    <div className="space-y-0.5">
+                                      <FormLabel className="text-sm">Enable Animations</FormLabel>
+                                      <FormDescription>
+                                        Animate chart transitions
+                                      </FormDescription>
+                                    </div>
+                                    <FormControl>
+                                      <Switch
+                                        checked={field.value}
+                                        onCheckedChange={field.onChange}
+                                      />
+                                    </FormControl>
+                                  </FormItem>
+                                )}
+                              />
+                              
+                              <FormField
+                                control={form.control}
+                                name="config.valueFormatter"
+                                render={({ field }) => (
+                                  <FormItem>
+                                    <FormLabel>Value Format</FormLabel>
+                                    <Select
+                                      value={field.value}
+                                      onValueChange={field.onChange}
+                                    >
+                                      <FormControl>
+                                        <SelectTrigger>
+                                          <SelectValue placeholder="Select format" />
+                                        </SelectTrigger>
+                                      </FormControl>
+                                      <SelectContent>
+                                        <SelectItem value="none">None</SelectItem>
+                                        <SelectItem value="number">Number</SelectItem>
+                                        <SelectItem value="percent">Percent</SelectItem>
+                                        <SelectItem value="currency">Currency</SelectItem>
+                                      </SelectContent>
+                                    </Select>
+                                    <FormDescription>
+                                      How to format the values
+                                    </FormDescription>
+                                    <FormMessage />
+                                  </FormItem>
+                                )}
+                              />
+                              
+                              {form.watch("config.valueFormatter") === "currency" && (
+                                <FormField
+                                  control={form.control}
+                                  name="config.currencySymbol"
+                                  render={({ field }) => (
+                                    <FormItem>
+                                      <FormLabel>Currency Symbol</FormLabel>
+                                      <FormControl>
+                                        <Input
+                                          placeholder="$"
+                                          {...field}
+                                        />
+                                      </FormControl>
+                                      <FormMessage />
+                                    </FormItem>
+                                  )}
+                                />
+                              )}
+                            </div>
+                            
+                            {/* Color Customization */}
+                            <h3 className="text-sm font-medium mt-4 flex items-center gap-2">
+                              <Palette className="h-4 w-4" />
+                              Color Customization
+                            </h3>
+                            <div className="space-y-4 border-l-2 pl-3">
+                              {/* Colors for each data series */}
+                              {(form.getValues('config.yAxis') || []).length > 0 && (
+                                <div className="space-y-3">
+                                  <FormLabel>Data Series Colors</FormLabel>
+                                  <div className="space-y-3">
+                                    {(form.getValues('config.yAxis') || []).map((metric, index) => {
+                                      // Get current colors array or initialize if empty
+                                      const colorsArray = form.getValues('config.colors') || [];
+                                      
+                                      return (
+                                        <div key={metric} className="flex items-center gap-3">
+                                          <ColorPicker
+                                            value={colorsArray[index] || ''}
+                                            onChange={(color) => {
+                                              const newColors = [...colorsArray];
+                                              newColors[index] = color;
+                                              form.setValue('config.colors', newColors);
+                                            }}
+                                          />
+                                          <span className="text-sm">{metric}</span>
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                  <FormDescription>
+                                    Customize colors for each data series
+                                  </FormDescription>
+                                </div>
+                              )}
                             </div>
                           </div>
                         )}

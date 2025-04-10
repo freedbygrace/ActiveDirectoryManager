@@ -26,6 +26,14 @@ export interface WidgetProps {
     showLegend?: boolean;
     stacked?: boolean;
     precision?: number;
+    // New chart options
+    showGrid?: boolean;
+    showTooltip?: boolean;
+    enableAnimation?: boolean;
+    valueFormatter?: "none" | "number" | "percent" | "currency";
+    currencySymbol?: string;
+    minValue?: number | null;
+    maxValue?: number | null;
   };
   onEdit: (id: string) => void;
   onDelete: (id: string) => void;
