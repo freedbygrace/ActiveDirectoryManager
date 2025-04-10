@@ -56,6 +56,7 @@ const menuSections: MenuSection[] = [
     items: [
       { title: "Users", path: "/users", icon: <Users className="h-4 w-4" /> },
       { title: "Groups", path: "/groups", icon: <UserPlus className="h-4 w-4" /> },
+      { title: "Dynamic Groups", path: "/dynamic-groups", icon: <LineChart className="h-4 w-4" /> },
       { title: "Organizational Units", path: "/organizational-units", icon: <FolderClosed className="h-4 w-4" /> },
       { title: "Computers", path: "/computers", icon: <Monitor className="h-4 w-4" /> },
       { title: "Domains", path: "/domains", icon: <Globe className="h-4 w-4" /> },
