@@ -244,101 +244,7 @@ const ConditionBuilder: React.FC<ConditionBuilderProps> = ({
     );
   };
 
-  // Render a condition group
-  const renderConditionGroup = (condition: Condition, index: number, level = 0) => {
-    const isExpanded = condition.id ? expandedGroups.has(condition.id) : false;
-    const childConditions = condition.id ? getConditionsForParent(condition.id) : [];
-    
-    return (
-      <div 
-        key={`group-${index}`} 
-        className="border border-border rounded-md p-3 mb-3"
-        style={{ marginLeft: level > 0 ? `${level * 20}px` : '0' }}
-      >
-        <div className="flex items-center justify-between mb-2">
-          <div className="flex items-center space-x-2">
-            <button
-              type="button"
-              onClick={() => condition.id && toggleGroupExpand(condition.id)}
-              className="p-1 hover:bg-accent rounded-sm"
-            >
-              {isExpanded ? (
-                <ChevronDown className="h-4 w-4" />
-              ) : (
-                <ChevronRight className="h-4 w-4" />
-              )}
-            </button>
-            
-            <span className="text-sm font-medium">
-              Condition Group ({condition.logicalOperator})
-            </span>
-          </div>
-          
-          <div className="flex items-center space-x-2">
-            <Select
-              value={condition.logicalOperator || 'AND'}
-              onValueChange={(value) => updateCondition(index, 'logicalOperator', value)}
-            >
-              <SelectTrigger className="w-20 h-8">
-                <SelectValue placeholder="Operator" />
-              </SelectTrigger>
-              <SelectContent>
-                {logicalOperators.map((op) => (
-                  <SelectItem key={op.value} value={op.value}>
-                    {op.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => addCondition(condition.id)}
-              title="Add Condition"
-            >
-              <Plus className="h-4 w-4" />
-            </Button>
-            
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => addConditionGroup(condition.id)}
-              title="Add Group"
-            >
-              <FolderPlus className="h-4 w-4" />
-            </Button>
-            
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => removeCondition(index)}
-              title="Remove Group"
-            >
-              <Trash className="h-4 w-4" />
-            </Button>
-          </div>
-        </div>
-        
-        {isExpanded && (
-          <div className="pl-2">
-            {childConditions.length === 0 ? (
-              <div className="text-sm text-muted-foreground p-2">
-                No conditions in this group. Add one using the buttons above.
-              </div>
-            ) : (
-              childConditions.map((child, childIndex) => {
-                const originalIndex = conditions.findIndex(c => c === child);
-                return child.isGroup 
-                  ? renderConditionGroup(child, originalIndex, level + 1) 
-                  : <SortableItem condition={child} index={originalIndex} level={level + 1} />;
-              })
-            )}
-          </div>
-        )}
-      </div>
-    );
-  };
+  // Removed unused renderConditionGroup function
 
   // Sortable Item wrapper component
   const SortableItem = ({ 
@@ -466,9 +372,12 @@ const ConditionBuilder: React.FC<ConditionBuilderProps> = ({
                     ) : (
                       childConditions.map((child, childIndex) => {
                         const originalIndex = conditions.findIndex(c => c === child);
-                        return child.isGroup 
-                          ? <SortableItem key={`child-${originalIndex}`} condition={child} index={originalIndex} level={level + 1} /> 
-                          : <SortableItem key={`child-${originalIndex}`} condition={child} index={originalIndex} level={level + 1} />;
+                        return <SortableItem 
+                          key={`child-${originalIndex}`} 
+                          condition={child} 
+                          index={originalIndex} 
+                          level={level + 1} 
+                        />;
                       })
                     );
                   })()
