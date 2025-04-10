@@ -378,35 +378,15 @@ export default function DashboardPage() {
     <div className="container mx-auto py-6">
       <div className="flex justify-between items-center mb-6">
         <div className="flex items-center gap-4">
-          <div className="flex space-x-2">
-            <Button 
-              variant="outline" 
-              size="sm" 
-              onClick={() => setLocation("/users")}
-              className="text-xs"
-            >
-              <ArrowLeft className="h-3 w-3 mr-1" />
-              Users
-            </Button>
-            <Button 
-              variant="outline" 
-              size="sm" 
-              onClick={() => setLocation("/groups")}
-              className="text-xs"
-            >
-              <ArrowLeft className="h-3 w-3 mr-1" />
-              Groups
-            </Button>
-            <Button 
-              variant="outline" 
-              size="sm" 
-              onClick={() => setLocation("/computers")}
-              className="text-xs"
-            >
-              <ArrowLeft className="h-3 w-3 mr-1" />
-              Computers
-            </Button>
-          </div>
+          <Button 
+            variant="outline" 
+            size="sm" 
+            onClick={() => window.history.back()}
+            className="mr-2"
+          >
+            <ArrowLeft className="h-4 w-4 mr-2" />
+            Back
+          </Button>
           <h1 className="text-3xl font-bold">Dashboards</h1>
         </div>
         <div className="flex gap-2">
