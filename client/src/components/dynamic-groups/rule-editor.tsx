@@ -128,9 +128,44 @@ export const RuleEditor: React.FC<RuleEditorProps> = ({ rule, onSave, onCancel }
   };
 
   // Compute the full target group DN
+  // Get the rootDSE string based on the first selected LDAP connection
+  const getRootDSE = () => {
+    if (!formData.connections || formData.connections.length === 0) {
+      return "DC=example,DC=com"; // Default if no connection selected
+    }
+    
+    const selectedConnection = ldapConnections.find(conn => 
+      formData.connections.includes(conn.id)
+    );
+    
+    if (!selectedConnection || !selectedConnection.domain) {
+      return "DC=example,DC=com"; // Fallback if no domain info
+    }
+    
+    const domainParts = selectedConnection.domain.split('.');
+    return domainParts.map(part => `DC=${part}`).join(',');
+  };
+  
+  // Ensure OU path has rootDSE appended
+  const ensureRootDSE = (ouPath: string) => {
+    if (!ouPath) return '';
+    
+    // Check if the path already contains DC=
+    if (ouPath.includes('DC=')) {
+      return ouPath;
+    }
+    
+    // Ensure a comma between the OU path and rootDSE if needed
+    const separator = ouPath.endsWith(',') ? '' : ',';
+    return `${ouPath}${separator}${getRootDSE()}`;
+  };
+
   const getTargetGroupDN = () => {
     if (!formData.targetGroupName || !formData.targetOU) return '';
-    return `CN=${formData.targetGroupName},${formData.targetOU}`;
+    
+    // Ensure targetOU has rootDSE
+    const fullOU = ensureRootDSE(formData.targetOU);
+    return `CN=${formData.targetGroupName},${fullOU}`;
   };
 
   // Handle form submission
