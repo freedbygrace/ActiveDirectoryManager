@@ -21,6 +21,11 @@ declare global {
 const scryptAsync = promisify(scrypt);
 const JWT_SECRET = process.env.JWT_SECRET || "super-secret-key-change-in-production";
 const SESSION_SECRET = process.env.SESSION_SECRET || "session-secret-change-in-production";
+const DISABLE_REGISTRATION = process.env.DISABLE_REGISTRATION === "true";
+const DEFAULT_ADMIN_USERNAME = process.env.DEFAULT_ADMIN_USERNAME || "admin";
+const DEFAULT_ADMIN_PASSWORD = process.env.DEFAULT_ADMIN_PASSWORD || "password";
+const DEFAULT_ADMIN_EMAIL = process.env.DEFAULT_ADMIN_EMAIL;
+const DEFAULT_ADMIN_FULLNAME = process.env.DEFAULT_ADMIN_FULLNAME || "System Administrator";
 
 async function hashPassword(password: string) {
   const salt = randomBytes(16).toString("hex");
@@ -35,7 +40,56 @@ async function comparePasswords(supplied: string, stored: string) {
   return timingSafeEqual(hashedBuf, suppliedBuf);
 }
 
+// Function to initialize default admin user
+async function initializeDefaultAdmin() {
+  try {
+    // Check if admin user exists
+    const adminUser = await storage.getUserByUsername(DEFAULT_ADMIN_USERNAME);
+    
+    if (!adminUser) {
+      console.log(`Creating default admin user: ${DEFAULT_ADMIN_USERNAME}`);
+      
+      // Get admin role
+      let adminRole = await storage.getRoleByName("admin");
+      
+      // If no admin role exists, create one with all permissions
+      if (!adminRole) {
+        console.log("Creating admin role with all permissions");
+        adminRole = await storage.createRole({
+          name: "admin",
+          description: "Administrator role with all permissions",
+          isDefault: false,
+        });
+        
+        // Add all permissions to the admin role
+        const permissions = Object.values(PERMISSIONS);
+        for (const permission of permissions) {
+          await storage.addPermissionToRole(adminRole.id, permission);
+        }
+      }
+      
+      // Create the admin user
+      const hashedPassword = await hashPassword(DEFAULT_ADMIN_PASSWORD);
+      await storage.createUser({
+        username: DEFAULT_ADMIN_USERNAME,
+        password: hashedPassword,
+        email: DEFAULT_ADMIN_EMAIL || null,
+        fullName: DEFAULT_ADMIN_FULLNAME,
+        roleId: adminRole.id,
+        authProvider: "local"
+      });
+      
+      console.log(`Default admin user created successfully`);
+    }
+  } catch (error) {
+    console.error("Failed to initialize default admin user:", error);
+  }
+}
+
 export function setupAuth(app: Express) {
+  // Initialize the default admin user
+  initializeDefaultAdmin();
+  
   const sessionSettings: session.SessionOptions = {
     secret: SESSION_SECRET,
     resave: false,
@@ -197,6 +251,11 @@ export function setupAuth(app: Express) {
   // Registration endpoint
   app.post("/api/register", async (req, res, next) => {
     try {
+      // Check if registration is disabled
+      if (DISABLE_REGISTRATION) {
+        return res.status(403).json({ message: "User registration is disabled" });
+      }
+      
       const validationResult = loginSchema.safeParse(req.body);
       if (!validationResult.success) {
         return res.status(400).json({ message: "Invalid input", errors: validationResult.error.errors });

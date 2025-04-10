@@ -204,9 +204,29 @@ export class DatabaseStorage implements IStorage {
     return result.length > 0 ? result[0] : undefined;
   }
   
+  async getRoleByName(name: string): Promise<Role | undefined> {
+    const result = await db.select().from(roles).where(eq(roles.name, name));
+    return result.length > 0 ? result[0] : undefined;
+  }
+  
   async getDefaultRole(): Promise<Role | undefined> {
     const result = await db.select().from(roles).where(eq(roles.isDefault, true));
     return result.length > 0 ? result[0] : undefined;
+  }
+  
+  async createRole(roleData: { name: string; description?: string; isDefault?: boolean }): Promise<Role> {
+    const result = await db.insert(roles).values(roleData).returning();
+    return result[0];
+  }
+  
+  async addPermissionToRole(roleId: number, permission: string): Promise<boolean> {
+    try {
+      await db.insert(rolePermissions).values({ roleId, permission }).returning();
+      return true;
+    } catch (error) {
+      console.error('Error adding permission to role:', error);
+      return false;
+    }
   }
 
   // API Token management
