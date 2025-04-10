@@ -88,7 +88,9 @@ const VariableSelector: React.FC<VariableSelectorProps> = ({ onSelectVariable, c
       const formattedVar = `OU={${attribute}}`;
       onSelectVariable(formattedVar);
     } else {
-      onSelectVariable(attribute);
+      // Format for group name with CN prefix
+      const formattedVar = `CN={${attribute}}`;
+      onSelectVariable(formattedVar);
     }
     setIsOpen(false);
   };
@@ -108,7 +110,9 @@ const VariableSelector: React.FC<VariableSelectorProps> = ({ onSelectVariable, c
       const formattedVar = `OU={${customAttribute.trim()}}`;
       onSelectVariable(formattedVar);
     } else {
-      onSelectVariable(customAttribute.trim());
+      // Format custom attribute for group name with CN prefix
+      const formattedVar = `CN={${customAttribute.trim()}}`;
+      onSelectVariable(formattedVar);
     }
     setCustomAttribute('');
     setIsOpen(false);
