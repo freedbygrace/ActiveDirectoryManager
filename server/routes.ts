@@ -2764,6 +2764,153 @@ export async function registerRoutes(app: Express): Promise<Server> {
    *         description: Server error
    */
   
+  // Domain PATCH endpoint
+  app.patch("/api/connections/:connectionId/ad-domains/:objectGUID", authenticateApiToken, async (req, res, next) => {
+    try {
+      // Check permissions
+      const hasPermission = await checkPermission(req, PERMISSIONS.UPDATE_AD_DOMAINS);
+      if (!hasPermission) {
+        return res.status(403).json({ message: "Not authorized to update domains" });
+      }
+      
+      const connectionId = parseInt(req.params.connectionId);
+      const objectGUID = req.params.objectGUID;
+      
+      // Verify the connection exists
+      const connection = await storage.getLdapConnection(connectionId);
+      if (!connection) {
+        return res.status(404).json({ message: "LDAP connection not found" });
+      }
+      
+      // Get domain to update
+      const domain = await storage.getAdDomain(connectionId, objectGUID);
+      if (!domain) {
+        return res.status(404).json({ message: "Domain not found" });
+      }
+      
+      try {
+        // Connect to LDAP server
+        const ldapClient = await connectToLdap(connection);
+        
+        // Create modification object based on the request body
+        const changes = {};
+        
+        if (req.body.description !== undefined) {
+          changes.description = req.body.description;
+        }
+        
+        if (req.body.netBIOSName !== undefined) {
+          changes.netBIOSName = req.body.netBIOSName;
+        }
+        
+        // Skip modification if no changes
+        if (Object.keys(changes).length === 0) {
+          return res.status(400).json({ message: "No valid attributes provided for update" });
+        }
+        
+        // Modify domain in LDAP
+        await ldapClient.modify(domain.distinguishedName, changes);
+        
+        // Update domain in database
+        const updatedDomain = await storage.updateAdDomain(connectionId, objectGUID, {
+          ...req.body,
+          adProperties: { ...domain.adProperties, ...changes }
+        });
+        
+        // Add audit log
+        await storage.createAuditLogEntry({
+          action: "update_domain",
+          targetId: objectGUID,
+          userId: req.user?.id,
+          connectionId: connectionId,
+          details: {
+            domain: domain.name,
+            distinguishedName: domain.distinguishedName,
+            changes: changes
+          }
+        });
+        
+        res.json({
+          ...updatedDomain,
+          objectType: 'domain'
+        });
+      } catch (err) {
+        console.error("Error updating domain:", err);
+        return res.status(500).json({ message: `Error updating domain: ${err.message}` });
+      }
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  // Domain DELETE endpoint
+  app.delete("/api/connections/:connectionId/ad-domains/:objectGUID", authenticateApiToken, async (req, res, next) => {
+    try {
+      // Check permissions
+      const hasPermission = await checkPermission(req, PERMISSIONS.DELETE_AD_DOMAINS);
+      if (!hasPermission) {
+        return res.status(403).json({ message: "Not authorized to delete domains" });
+      }
+      
+      const connectionId = parseInt(req.params.connectionId);
+      const objectGUID = req.params.objectGUID;
+      
+      // Verify the connection exists
+      const connection = await storage.getLdapConnection(connectionId);
+      if (!connection) {
+        return res.status(404).json({ message: "LDAP connection not found" });
+      }
+      
+      // Get domain to delete
+      const domain = await storage.getAdDomain(connectionId, objectGUID);
+      if (!domain) {
+        return res.status(404).json({ message: "Domain not found" });
+      }
+      
+      try {
+        // Connect to LDAP server
+        const ldapClient = await connectToLdap(connection);
+        
+        // First check if there are any children under this domain
+        const searchResults = await ldapClient.search(domain.distinguishedName, {
+          scope: 'one',
+          filter: '(objectClass=*)'
+        });
+        
+        if (searchResults.searchEntries && searchResults.searchEntries.length > 0) {
+          return res.status(409).json({ 
+            message: "Cannot delete domain with child objects. Remove all child objects first." 
+          });
+        }
+        
+        // Delete domain from LDAP
+        await ldapClient.del(domain.distinguishedName);
+        
+        // Delete domain from database
+        await storage.deleteAdDomain(connectionId, objectGUID);
+        
+        // Add audit log
+        await storage.createAuditLogEntry({
+          action: "delete_domain",
+          targetId: objectGUID,
+          userId: req.user?.id,
+          connectionId: connectionId,
+          details: {
+            domain: domain.name,
+            distinguishedName: domain.distinguishedName
+          }
+        });
+        
+        res.json({ success: true });
+      } catch (err) {
+        console.error("Error deleting domain:", err);
+        return res.status(500).json({ message: `Error deleting domain: ${err.message}` });
+      }
+    } catch (error) {
+      next(error);
+    }
+  });
+
   app.post("/api/connections/:connectionId/ad-domains", authenticateApiToken, async (req, res, next) => {
     try {
       // Check permissions
