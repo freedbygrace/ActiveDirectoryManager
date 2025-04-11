@@ -124,10 +124,10 @@ export function DashboardLayout({ children, title, description }: DashboardLayou
   };
 
   return (
-    <div className="flex h-screen overflow-hidden bg-background">
+    <div className="flex h-screen max-h-screen overflow-hidden bg-background">
       {/* Sidebar */}
       <div
-        className={`w-64 h-full dark:bg-sidebar bg-white shadow-md z-10 flex-shrink-0 transition-all duration-300 ease-in-out ${
+        className={`w-64 h-full max-h-screen dark:bg-sidebar bg-white shadow-md z-10 flex-shrink-0 transition-all duration-300 ease-in-out ${
           sidebarOpen ? "" : "-ml-64"
         } ${isMobile ? "absolute" : "relative"}`}
       >
@@ -137,7 +137,7 @@ export function DashboardLayout({ children, title, description }: DashboardLayou
           </Link>
         </div>
 
-        <div className="overflow-y-auto h-[calc(100%-64px)]">
+        <div className="overflow-y-auto h-[calc(100%-64px)] scrollbar-thin">
           <div className="px-2 pt-4">
             <Link 
               href="/"
@@ -174,9 +174,9 @@ export function DashboardLayout({ children, title, description }: DashboardLayou
       </div>
 
       {/* Main Content */}
-      <div className="flex-1 flex flex-col overflow-hidden">
+      <div className="flex-1 flex flex-col min-h-screen max-h-screen overflow-hidden">
         {/* Top App Bar */}
-        <header className="h-16 bg-white dark:bg-sidebar shadow-sm flex items-center justify-between px-4 z-10">
+        <header className="h-16 bg-white dark:bg-sidebar shadow-sm flex items-center justify-between px-4 z-10 flex-shrink-0">
           <div className="flex items-center">
             <Button
               variant="ghost"
@@ -222,7 +222,7 @@ export function DashboardLayout({ children, title, description }: DashboardLayou
                   <ChevronDown className="h-4 w-4 text-muted-foreground" />
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
+              <DropdownMenuContent align="end" className="max-h-[70vh] overflow-y-auto">
                 <DropdownMenuLabel>My Account</DropdownMenuLabel>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem>
@@ -244,7 +244,7 @@ export function DashboardLayout({ children, title, description }: DashboardLayou
         </header>
 
         {/* Main Content Area */}
-        <main className="flex-1 overflow-y-auto p-6 bg-background">
+        <main className="flex-1 overflow-y-auto p-6 bg-background min-h-0">
           <div className="mb-6">
             <h1 className="text-2xl font-medium text-gray-800 dark:text-gray-100">{title}</h1>
             {description && <p className="text-gray-600 dark:text-gray-400">{description}</p>}
