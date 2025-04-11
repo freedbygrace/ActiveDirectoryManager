@@ -171,6 +171,56 @@ export async function getUserPermissions(userId: number): Promise<string[]> {
   return rolePerms.map(rp => rp.permission);
 }
 
+// Check if a request has a specific permission
+export async function checkPermission(req: Request, permission: string): Promise<boolean> {
+  if (!req.user) {
+    return false;
+  }
+  
+  let hasPermission = false;
+  
+  // Check for API token custom permissions first if present
+  if (req.user?.tokenId && Array.isArray(req.user?.customPermissions)) {
+    // For API tokens with custom permissions
+    const customPermissions = req.user.customPermissions;
+    if (customPermissions.includes(permission)) {
+      hasPermission = true;
+    }
+  } 
+  
+  // If no permission yet, check role-based permissions
+  if (!hasPermission && req.user.roleId) {
+    // Get permissions assigned to the role
+    const rolePerms = await db.select()
+      .from(rolePermissions)
+      .where(eq(rolePermissions.roleId, req.user.roleId));
+    
+    const userPermissions = rolePerms.map(rp => rp.permission);
+
+    // Check for the specific permission
+    if (userPermissions.includes(permission)) {
+      hasPermission = true;
+    }
+  }
+  
+  // Check if user has the admin:system permission which grants all access
+  if (!hasPermission && req.user.roleId) {
+    const adminPerm = await db.select()
+      .from(rolePermissions)
+      .where(and(
+        eq(rolePermissions.roleId, req.user.roleId),
+        eq(rolePermissions.permission, "admin:system")
+      ))
+      .limit(1);
+      
+    if (adminPerm.length > 0) {
+      hasPermission = true;
+    }
+  }
+  
+  return hasPermission;
+}
+
 // Initialize on server startup to ensure default roles
 export async function initializeRBAC() {
   try {
