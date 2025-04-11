@@ -455,28 +455,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  /**
-   * @swagger
-   * /api/users:
-   *   get:
-   *     summary: List all users (admin only)
-   *     tags: [Users]
-   *     security:
-   *       - cookieAuth: []
-   *     responses:
-   *       200:
-   *         description: A list of users
-   *         content:
-   *           application/json:
-   *             schema:
-   *               type: array
-   *               items:
-   *                 $ref: '#/components/schemas/User'
-   *       401:
-   *         $ref: '#/components/responses/UnauthorizedError'
-   *       403:
-   *         description: Forbidden - admin access required
-   */
+  // Removed from Swagger documentation - non-AD user endpoint
   app.get("/api/users", requireAdmin, async (req, res, next) => {
     try {
       const users = await storage.listUsers();
