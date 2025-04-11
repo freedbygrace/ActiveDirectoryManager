@@ -57,6 +57,10 @@ const formSchema = z.object({
     computers_write: z.boolean().default(false),
     domains_read: z.boolean().default(true),
     domains_write: z.boolean().default(false),
+    sites_read: z.boolean().default(true),
+    sites_write: z.boolean().default(false),
+    subnets_read: z.boolean().default(true),
+    subnets_write: z.boolean().default(false),
   }),
 });
 
@@ -82,6 +86,10 @@ export function CreateTokenModal({ isOpen, onClose }: CreateTokenModalProps) {
         computers_write: false,
         domains_read: true,
         domains_write: false,
+        sites_read: true,
+        sites_write: false,
+        subnets_read: true,
+        subnets_write: false,
       },
     },
   });
@@ -147,6 +155,10 @@ export function CreateTokenModal({ isOpen, onClose }: CreateTokenModalProps) {
     { id: "computers_write", label: "Computers - Write" },
     { id: "domains_read", label: "Domains - Read" },
     { id: "domains_write", label: "Domains - Write" },
+    { id: "sites_read", label: "Sites - Read" },
+    { id: "sites_write", label: "Sites - Write" },
+    { id: "subnets_read", label: "Subnets - Read" },
+    { id: "subnets_write", label: "Subnets - Write" },
   ];
 
   return (
@@ -162,7 +174,7 @@ export function CreateTokenModal({ isOpen, onClose }: CreateTokenModalProps) {
             </DialogHeader>
             
             <div className="my-4">
-              <Alert variant="warning">
+              <Alert className="border-amber-500 text-amber-800 dark:text-amber-400">
                 <AlertCircle className="h-4 w-4" />
                 <AlertTitle>Important</AlertTitle>
                 <AlertDescription>
