@@ -189,6 +189,15 @@ export function DashboardLayout({ children, title, description }: DashboardLayou
           </div>
 
           <div className="flex items-center space-x-4">
+            <Button 
+              variant="default" 
+              className="flex items-center gap-2"
+              onClick={() => window.open('/api/docs', '_blank')}
+            >
+              <ClipboardList className="h-4 w-4" />
+              API Documentation
+            </Button>
+            
             <ThemeToggle />
             
             <Button variant="ghost" size="icon">
