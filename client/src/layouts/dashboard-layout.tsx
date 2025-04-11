@@ -137,7 +137,7 @@ export function DashboardLayout({ children, title, description }: DashboardLayou
           </Link>
         </div>
 
-        <div className="overflow-y-auto h-[calc(100%-64px)] scrollbar-thin">
+        <div className="overflow-y-auto h-[calc(100%-64px)] scrollbar-custom">
           <div className="px-2 pt-4">
             <Link 
               href="/"
@@ -222,7 +222,7 @@ export function DashboardLayout({ children, title, description }: DashboardLayou
                   <ChevronDown className="h-4 w-4 text-muted-foreground" />
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="max-h-[70vh] overflow-y-auto">
+              <DropdownMenuContent align="end" className="max-h-[70vh] overflow-y-auto scrollbar-custom">
                 <DropdownMenuLabel>My Account</DropdownMenuLabel>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem>
@@ -250,7 +250,9 @@ export function DashboardLayout({ children, title, description }: DashboardLayou
             {description && <p className="text-gray-600 dark:text-gray-400">{description}</p>}
           </div>
 
-          {children}
+          <div className="overflow-visible">
+            {children}
+          </div>
         </main>
       </div>
     </div>
