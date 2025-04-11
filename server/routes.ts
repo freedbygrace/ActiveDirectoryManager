@@ -2571,6 +2571,57 @@ export async function registerRoutes(app: Express): Promise<Server> {
    *       404:
    *         $ref: '#/components/responses/NotFoundError'
    */
+   
+  /**
+   * @swagger
+   * /api/connections/{connectionId}/ad-domains:
+   *   post:
+   *     summary: Create a new Active Directory domain
+   *     tags: [AD Domains]
+   *     security:
+   *       - cookieAuth: []
+   *       - bearerAuth: []
+   *     parameters:
+   *       - in: path
+   *         name: connectionId
+   *         required: true
+   *         schema:
+   *           type: integer
+   *         description: LDAP connection ID
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             required:
+   *               - name
+   *               - distinguishedName
+   *             properties:
+   *               name:
+   *                 type: string
+   *                 description: The name of the domain
+   *               distinguishedName:
+   *                 type: string
+   *                 description: The distinguished name of the domain
+   *               netBIOSName:
+   *                 type: string
+   *                 description: The NetBIOS name of the domain
+   *               forestName:
+   *                 type: string
+   *                 description: The forest name for the domain
+   *     responses:
+   *       201:
+   *         description: Domain created successfully
+   *       400:
+   *         description: Invalid input
+   *       401:
+   *         description: Unauthorized
+   *       403:
+   *         description: Forbidden
+   *       500:
+   *         description: Server error
+   */
   app.get("/api/connections/:connectionId/ad-domains", async (req, res, next) => {
     try {
       if (!req.isAuthenticated() && !req.headers.authorization) {
@@ -2623,6 +2674,188 @@ export async function registerRoutes(app: Express): Promise<Server> {
         data: domainsWithObjectType,
         ...paginationMetadata
       });
+    } catch (error) {
+      next(error);
+    }
+  });
+  
+  /**
+   * @swagger
+   * /api/connections/{connectionId}/ad-domains/{objectGUID}:
+   *   patch:
+   *     summary: Update an Active Directory domain
+   *     tags: [AD Domains]
+   *     security:
+   *       - cookieAuth: []
+   *       - bearerAuth: []
+   *     parameters:
+   *       - in: path
+   *         name: connectionId
+   *         required: true
+   *         schema:
+   *           type: integer
+   *         description: LDAP connection ID
+   *       - in: path
+   *         name: objectGUID
+   *         required: true
+   *         schema:
+   *           type: string
+   *         description: Object GUID of the domain to update
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             properties:
+   *               description:
+   *                 type: string
+   *                 description: Description for the domain
+   *               netBIOSName:
+   *                 type: string
+   *                 description: NetBIOS name for the domain
+   *     responses:
+   *       200:
+   *         description: Domain updated successfully
+   *       400:
+   *         description: Invalid input
+   *       401:
+   *         description: Unauthorized
+   *       403:
+   *         description: Forbidden
+   *       404:
+   *         description: Domain not found
+   *       500:
+   *         description: Server error
+   */
+  
+  /**
+   * @swagger
+   * /api/connections/{connectionId}/ad-domains/{objectGUID}:
+   *   delete:
+   *     summary: Delete an Active Directory domain
+   *     tags: [AD Domains]
+   *     security:
+   *       - cookieAuth: []
+   *       - bearerAuth: []
+   *     parameters:
+   *       - in: path
+   *         name: connectionId
+   *         required: true
+   *         schema:
+   *           type: integer
+   *         description: LDAP connection ID
+   *       - in: path
+   *         name: objectGUID
+   *         required: true
+   *         schema:
+   *           type: string
+   *         description: Object GUID of the domain to delete
+   *     responses:
+   *       200:
+   *         description: Domain deleted successfully
+   *       401:
+   *         description: Unauthorized
+   *       403:
+   *         description: Forbidden
+   *       404:
+   *         description: Domain not found
+   *       500:
+   *         description: Server error
+   */
+  
+  app.post("/api/connections/:connectionId/ad-domains", authenticateApiToken, async (req, res, next) => {
+    try {
+      // Check permissions
+      const hasPermission = await checkPermission(req, PERMISSIONS.CREATE_AD_DOMAINS);
+      if (!hasPermission) {
+        return res.status(403).json({ message: "Not authorized to create domains" });
+      }
+      
+      const connectionId = parseInt(req.params.connectionId);
+      const connection = await storage.getLdapConnection(connectionId);
+      
+      if (!connection) {
+        return res.status(404).json({ message: "LDAP connection not found" });
+      }
+      
+      // Validate required fields
+      if (!req.body.name || !req.body.distinguishedName) {
+        return res.status(400).json({ message: "Name and distinguishedName are required" });
+      }
+      
+      try {
+        // Connect to LDAP server
+        const ldapClient = await connectToLdap(connection);
+        
+        // Create domain attributes
+        const domainAttributes = {
+          objectClass: ['domain'],
+          cn: req.body.name,
+          description: req.body.description || `Domain ${req.body.name}`
+        };
+        
+        if (req.body.netBIOSName) {
+          domainAttributes.netBIOSName = req.body.netBIOSName;
+        }
+        
+        // Add domain to LDAP
+        await ldapClient.add(req.body.distinguishedName, domainAttributes);
+        
+        // Get the created domain's GUID and details
+        const searchResults = await ldapClient.search(req.body.distinguishedName, {
+          scope: 'base',
+          attributes: ['objectGUID', 'distinguishedName', 'cn', 'description', 'name', 'netBIOSName']
+        });
+        
+        if (!searchResults.searchEntries || searchResults.searchEntries.length === 0) {
+          return res.status(500).json({ message: "Domain was created but could not be retrieved" });
+        }
+        
+        const domainEntry = searchResults.searchEntries[0];
+        
+        // Format objectGUID
+        const objectGUID = Buffer.from(domainEntry.objectGUID).toString('hex');
+        
+        // Create domain record in database
+        const domainData = {
+          name: req.body.name,
+          connectionId: connectionId,
+          objectGUID: objectGUID,
+          distinguishedName: req.body.distinguishedName,
+          cn: domainEntry.cn,
+          netBIOSName: req.body.netBIOSName,
+          forestName: req.body.forestName,
+          adProperties: domainEntry
+        };
+        
+        const createdDomain = await storage.createAdDomain(domainData);
+        
+        // Add audit log
+        await storage.createAuditLogEntry({
+          action: "create_domain",
+          targetId: objectGUID,
+          userId: req.user?.id,
+          connectionId: connectionId,
+          details: {
+            domain: req.body.name,
+            distinguishedName: req.body.distinguishedName
+          }
+        });
+        
+        res.status(201).json({
+          ...createdDomain,
+          objectType: 'domain'
+        });
+      } catch (err) {
+        console.error("Error creating domain:", err);
+        // Check if the error is because the domain already exists
+        if (err.message && err.message.includes('entryAlreadyExists')) {
+          return res.status(409).json({ message: "Domain already exists" });
+        }
+        
+        return res.status(500).json({ message: `Error creating domain: ${err.message}` });
+      }
     } catch (error) {
       next(error);
     }
