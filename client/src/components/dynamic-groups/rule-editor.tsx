@@ -589,7 +589,7 @@ export const RuleEditor: React.FC<RuleEditorProps> = ({ rule, onSave, onCancel }
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <ConditionBuilder 
+              <FixedConditionBuilder 
                 conditions={conditions} 
                 onChange={setConditions}
                 connections={formData.connections}
