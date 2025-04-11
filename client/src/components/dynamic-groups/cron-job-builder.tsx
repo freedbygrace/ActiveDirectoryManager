@@ -90,29 +90,40 @@ export const CronJobBuilder: React.FC<CronJobBuilderProps> = ({
     
     // Update cron expression
     const schedule = newSchedules[index];
-    let cronExpression = '';
     
-    switch (schedule.frequency) {
-      case 'minutely':
-        cronExpression = '* * * * *';
-        break;
-      case 'hourly':
-        cronExpression = `${schedule.minute} * * * *`;
-        break;
-      case 'daily':
-        cronExpression = `${schedule.minute} ${schedule.hour} * * *`;
-        break;
-      case 'weekly':
-        const dayNumber = schedule.dayOfWeek ? weekdays.indexOf(schedule.dayOfWeek) : 0;
-        cronExpression = `${schedule.minute} ${schedule.hour} * * ${dayNumber}`;
-        break;
-      case 'monthly':
-        const day = schedule.dayOfMonth || 1;
-        cronExpression = `${schedule.minute} ${schedule.hour} ${day} * *`;
-        break;
+    // If we're in advanced mode and it's a custom schedule, use the advanced generator
+    if (schedule.mode === 'advanced' && schedule.customSchedule) {
+      newSchedules[index].cronExpression = generateAdvancedCronExpression(schedule);
+    } else {
+      // Otherwise use the standard frequency-based generator
+      let cronExpression = '';
+      
+      switch (schedule.frequency) {
+        case 'minutely':
+          cronExpression = '* * * * *';
+          break;
+        case 'hourly':
+          cronExpression = `${schedule.minute} * * * *`;
+          break;
+        case 'daily':
+          cronExpression = `${schedule.minute} ${schedule.hour} * * *`;
+          break;
+        case 'weekly':
+          const dayNumber = schedule.dayOfWeek ? weekdays.indexOf(schedule.dayOfWeek) : 0;
+          cronExpression = `${schedule.minute} ${schedule.hour} * * ${dayNumber}`;
+          break;
+        case 'monthly':
+          const day = schedule.dayOfMonth || 1;
+          cronExpression = `${schedule.minute} ${schedule.hour} ${day} * *`;
+          break;
+        case 'custom':
+          // For custom schedules, if there's no existing cron expression, use a default
+          cronExpression = schedule.cronExpression || '0 0 * * *';
+          break;
+      }
+      
+      newSchedules[index].cronExpression = cronExpression;
     }
-    
-    newSchedules[index].cronExpression = cronExpression;
     
     setActiveSchedules(newSchedules);
     onSchedulesChange(newSchedules);
@@ -598,11 +609,7 @@ export const CronJobBuilder: React.FC<CronJobBuilderProps> = ({
                                         
                                         updateSchedule(index, { 
                                           minutes: newMinutes,
-                                          customSchedule: true,
-                                          cronExpression: generateAdvancedCronExpression({
-                                            ...schedule,
-                                            minutes: newMinutes
-                                          })
+                                          customSchedule: true
                                         });
                                       }}
                                     >
@@ -638,11 +645,7 @@ export const CronJobBuilder: React.FC<CronJobBuilderProps> = ({
                                         
                                         updateSchedule(index, { 
                                           hours: newHours,
-                                          customSchedule: true,
-                                          cronExpression: generateAdvancedCronExpression({
-                                            ...schedule,
-                                            hours: newHours
-                                          })
+                                          customSchedule: true
                                         });
                                       }}
                                     >
@@ -678,11 +681,7 @@ export const CronJobBuilder: React.FC<CronJobBuilderProps> = ({
                                         
                                         updateSchedule(index, { 
                                           daysOfWeek: newDays,
-                                          customSchedule: true,
-                                          cronExpression: generateAdvancedCronExpression({
-                                            ...schedule,
-                                            daysOfWeek: newDays
-                                          })
+                                          customSchedule: true
                                         });
                                       }}
                                     >
@@ -718,11 +717,7 @@ export const CronJobBuilder: React.FC<CronJobBuilderProps> = ({
                                         
                                         updateSchedule(index, { 
                                           daysOfMonth: newDays,
-                                          customSchedule: true,
-                                          cronExpression: generateAdvancedCronExpression({
-                                            ...schedule,
-                                            daysOfMonth: newDays
-                                          })
+                                          customSchedule: true
                                         });
                                       }}
                                     >
@@ -763,11 +758,7 @@ export const CronJobBuilder: React.FC<CronJobBuilderProps> = ({
                                         
                                         updateSchedule(index, { 
                                           months: newMonths,
-                                          customSchedule: true,
-                                          cronExpression: generateAdvancedCronExpression({
-                                            ...schedule,
-                                            months: newMonths
-                                          })
+                                          customSchedule: true
                                         });
                                       }}
                                     >
