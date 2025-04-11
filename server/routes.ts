@@ -1999,6 +1999,123 @@ export async function registerRoutes(app: Express): Promise<Server> {
    *       404:
    *         $ref: '#/components/responses/NotFoundError'
    */
+   
+  /**
+   * @swagger
+   * /api/connections/{connectionId}/ad-ous:
+   *   post:
+   *     summary: Create a new organizational unit
+   *     tags: [AD OUs]
+   *     security:
+   *       - bearerAuth: []
+   *       - cookieAuth: []
+   *     parameters:
+   *       - name: connectionId
+   *         in: path
+   *         required: true
+   *         schema:
+   *           type: integer
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             required:
+   *               - name
+   *               - parentDN
+   *             properties:
+   *               name:
+   *                 type: string
+   *                 description: Name of the organizational unit
+   *               parentDN:
+   *                 type: string
+   *                 description: Distinguished name of the parent container
+   *               description:
+   *                 type: string
+   *                 description: Description of the organizational unit
+   *     responses:
+   *       201:
+   *         description: Organizational unit created successfully
+   *       400:
+   *         $ref: '#/components/responses/BadRequestError'
+   *       401:
+   *         $ref: '#/components/responses/UnauthorizedError'
+   */
+  app.post("/api/connections/:connectionId/ad-ous", authenticateApiToken, requirePermission(PERMISSIONS.CREATE_AD_OUS), async (req, res, next) => {
+    try {
+      const connectionId = parseInt(req.params.connectionId);
+      const { name, parentDN, description } = req.body;
+      
+      // Basic validation
+      if (!name || !parentDN) {
+        return res.status(400).json({ message: "OU name and parent DN are required" });
+      }
+
+      // Get connection
+      const connection = await storage.getLdapConnection(connectionId);
+      if (!connection) {
+        return res.status(404).json({ message: "LDAP connection not found" });
+      }
+      
+      // Create the DN for the new OU
+      const ouDN = `OU=${name},${parentDN}`;
+      
+      // Attributes for the new organizational unit
+      const ouAttributes = {
+        objectClass: ['top', 'organizationalUnit'],
+        ou: name,
+        description: description || ''
+      };
+      
+      // Create the OU in AD
+      await ldapClient.createEntry(connectionId, ouDN, ouAttributes);
+      
+      // Search for the newly created OU to get its attributes
+      const searchResults = await ldapClient.searchOUs(connectionId, `(&(objectClass=organizationalUnit)(ou=${name}))`, [
+        'objectGUID', 'distinguishedName', 'canonicalName', 'ou', 'description', 'name'
+      ]);
+      
+      if (!searchResults || searchResults.length === 0) {
+        return res.status(500).json({ message: "OU created but could not retrieve details" });
+      }
+      
+      const adOU = searchResults[0];
+      
+      // Store in database
+      const storedOU = await storage.createAdOrgUnit({
+        connectionId,
+        objectGUID: adOU.objectGUID,
+        distinguishedName: adOU.distinguishedName,
+        canonicalName: adOU.canonicalName,
+        name: adOU.ou || adOU.name || name,
+        description: adOU.description,
+        adProperties: adOU // Store all attributes
+      });
+      
+      // Add audit log
+      await storage.createAuditLogEntry({
+        userId: req.user.id,
+        connectionId,
+        action: 'create',
+        targetType: 'ou',
+        targetId: storedOU.id.toString(),
+        details: {
+          distinguishedName: ouDN,
+          name: name,
+          description: description
+        }
+      });
+      
+      res.status(201).json(storedOU);
+    } catch (err) {
+      console.error("Error creating AD organizational unit:", err);
+      if (err.message && err.message.includes('Entry Already Exists')) {
+        return res.status(409).json({ message: "Organizational unit already exists" });
+      }
+      next(err);
+    }
+  });
   app.delete("/api/connections/:connectionId/ad-computers/:id", authenticateApiToken, async (req, res, next) => {
     try {
       const computer = await storage.getAdComputer(parseInt(req.params.id));
