@@ -154,8 +154,7 @@ export const scheduleFrequencies = [
   "daily", 
   "weekly", 
   "monthly", 
-  "yearly", 
-  "custom"
+  "yearly"
 ] as const;
 
 export const weekdays = [
@@ -172,7 +171,7 @@ export const weekdays = [
 export const scheduleRules = pgTable("schedule_rules", {
   id: serial("id").primaryKey(),
   ruleId: integer("rule_id").references(() => dynamicGroupRules.id, { onDelete: "cascade" }).notNull(),
-  frequency: text("frequency").notNull(), // once, minutely, hourly, daily, weekly, monthly, yearly, custom
+  frequency: text("frequency").notNull(), // once, minutely, hourly, daily, weekly, monthly, yearly
   minute: integer("minute"), // 0-59
   hour: integer("hour"), // 0-23
   dayOfMonth: integer("day_of_month"), // 1-31

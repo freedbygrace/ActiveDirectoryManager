@@ -281,10 +281,8 @@ export const CronJobBuilder: React.FC<CronJobBuilderProps> = ({
         return `Runs weekly on ${schedule.dayOfWeek || 'Monday'} at ${formatTime(schedule.hour, schedule.minute)}`;
       case 'monthly':
         return `Runs monthly on day ${schedule.dayOfMonth || 1} at ${formatTime(schedule.hour, schedule.minute)}`;
-      case 'custom':
-        return 'Custom schedule';
       default:
-        return 'Custom schedule';
+        return 'Advanced schedule';
     }
   };
 
@@ -724,6 +722,34 @@ export const CronJobBuilder: React.FC<CronJobBuilderProps> = ({
                             </AccordionTrigger>
                             <AccordionContent>
                               <div className="space-y-4 pt-2">
+                                <div className="mb-2 flex justify-between items-center">
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => {
+                                      // Select all days of week
+                                      updateSchedule(index, { 
+                                        daysOfWeek: [...weekdays],
+                                        customSchedule: true
+                                      });
+                                    }}
+                                  >
+                                    Select All
+                                  </Button>
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => {
+                                      // Clear all selected days
+                                      updateSchedule(index, { 
+                                        daysOfWeek: [],
+                                        customSchedule: true
+                                      });
+                                    }}
+                                  >
+                                    Clear All
+                                  </Button>
+                                </div>
                                 <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
                                   {weekdays.map((day) => (
                                     <Button
@@ -760,6 +786,35 @@ export const CronJobBuilder: React.FC<CronJobBuilderProps> = ({
                             </AccordionTrigger>
                             <AccordionContent>
                               <div className="space-y-4 pt-2">
+                                <div className="mb-2 flex justify-between items-center">
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => {
+                                      // Select all days of month (1-31)
+                                      const allDays = Array.from({ length: 31 }, (_, i) => i + 1);
+                                      updateSchedule(index, { 
+                                        daysOfMonth: allDays,
+                                        customSchedule: true
+                                      });
+                                    }}
+                                  >
+                                    Select All
+                                  </Button>
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => {
+                                      // Clear all selected days
+                                      updateSchedule(index, { 
+                                        daysOfMonth: [],
+                                        customSchedule: true
+                                      });
+                                    }}
+                                  >
+                                    Clear All
+                                  </Button>
+                                </div>
                                 <div className="grid grid-cols-7 gap-2">
                                   {Array.from({ length: 31 }, (_, i) => i + 1).map((day) => (
                                     <Button
@@ -796,6 +851,35 @@ export const CronJobBuilder: React.FC<CronJobBuilderProps> = ({
                             </AccordionTrigger>
                             <AccordionContent>
                               <div className="space-y-4 pt-2">
+                                <div className="mb-2 flex justify-between items-center">
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => {
+                                      // Select all months (1-12)
+                                      const allMonths = Array.from({ length: 12 }, (_, i) => i + 1);
+                                      updateSchedule(index, { 
+                                        months: allMonths,
+                                        customSchedule: true
+                                      });
+                                    }}
+                                  >
+                                    Select All
+                                  </Button>
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => {
+                                      // Clear all selected months
+                                      updateSchedule(index, { 
+                                        months: [],
+                                        customSchedule: true
+                                      });
+                                    }}
+                                  >
+                                    Clear All
+                                  </Button>
+                                </div>
                                 <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
                                   {[
                                     'January', 'February', 'March', 'April', 
