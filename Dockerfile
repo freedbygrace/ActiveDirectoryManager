@@ -24,6 +24,7 @@ WORKDIR /app
 # Set environment variables
 ENV NODE_ENV=production
 ENV PORT=5000
+ENV BASE_URL=http://localhost:5000
 
 # Authentication environment variables
 ENV JWT_SECRET=change-this-in-production

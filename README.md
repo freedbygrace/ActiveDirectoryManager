@@ -150,6 +150,7 @@ The application follows a modern web architecture with clear separation of conce
    ```bash
    # Make sure to set appropriate values in your .env file
    # For production deployments, ensure secure values for SESSION_SECRET and other security settings
+   # Don't forget to set BASE_URL to your server's public URL
    ```
 
 4. Start the application stack:
@@ -161,6 +162,26 @@ The application follows a modern web architecture with clear separation of conce
    - Frontend: https://your-server-domain
    - API: https://your-server-domain/api
    - Swagger Documentation: https://your-server-domain/api/docs
+
+#### Using Docker Hub Image
+
+The application is also available as a pre-built Docker image:
+
+1. Pull the image from Docker Hub:
+   ```bash
+   docker pull yourusername/ad-management-platform:latest
+   ```
+
+2. Create a .env file with your configuration.
+
+3. Run the container with your environment variables:
+   ```bash
+   docker run -d \
+     --name ad-management \
+     -p 5000:5000 \
+     --env-file .env \
+     yourusername/ad-management-platform:latest
+   ```
 
 #### Manual Deployment
 
@@ -198,6 +219,7 @@ Configuration is managed through environment variables. See [.env.example](.env.
 
 - **Database**: PostgreSQL connection settings
 - **Redis**: Caching configuration
+- **Application**: Base URL and port configuration
 - **Session**: Security settings for user sessions
 - **JWT**: Settings for API tokens
 - **LDAP**: Connection parameters for Active Directory
