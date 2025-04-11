@@ -869,7 +869,7 @@ const LdapQueryBuilderPage = () => {
   };
 
   return (
-    <DashboardLayout>
+    <DashboardLayout title="LDAP Query Builder">
       <div className="container mx-auto py-6">
         <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
           {/* Sidebar */}
