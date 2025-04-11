@@ -25,6 +25,18 @@ WORKDIR /app
 ENV NODE_ENV=production
 ENV PORT=5000
 
+# Authentication environment variables
+ENV JWT_SECRET=change-this-in-production
+ENV SESSION_SECRET=change-this-in-production
+ENV DEFAULT_ADMIN_USERNAME=admin
+ENV DEFAULT_ADMIN_PASSWORD=password
+ENV DEFAULT_ADMIN_EMAIL=
+ENV DEFAULT_ADMIN_FULLNAME="System Administrator"
+ENV DISABLE_REGISTRATION=false
+
+# Database configuration
+ENV DATABASE_URL=postgres://postgres:postgres@postgres:5432/admgr
+
 # Copy package files
 COPY package*.json ./
 
