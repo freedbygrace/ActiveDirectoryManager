@@ -4947,21 +4947,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  /**
-   * @swagger
-   * /api/group-dashboard-data:
-   *   get:
-   *     summary: Get group data for dashboard visualizations
-   *     tags: [Dashboard]
-   *     security:
-   *       - cookieAuth: []
-   *       - bearerAuth: []
-   *     responses:
-   *       200:
-   *         description: Group data for dashboard
-   *       401:
-   *         $ref: '#/components/responses/UnauthorizedError'
-   */
+  // Removed from Swagger documentation - Dashboard endpoint
   app.get("/api/group-dashboard-data", requireAuth({ allowApiToken: true }), async (req, res, next) => {
     try {
       // Get data from the first available LDAP connection
@@ -4986,21 +4972,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  /**
-   * @swagger
-   * /api/ou-dashboard-data:
-   *   get:
-   *     summary: Get Organizational Unit data for dashboard visualizations
-   *     tags: [Dashboard]
-   *     security:
-   *       - cookieAuth: []
-   *       - bearerAuth: []
-   *     responses:
-   *       200:
-   *         description: Organizational Unit data for dashboard
-   *       401:
-   *         $ref: '#/components/responses/UnauthorizedError'
-   */
+  // Removed from Swagger documentation - Dashboard endpoint
   app.get("/api/ou-dashboard-data", requireAuth({ allowApiToken: true }), async (req, res, next) => {
     try {
       // Get data from the first available LDAP connection
@@ -5025,21 +4997,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  /**
-   * @swagger
-   * /api/domain-dashboard-data:
-   *   get:
-   *     summary: Get domain data for dashboard visualizations
-   *     tags: [Dashboard]
-   *     security:
-   *       - cookieAuth: []
-   *       - bearerAuth: []
-   *     responses:
-   *       200:
-   *         description: Domain data for dashboard
-   *       401:
-   *         $ref: '#/components/responses/UnauthorizedError'
-   */
+  // Removed from Swagger documentation - Dashboard endpoint
   app.get("/api/domain-dashboard-data", requireAuth({ allowApiToken: true }), async (req, res, next) => {
     try {
       // Get data from the first available LDAP connection
@@ -5064,21 +5022,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  /**
-   * @swagger
-   * /api/site-dashboard-data:
-   *   get:
-   *     summary: Get site data for dashboard visualizations
-   *     tags: [Dashboard]
-   *     security:
-   *       - cookieAuth: []
-   *       - bearerAuth: []
-   *     responses:
-   *       200:
-   *         description: Site data for dashboard
-   *       401:
-   *         $ref: '#/components/responses/UnauthorizedError'
-   */
+  // Removed from Swagger documentation - Dashboard endpoint
   app.get("/api/site-dashboard-data", requireAuth({ allowApiToken: true }), async (req, res, next) => {
     try {
       // Get data from the first available LDAP connection
@@ -5103,21 +5047,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  /**
-   * @swagger
-   * /api/subnet-dashboard-data:
-   *   get:
-   *     summary: Get subnet data for dashboard visualizations
-   *     tags: [Dashboard]
-   *     security:
-   *       - cookieAuth: []
-   *       - bearerAuth: []
-   *     responses:
-   *       200:
-   *         description: Subnet data for dashboard
-   *       401:
-   *         $ref: '#/components/responses/UnauthorizedError'
-   */
+  // Removed from Swagger documentation - Dashboard endpoint
   app.get("/api/subnet-dashboard-data", requireAuth({ allowApiToken: true }), async (req, res, next) => {
     try {
       // Get data from the first available LDAP connection
