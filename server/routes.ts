@@ -584,6 +584,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
    */
   app.post("/api/connections/:connectionId/ad-users", authenticateApiToken, async (req, res, next) => {
     try {
+      if (!req.isAuthenticated() && !req.headers.authorization) {
+        return res.status(401).json({ message: "Authentication required" });
+      }
+      
       const connectionId = parseInt(req.params.connectionId);
       const connection = await storage.getLdapConnection(connectionId);
       
@@ -591,10 +595,96 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "LDAP connection not found" });
       }
       
-      const userData = { ...req.body, connectionId };
-      const user = await storage.createAdUser(userData);
+      // Extract user data from request
+      const { name, samAccountName, description, email, firstName, lastName, ou, enabled = true, password } = req.body;
       
-      res.status(201).json(user);
+      if (!name || !samAccountName || !ou) {
+        return res.status(400).json({ message: "Name, samAccountName, and OU are required" });
+      }
+      
+      // Create user in AD using LDAP
+      const client = ldapClient.getClient(connectionId);
+      
+      if (!client) {
+        const connected = await ldapClient.connect(connection);
+        if (!connected) {
+          return res.status(500).json({ message: "Failed to connect to LDAP server" });
+        }
+      }
+      
+      // Create a DN for the new user
+      const userDN = `CN=${name},${ou}`;
+      
+      // Attributes for the new user
+      const userAttributes = {
+        objectClass: ['user', 'person', 'organizationalPerson', 'top'],
+        cn: name,
+        sAMAccountName: samAccountName,
+        givenName: firstName || '',
+        sn: lastName || '',
+        displayName: name,
+        description: description || '',
+        mail: email || '',
+        userAccountControl: enabled ? '512' : '514' // 512 = enabled, 514 = disabled
+      };
+      
+      // Add password if provided
+      if (password) {
+        // Unicode password format for Active Directory
+        const unicodePassword = Buffer.from(`"${password}"`, 'utf16le');
+        userAttributes.unicodePwd = unicodePassword;
+      }
+      
+      try {
+        const success = await ldapClient.createEntry(connectionId, userDN, userAttributes);
+        
+        if (!success) {
+          return res.status(500).json({ message: "Failed to create AD user" });
+        }
+        
+        // Search for the user to get all its attributes
+        const userResults = await ldapClient.searchUsers(connectionId, `(cn=${name})`);
+        
+        if (!userResults || userResults.length === 0) {
+          return res.status(500).json({ message: "User created but could not retrieve details" });
+        }
+        
+        const userData = userResults[0];
+        
+        // Create entry in our database
+        const newUser = await storage.createAdUser({
+          connectionId,
+          name,
+          objectGUID: userData.objectGUID || uuidv4(),
+          objectType: 'user',
+          dn: userDN,
+          canonicalName: userData.canonicalName || "",
+          samAccountName,
+          firstName: firstName || null,
+          lastName: lastName || null,
+          email: email || null,
+          description: description || null,
+          enabled,
+          lastLogon: null,
+          created: new Date(),
+          managedBy: null,
+          adProperties: userData
+        });
+        
+        // Create audit log entry
+        await storage.createAuditLogEntry({
+          action: 'create',
+          targetId: newUser.id.toString(),
+          details: { type: 'user', name, dn: userDN },
+          userId: req.user?.id,
+          connectionId
+        });
+        
+        res.status(201).json(newUser);
+      } catch (err) {
+        console.error("Error creating AD user:", err);
+        return res.status(500).json({ message: `Error creating AD user: ${err.message}` });
+      }
     } catch (error) {
       next(error);
     }
