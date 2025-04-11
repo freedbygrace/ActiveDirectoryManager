@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -394,24 +394,13 @@ const ConditionBuilder: React.FC<ConditionBuilderProps> = ({
             </Select>
             
             {condition.attribute === 'custom' && (
-              <Input
+              <TextInput
                 className="mt-1"
                 placeholder="Enter custom attribute"
                 value={condition.customAttribute || ''}
-                onChange={(e) => {
-                  // Create direct reference to prevent re-rendering that causes focus loss
-                  const newConditions = [...conditions];
-                  newConditions[index] = { 
-                    ...newConditions[index], 
-                    customAttribute: e.target.value 
-                  };
-                  // Use a stable reference - in React 18+ this helps maintain focus
-                  requestAnimationFrame(() => {
-                    onChange(newConditions);
-                  });
+                onChange={(value) => {
+                  updateCondition(index, 'customAttribute', value);
                 }}
-                // Add key to ensure input identity is stable
-                key={`custom-attr-input-${condition.id || index}`}
               />
             )}
           </div>
@@ -436,23 +425,12 @@ const ConditionBuilder: React.FC<ConditionBuilderProps> = ({
           
           <div className="col-span-3">
             {condition.operator !== 'present' && condition.operator !== 'notPresent' && (
-              <Input
+              <TextInput
                 placeholder="Value"
                 value={condition.value || ''}
-                onChange={(e) => {
-                  // Create direct reference to prevent re-rendering that causes focus loss
-                  const newConditions = [...conditions];
-                  newConditions[index] = { 
-                    ...newConditions[index], 
-                    value: e.target.value 
-                  };
-                  // Use a stable reference - in React 18+ this helps maintain focus
-                  requestAnimationFrame(() => {
-                    onChange(newConditions);
-                  });
+                onChange={(value) => {
+                  updateCondition(index, 'value', value);
                 }}
-                // Add key to ensure input identity is stable
-                key={`value-input-${condition.id || index}`}
               />
             )}
           </div>
