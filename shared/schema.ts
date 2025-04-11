@@ -51,6 +51,17 @@ export const PERMISSIONS = {
   MOVE_AD_COMPUTERS: "move:ad_computers",
   
   VIEW_AD_DOMAINS: "view:ad_domains",
+  
+  // Sites and Services management
+  VIEW_AD_SITES: "view:ad_sites",
+  CREATE_AD_SITES: "create:ad_sites",
+  UPDATE_AD_SITES: "update:ad_sites",
+  DELETE_AD_SITES: "delete:ad_sites",
+  
+  VIEW_AD_SUBNETS: "view:ad_subnets",
+  CREATE_AD_SUBNETS: "create:ad_subnets",
+  UPDATE_AD_SUBNETS: "update:ad_subnets",
+  DELETE_AD_SUBNETS: "delete:ad_subnets",
 
   // API Token management
   MANAGE_API_TOKENS: "manage:api_tokens",
@@ -90,6 +101,14 @@ export const permissionsSchema = z.enum([
   "delete:ad_computers",
   "move:ad_computers",
   "view:ad_domains",
+  "view:ad_sites",
+  "create:ad_sites",
+  "update:ad_sites",
+  "delete:ad_sites",
+  "view:ad_subnets",
+  "create:ad_subnets",
+  "update:ad_subnets",
+  "delete:ad_subnets",
   "manage:api_tokens",
   "manage:roles",
   "admin:system"
