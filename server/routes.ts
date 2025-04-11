@@ -4958,21 +4958,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  /**
-   * @swagger
-   * /api/user-dashboard-data:
-   *   get:
-   *     summary: Get user data for dashboard visualizations
-   *     tags: [Dashboard]
-   *     security:
-   *       - cookieAuth: []
-   *       - bearerAuth: []
-   *     responses:
-   *       200:
-   *         description: User data for dashboard
-   *       401:
-   *         $ref: '#/components/responses/UnauthorizedError'
-   */
+  // Dashboard endpoints removed from Swagger API as requested
   app.get("/api/user-dashboard-data", requireAuth({ allowApiToken: true }), async (req, res, next) => {
     try {
       // Get data from the first available LDAP connection
@@ -4997,21 +4983,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  /**
-   * @swagger
-   * /api/computer-dashboard-data:
-   *   get:
-   *     summary: Get computer data for dashboard visualizations
-   *     tags: [Dashboard]
-   *     security:
-   *       - cookieAuth: []
-   *       - bearerAuth: []
-   *     responses:
-   *       200:
-   *         description: Computer data for dashboard
-   *       401:
-   *         $ref: '#/components/responses/UnauthorizedError'
-   */
+  // Dashboard endpoints removed from Swagger API as requested
   app.get("/api/computer-dashboard-data", requireAuth({ allowApiToken: true }), async (req, res, next) => {
     try {
       // Get data from the first available LDAP connection
