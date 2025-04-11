@@ -23,7 +23,7 @@ import {
 
 import { DynamicGroupRule, LdapConnection } from '@shared/schema';
 import CronJobBuilder, { ScheduleItem } from './cron-job-builder';
-import ConditionBuilder from './condition-builder';
+import FixedConditionBuilder from './fixed-condition-builder';
 import VariableSelector from './variable-selector';
 import { useToast } from '@/hooks/use-toast';
 import { queryClient, apiRequest } from '@/lib/queryClient';
