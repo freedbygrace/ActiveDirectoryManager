@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -6,7 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Card, CardContent } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
 import { useQuery } from '@tanstack/react-query';
-import { Trash, Plus, Move, FolderPlus, ChevronDown, ChevronRight } from 'lucide-react';
+import { Trash, Plus, Move, FolderPlus, ChevronDown, ChevronRight, Copy } from 'lucide-react';
 import { Condition } from './rule-editor';
 import { LdapAttribute } from '@shared/schema';
 
@@ -399,14 +399,19 @@ const ConditionBuilder: React.FC<ConditionBuilderProps> = ({
                 placeholder="Enter custom attribute"
                 value={condition.customAttribute || ''}
                 onChange={(e) => {
-                  // Use direct update to prevent focus loss
+                  // Create direct reference to prevent re-rendering that causes focus loss
                   const newConditions = [...conditions];
                   newConditions[index] = { 
                     ...newConditions[index], 
                     customAttribute: e.target.value 
                   };
-                  onChange(newConditions);
+                  // Use a stable reference - in React 18+ this helps maintain focus
+                  requestAnimationFrame(() => {
+                    onChange(newConditions);
+                  });
                 }}
+                // Add key to ensure input identity is stable
+                key={`custom-attr-input-${condition.id || index}`}
               />
             )}
           </div>
@@ -435,14 +440,19 @@ const ConditionBuilder: React.FC<ConditionBuilderProps> = ({
                 placeholder="Value"
                 value={condition.value || ''}
                 onChange={(e) => {
-                  // Use a direct update approach for text inputs to prevent focus loss
+                  // Create direct reference to prevent re-rendering that causes focus loss
                   const newConditions = [...conditions];
                   newConditions[index] = { 
                     ...newConditions[index], 
                     value: e.target.value 
                   };
-                  onChange(newConditions);
+                  // Use a stable reference - in React 18+ this helps maintain focus
+                  requestAnimationFrame(() => {
+                    onChange(newConditions);
+                  });
                 }}
+                // Add key to ensure input identity is stable
+                key={`value-input-${condition.id || index}`}
               />
             )}
           </div>
@@ -536,7 +546,26 @@ const ConditionBuilder: React.FC<ConditionBuilderProps> = ({
           </div>
           
           <div className="mt-4 p-4 bg-muted rounded-md">
-            <Label className="text-sm font-medium mb-2 block">Generated LDAP Filter:</Label>
+            <div className="flex justify-between items-center mb-2">
+              <Label className="text-sm font-medium">Generated LDAP Filter:</Label>
+              <Button
+                variant="outline"
+                size="sm"
+                className="flex items-center"
+                onClick={() => {
+                  const filterText = generateLdapFilter(conditions);
+                  navigator.clipboard.writeText(filterText);
+                  toast({
+                    title: "LDAP Filter Copied!",
+                    description: "The LDAP filter has been copied to your clipboard.",
+                    duration: 2000,
+                  });
+                }}
+              >
+                <Copy className="h-3.5 w-3.5 mr-1" />
+                Copy
+              </Button>
+            </div>
             <div className="font-mono text-sm overflow-auto p-2 bg-background rounded border whitespace-pre-wrap">
               {generateLdapFilter(conditions)}
             </div>
