@@ -116,8 +116,8 @@ export const CronJobBuilder: React.FC<CronJobBuilderProps> = ({
           const day = schedule.dayOfMonth || 1;
           cronExpression = `${schedule.minute} ${schedule.hour} ${day} * *`;
           break;
-        case 'custom':
-          // For custom schedules, if there's no existing cron expression, use a default
+        default:
+          // For any other schedules, if there's no existing cron expression, use a default
           cronExpression = schedule.cronExpression || '0 0 * * *';
           break;
       }
@@ -594,6 +594,35 @@ export const CronJobBuilder: React.FC<CronJobBuilderProps> = ({
                             </AccordionTrigger>
                             <AccordionContent>
                               <div className="space-y-4 pt-2">
+                                <div className="mb-2 flex justify-between items-center">
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => {
+                                      // Select all minutes (0-59)
+                                      const allMinutes = Array.from({ length: 60 }, (_, i) => i);
+                                      updateSchedule(index, { 
+                                        minutes: allMinutes,
+                                        customSchedule: true
+                                      });
+                                    }}
+                                  >
+                                    Select All
+                                  </Button>
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => {
+                                      // Clear all selected minutes
+                                      updateSchedule(index, { 
+                                        minutes: [],
+                                        customSchedule: true
+                                      });
+                                    }}
+                                  >
+                                    Clear All
+                                  </Button>
+                                </div>
                                 <div className="grid grid-cols-6 gap-2">
                                   {Array.from({ length: 60 }, (_, i) => i).map((minute) => (
                                     <Button
@@ -630,6 +659,35 @@ export const CronJobBuilder: React.FC<CronJobBuilderProps> = ({
                             </AccordionTrigger>
                             <AccordionContent>
                               <div className="space-y-4 pt-2">
+                                <div className="mb-2 flex justify-between items-center">
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => {
+                                      // Select all hours (0-23)
+                                      const allHours = Array.from({ length: 24 }, (_, i) => i);
+                                      updateSchedule(index, { 
+                                        hours: allHours,
+                                        customSchedule: true
+                                      });
+                                    }}
+                                  >
+                                    Select All
+                                  </Button>
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => {
+                                      // Clear all selected hours
+                                      updateSchedule(index, { 
+                                        hours: [],
+                                        customSchedule: true
+                                      });
+                                    }}
+                                  >
+                                    Clear All
+                                  </Button>
+                                </div>
                                 <div className="grid grid-cols-6 gap-2">
                                   {Array.from({ length: 24 }, (_, i) => i).map((hour) => (
                                     <Button
