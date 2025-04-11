@@ -35,11 +35,23 @@ The Active Directory Management Platform provides the following key features:
 - **User Management**: Admin interface for managing platform users and their permissions
 
 ### Advanced Features
+- **Dynamic Group Management**: Automated group membership management
+  - Rules based on LDAP queries for dynamic group assignment
+  - Scheduled execution with flexible cron expressions
+  - Variable support for dynamic group and OU naming
+  - Automatic creation of target groups and OUs as needed
+  - Multi-connection support for cross-domain management
+- **Custom Dashboards**: Custom visualizations for Active Directory metrics
+  - Multiple chart types (bar, line, pie, etc.)
+  - Data export capabilities (PDF, image)
+  - Shareable dashboard snapshots with custom branding
 - **LDAP Query Builder**: Visual interface for building, testing, and saving complex LDAP queries
   - Filter version history with revision control
   - Revert to previous filter versions
   - Test filters against live Active Directory data
   - Save frequently used filters for reuse
+  - Drag and drop condition reordering
+  - One-click copy feature for generated queries
 - **API Filtering**: Dynamic property filtering on all API endpoints
 - **Bulk Operations**: Efficient batch processing for operations on multiple directory objects
 - **Audit Logging**: Comprehensive audit trail for all directory changes
@@ -191,6 +203,9 @@ Configuration is managed through environment variables. See [.env.example](.env.
 - **LDAP**: Connection parameters for Active Directory
 - **Rate Limiting**: API request restrictions
 - **Logging**: Debug and audit log configuration
+- **Default Admin**: Initial admin user configuration
+- **Authentication**: LDAP and OpenID Connect (OIDC) authentication settings
+- **Registration**: Enable/disable user registration
 
 ## LDAP Query Builder
 
