@@ -25,7 +25,8 @@ import {
   requireAuth, 
   requirePermission, 
   requireAdmin, 
-  initializeRBAC
+  initializeRBAC,
+  checkPermission
 } from "./authorization";
 import { ldapClient } from "./ldap";
 import { 
@@ -34,8 +35,18 @@ import {
   parseFilter, 
   parsePagination 
 } from "./query-parser";
+
 import { eq, sql, count } from "drizzle-orm";
+
 import { v4 as uuidv4 } from "uuid";
+
+// Helper function to connect to LDAP server
+async function connectToLdap(connection: any) {
+  if (!ldapClient.isConnectionActive(connection.id)) {
+    await ldapClient.connect(connection);
+  }
+  return ldapClient.getClient(connection.id);
+}
 
 // Extend Express Request to include user property
 interface Request extends ExpressRequest {
