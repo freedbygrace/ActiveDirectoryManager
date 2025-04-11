@@ -49,29 +49,6 @@ const swaggerOptions = {
         },
       },
       schemas: {
-        User: {
-          type: "object",
-          properties: {
-            id: { type: "integer" },
-            username: { type: "string" },
-            email: { type: "string" },
-            fullName: { type: "string" },
-            role: { type: "string" },
-            createdAt: { type: "string", format: "date-time" },
-          },
-        },
-        ApiToken: {
-          type: "object",
-          properties: {
-            id: { type: "integer" },
-            name: { type: "string" },
-            token: { type: "string" },
-            userId: { type: "integer" },
-            customPermissions: { type: "array", items: { type: "string" } },
-            expiresAt: { type: "string", format: "date-time" },
-            createdAt: { type: "string", format: "date-time" },
-          },
-        },
         LdapConnection: {
           type: "object",
           properties: {
