@@ -900,7 +900,7 @@ const LdapQueryBuilderPage = () => {
                 Build and test LDAP filters for your Active Directory queries
               </CardDescription>
             </CardHeader>
-            <CardContent>
+            <CardContent className="max-h-[calc(100vh-250px)] overflow-y-auto pr-1 scrollbar-custom">
               <div className="space-y-4">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
