@@ -111,7 +111,9 @@ const defaultGroup: Condition = {
 
 // Non-recursive function to generate LDAP filter syntax from conditions
 const generateLdapFilter = (conditions: Condition[]): string => {
-  if (conditions.length === 0) return '(objectClass=*)';
+  if (!conditions || conditions.length === 0) return '(objectClass=*)';
+  
+  console.log("Generating filter from conditions:", JSON.stringify(conditions));
   
   // Helper function to generate filter for a regular condition (not a group)
   const generateRegularFilter = (condition: Condition): string => {
@@ -143,49 +145,57 @@ const generateLdapFilter = (conditions: Condition[]): string => {
     }
   };
   
-  // Build a map of parent IDs to their child conditions
+  // Copy the conditions array to avoid mutation issues
+  const workingConditions = [...conditions];
+  
+  // First, build a map of parent IDs to their child conditions
   const childrenByParentId = new Map<number | null | undefined, Condition[]>();
   
   // Organize conditions by their parent
-  for (const condition of conditions) {
+  for (const condition of workingConditions) {
     const parentId = condition.parentId;
     if (!childrenByParentId.has(parentId)) {
       childrenByParentId.set(parentId, []);
     }
-    childrenByParentId.get(parentId)!.push(condition);
+    childrenByParentId.get(parentId)!.push({...condition}); // Copy to avoid mutation issues
   }
   
-  // Generate filter for a group using an iterative approach
+  // Generate filter for a group using a more robust approach
   const generateGroupFilter = (parentId: number | null | undefined): string => {
     const childConditions = childrenByParentId.get(parentId) || [];
     if (childConditions.length === 0) return '(objectClass=*)';
     
-    // Find the logical operator for this group
-    const logicalOp = parentId === null || parentId === undefined
-      ? 'AND' // Default for root level
-      : conditions.find(c => c.id === parentId)?.logicalOperator || 'AND';
+    // Find the group condition or use default
+    let groupCondition: Condition | undefined;
+    if (parentId !== null && parentId !== undefined) {
+      groupCondition = workingConditions.find(c => c.id === parentId);
+    }
     
+    // Get logical operator for the group
+    const logicalOp = groupCondition?.logicalOperator || 'AND';
     const operator = logicalOp === 'AND' ? '&' : '|';
+    
+    // Initialize group filter
     let groupFilter = `(${operator}`;
     
-    // Track if we've added any conditions to this group
+    // Keep track of added conditions to handle edge cases
     let hasAddedCondition = false;
     
-    // Process regular conditions in this group
-    for (const condition of childConditions) {
-      if (!condition.isGroup) {
-        const filter = generateRegularFilter(condition);
-        if (filter) {
-          groupFilter += filter;
-          hasAddedCondition = true;
-        }
+    // First process all regular conditions in this group
+    const regularConditions = childConditions.filter(c => !c.isGroup);
+    for (const condition of regularConditions) {
+      const filter = generateRegularFilter(condition);
+      if (filter) {
+        groupFilter += filter;
+        hasAddedCondition = true;
       }
     }
     
-    // Process subgroups in this group
-    for (const condition of childConditions) {
-      if (condition.isGroup && condition.id !== undefined) {
-        const subGroupFilter = generateGroupFilter(condition.id);
+    // Then process all subgroups in this group
+    const subgroups = childConditions.filter(c => c.isGroup && c.id !== undefined);
+    for (const subgroup of subgroups) {
+      if (subgroup.id !== undefined) {
+        const subGroupFilter = generateGroupFilter(subgroup.id);
         if (subGroupFilter !== '(objectClass=*)') {
           groupFilter += subGroupFilter;
           hasAddedCondition = true;
@@ -195,7 +205,7 @@ const generateLdapFilter = (conditions: Condition[]): string => {
     
     groupFilter += ')';
     
-    // If there are no actual conditions, return a default
+    // If no conditions were added, return a default filter
     if (!hasAddedCondition) {
       return '(objectClass=*)';
     }
@@ -204,7 +214,9 @@ const generateLdapFilter = (conditions: Condition[]): string => {
   };
   
   // Start with the root level conditions
-  return generateGroupFilter(null);
+  const result = generateGroupFilter(null);
+  console.log("Generated LDAP filter:", result);
+  return result;
 };
 
 // Main component (completely rewritten)
@@ -241,10 +253,13 @@ const FixedConditionBuilder: React.FC<ConditionBuilderProps> = ({
     }
   }, [attributesData]);
   
-  // Update LDAP filter when conditions change
+  // Update LDAP filter when conditions change - use deep comparison
   useEffect(() => {
-    setLdapFilter(generateLdapFilter(conditions));
-  }, [conditions]);
+    const newFilter = generateLdapFilter(conditions);
+    setLdapFilter(newFilter);
+    // Log for debugging
+    console.log("Filter updated:", newFilter);
+  }, [JSON.stringify(conditions)]); // Use JSON.stringify for deep comparison
 
   // Handle adding a new condition
   const addCondition = (parentId?: number | null) => {
