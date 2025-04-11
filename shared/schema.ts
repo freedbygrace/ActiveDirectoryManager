@@ -51,6 +51,9 @@ export const PERMISSIONS = {
   MOVE_AD_COMPUTERS: "move:ad_computers",
   
   VIEW_AD_DOMAINS: "view:ad_domains",
+  CREATE_AD_DOMAINS: "create:ad_domains",
+  UPDATE_AD_DOMAINS: "update:ad_domains",
+  DELETE_AD_DOMAINS: "delete:ad_domains",
   
   // Sites and Services management
   VIEW_AD_SITES: "view:ad_sites",
@@ -101,6 +104,9 @@ export const permissionsSchema = z.enum([
   "delete:ad_computers",
   "move:ad_computers",
   "view:ad_domains",
+  "create:ad_domains",
+  "update:ad_domains",
+  "delete:ad_domains",
   "view:ad_sites",
   "create:ad_sites",
   "update:ad_sites",
