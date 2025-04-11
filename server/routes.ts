@@ -366,26 +366,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  /**
-   * @swagger
-   * /api/tokens:
-   *   get:
-   *     summary: List all API tokens for current user
-   *     tags: [API Tokens]
-   *     security:
-   *       - cookieAuth: []
-   *     responses:
-   *       200:
-   *         description: A list of API tokens
-   *         content:
-   *           application/json:
-   *             schema:
-   *               type: array
-   *               items:
-   *                 $ref: '#/components/schemas/ApiToken'
-   *       401:
-   *         $ref: '#/components/responses/UnauthorizedError'
-   */
+  // Removed from Swagger documentation - API Tokens endpoint
   app.get("/api/tokens", async (req, res, next) => {
     try {
       if (!req.isAuthenticated()) {
@@ -399,28 +380,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  /**
-   * @swagger
-   * /api/tokens/{id}:
-   *   delete:
-   *     summary: Delete an API token
-   *     tags: [API Tokens]
-   *     security:
-   *       - cookieAuth: []
-   *     parameters:
-   *       - name: id
-   *         in: path
-   *         required: true
-   *         schema:
-   *           type: integer
-   *     responses:
-   *       200:
-   *         description: Token deleted successfully
-   *       401:
-   *         $ref: '#/components/responses/UnauthorizedError'
-   *       404:
-   *         $ref: '#/components/responses/NotFoundError'
-   */
+  // Removed from Swagger documentation - API Tokens endpoint
   app.delete("/api/tokens/:id", async (req, res, next) => {
     try {
       if (!req.isAuthenticated()) {
@@ -5182,21 +5142,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  /**
-   * @swagger
-   * /api/dashboard-summary:
-   *   get:
-   *     summary: Get summary statistics for the dashboard
-   *     tags: [Dashboard]
-   *     security:
-   *       - cookieAuth: []
-   *       - bearerAuth: []
-   *     responses:
-   *       200:
-   *         description: Summary statistics for the dashboard
-   *       401:
-   *         $ref: '#/components/responses/UnauthorizedError'
-   */
+  // Removed from Swagger documentation - Dashboard endpoint
   app.get("/api/dashboard-summary", requireAuth({ allowApiToken: true }), async (req, res, next) => {
     try {
       // Get data from the first available LDAP connection
