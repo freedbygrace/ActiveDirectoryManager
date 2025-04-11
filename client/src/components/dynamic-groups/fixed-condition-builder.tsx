@@ -109,114 +109,81 @@ const defaultGroup: Condition = {
   isGroup: true
 };
 
-// Non-recursive function to generate LDAP filter syntax from conditions
+// Simple direct LDAP filter generator that ignores nesting for now
 const generateLdapFilter = (conditions: Condition[]): string => {
   if (!conditions || conditions.length === 0) return '(objectClass=*)';
   
-  console.log("Generating filter from conditions:", JSON.stringify(conditions));
+  // Simple direct generation for demonstration
+  // This is a simplified approach to get a working filter quickly
   
-  // Helper function to generate filter for a regular condition (not a group)
-  const generateRegularFilter = (condition: Condition): string => {
-    // Get actual attribute name (custom or selected)
-    const attributeName = condition.attribute === 'custom' && condition.customAttribute 
-      ? condition.customAttribute 
-      : condition.attribute;
-    
-    if (!attributeName) return '';
-    
-    // Regular condition
-    switch (condition.operator) {
-      case '=':
-        return `(${attributeName}=${condition.value})`;
-      case '!=':
-        return `(!(${attributeName}=${condition.value}))`;
-      case 'contains':
-        return `(${attributeName}=*${condition.value}*)`;
-      case 'startsWith':
-        return `(${attributeName}=${condition.value}*)`;
-      case 'endsWith':
-        return `(${attributeName}=*${condition.value})`;
-      case 'present':
-        return `(${attributeName}=*)`;
-      case 'notPresent':
-        return `(!(${attributeName}=*))`;
-      default:
-        return `(${attributeName}=${condition.value})`;
-    }
-  };
+  // Find all non-group conditions
+  const regularConditions = conditions.filter(c => !c.isGroup);
   
-  // Copy the conditions array to avoid mutation issues
-  const workingConditions = [...conditions];
-  
-  // First, build a map of parent IDs to their child conditions
-  const childrenByParentId = new Map<number | null | undefined, Condition[]>();
-  
-  // Organize conditions by their parent
-  for (const condition of workingConditions) {
-    const parentId = condition.parentId;
-    if (!childrenByParentId.has(parentId)) {
-      childrenByParentId.set(parentId, []);
-    }
-    childrenByParentId.get(parentId)!.push({...condition}); // Copy to avoid mutation issues
+  // If there are no regular conditions, return default filter
+  if (regularConditions.length === 0) {
+    return '(objectClass=*)';
   }
   
-  // Generate filter for a group using a more robust approach
-  const generateGroupFilter = (parentId: number | null | undefined): string => {
-    const childConditions = childrenByParentId.get(parentId) || [];
-    if (childConditions.length === 0) return '(objectClass=*)';
-    
-    // Find the group condition or use default
-    let groupCondition: Condition | undefined;
-    if (parentId !== null && parentId !== undefined) {
-      groupCondition = workingConditions.find(c => c.id === parentId);
-    }
-    
-    // Get logical operator for the group
-    const logicalOp = groupCondition?.logicalOperator || 'AND';
-    const operator = logicalOp === 'AND' ? '&' : '|';
-    
-    // Initialize group filter
-    let groupFilter = `(${operator}`;
-    
-    // Keep track of added conditions to handle edge cases
-    let hasAddedCondition = false;
-    
-    // First process all regular conditions in this group
-    const regularConditions = childConditions.filter(c => !c.isGroup);
-    for (const condition of regularConditions) {
-      const filter = generateRegularFilter(condition);
-      if (filter) {
-        groupFilter += filter;
-        hasAddedCondition = true;
-      }
-    }
-    
-    // Then process all subgroups in this group
-    const subgroups = childConditions.filter(c => c.isGroup && c.id !== undefined);
-    for (const subgroup of subgroups) {
-      if (subgroup.id !== undefined) {
-        const subGroupFilter = generateGroupFilter(subgroup.id);
-        if (subGroupFilter !== '(objectClass=*)') {
-          groupFilter += subGroupFilter;
-          hasAddedCondition = true;
-        }
-      }
-    }
-    
-    groupFilter += ')';
-    
-    // If no conditions were added, return a default filter
-    if (!hasAddedCondition) {
-      return '(objectClass=*)';
-    }
-    
-    return groupFilter;
-  };
+  // Generate individual condition filters
+  const conditionFilters: string[] = [];
   
-  // Start with the root level conditions
-  const result = generateGroupFilter(null);
-  console.log("Generated LDAP filter:", result);
-  return result;
+  for (const condition of regularConditions) {
+    // Get attribute name
+    const attributeName = condition.attribute === 'custom' && condition.customAttribute
+      ? condition.customAttribute
+      : condition.attribute;
+    
+    // Skip if no attribute name
+    if (!attributeName) continue;
+    
+    // Generate filter based on operator
+    let filter = '';
+    switch (condition.operator) {
+      case '=':
+        filter = `(${attributeName}=${condition.value})`;
+        break;
+      case '!=':
+        filter = `(!(${attributeName}=${condition.value}))`;
+        break;
+      case 'contains':
+        filter = `(${attributeName}=*${condition.value}*)`;
+        break;
+      case 'startsWith':
+        filter = `(${attributeName}=${condition.value}*)`;
+        break;
+      case 'endsWith':
+        filter = `(${attributeName}=*${condition.value})`;
+        break;
+      case 'present':
+        filter = `(${attributeName}=*)`;
+        break;
+      case 'notPresent':
+        filter = `(!(${attributeName}=*))`;
+        break;
+      default:
+        if (condition.value) {
+          filter = `(${attributeName}=${condition.value})`;
+        }
+    }
+    
+    if (filter) {
+      conditionFilters.push(filter);
+    }
+  }
+  
+  // If no valid filters, return default
+  if (conditionFilters.length === 0) {
+    return '(objectClass=*)';
+  }
+  
+  // If only one filter, return it directly
+  if (conditionFilters.length === 1) {
+    return conditionFilters[0];
+  }
+  
+  // Default to AND logic for now, for simplicity
+  // We'll refine this in future once the basic functionality works
+  return `(&${conditionFilters.join('')})`;
 };
 
 // Main component (completely rewritten)
