@@ -142,9 +142,12 @@ export interface IStorage {
 
   // AD Domains
   getAdDomain(id: number): Promise<AdDomain | undefined>;
+  getAdDomainByGuid(connectionId: number, objectGUID: string): Promise<AdDomain | undefined>;
   createAdDomain(domain: InsertAdDomain): Promise<AdDomain>;
   updateAdDomain(id: number, domain: Partial<AdDomain>): Promise<AdDomain | undefined>;
+  updateAdDomainByGuid(connectionId: number, objectGUID: string, domain: Partial<AdDomain>): Promise<AdDomain | undefined>;
   deleteAdDomain(id: number): Promise<boolean>;
+  deleteAdDomainByGuid(connectionId: number, objectGUID: string): Promise<boolean>;
   listAdDomains(connectionId: number, query?: any): Promise<AdDomain[]>;
   
   // AD Sites
@@ -1027,6 +1030,16 @@ export class DatabaseStorage implements IStorage {
     const result = await db.select().from(adDomains).where(eq(adDomains.id, id));
     return result.length > 0 ? result[0] : undefined;
   }
+  
+  async getAdDomainByGuid(connectionId: number, objectGUID: string): Promise<AdDomain | undefined> {
+    const result = await db.select().from(adDomains).where(
+      and(
+        eq(adDomains.connectionId, connectionId),
+        eq(adDomains.objectGUID, objectGUID)
+      )
+    );
+    return result.length > 0 ? result[0] : undefined;
+  }
 
   async createAdDomain(domain: InsertAdDomain): Promise<AdDomain> {
     const result = await db.insert(adDomains).values(domain).returning();
@@ -1037,9 +1050,34 @@ export class DatabaseStorage implements IStorage {
     const result = await db.update(adDomains).set(domainData).where(eq(adDomains.id, id)).returning();
     return result.length > 0 ? result[0] : undefined;
   }
+  
+  async updateAdDomainByGuid(connectionId: number, objectGUID: string, domainData: Partial<AdDomain>): Promise<AdDomain | undefined> {
+    const result = await db.update(adDomains)
+      .set(domainData)
+      .where(
+        and(
+          eq(adDomains.connectionId, connectionId),
+          eq(adDomains.objectGUID, objectGUID)
+        )
+      )
+      .returning();
+    return result.length > 0 ? result[0] : undefined;
+  }
 
   async deleteAdDomain(id: number): Promise<boolean> {
     const result = await db.delete(adDomains).where(eq(adDomains.id, id)).returning({ id: adDomains.id });
+    return result.length > 0;
+  }
+  
+  async deleteAdDomainByGuid(connectionId: number, objectGUID: string): Promise<boolean> {
+    const result = await db.delete(adDomains)
+      .where(
+        and(
+          eq(adDomains.connectionId, connectionId),
+          eq(adDomains.objectGUID, objectGUID)
+        )
+      )
+      .returning({ id: adDomains.id });
     return result.length > 0;
   }
 
