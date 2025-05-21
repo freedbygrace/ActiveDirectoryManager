@@ -19,48 +19,48 @@ export const PERMISSIONS = {
   CREATE_USERS: "create:users",
   UPDATE_USERS: "update:users",
   DELETE_USERS: "delete:users",
-  
+
   // LDAP connections
   VIEW_LDAP_CONNECTIONS: "view:ldap_connections",
   CREATE_LDAP_CONNECTIONS: "create:ldap_connections",
   UPDATE_LDAP_CONNECTIONS: "update:ldap_connections",
   DELETE_LDAP_CONNECTIONS: "delete:ldap_connections",
-  
+
   // Active Directory management
   VIEW_AD_USERS: "view:ad_users",
   CREATE_AD_USERS: "create:ad_users",
   UPDATE_AD_USERS: "update:ad_users",
   DELETE_AD_USERS: "delete:ad_users",
   MOVE_AD_USERS: "move:ad_users",
-  
+
   VIEW_AD_GROUPS: "view:ad_groups",
   CREATE_AD_GROUPS: "create:ad_groups",
   UPDATE_AD_GROUPS: "update:ad_groups",
   DELETE_AD_GROUPS: "delete:ad_groups",
   MANAGE_GROUP_MEMBERSHIP: "manage:group_membership",
-  
+
   VIEW_AD_OUS: "view:ad_ous",
   CREATE_AD_OUS: "create:ad_ous",
   UPDATE_AD_OUS: "update:ad_ous",
   DELETE_AD_OUS: "delete:ad_ous",
-  
+
   VIEW_AD_COMPUTERS: "view:ad_computers",
   CREATE_AD_COMPUTERS: "create:ad_computers",
   UPDATE_AD_COMPUTERS: "update:ad_computers",
   DELETE_AD_COMPUTERS: "delete:ad_computers",
   MOVE_AD_COMPUTERS: "move:ad_computers",
-  
+
   VIEW_AD_DOMAINS: "view:ad_domains",
   CREATE_AD_DOMAINS: "create:ad_domains",
   UPDATE_AD_DOMAINS: "update:ad_domains",
   DELETE_AD_DOMAINS: "delete:ad_domains",
-  
+
   // Sites and Services management
   VIEW_AD_SITES: "view:ad_sites",
   CREATE_AD_SITES: "create:ad_sites",
   UPDATE_AD_SITES: "update:ad_sites",
   DELETE_AD_SITES: "delete:ad_sites",
-  
+
   VIEW_AD_SUBNETS: "view:ad_subnets",
   CREATE_AD_SUBNETS: "create:ad_subnets",
   UPDATE_AD_SUBNETS: "update:ad_subnets",
@@ -68,7 +68,7 @@ export const PERMISSIONS = {
 
   // API Token management
   MANAGE_API_TOKENS: "manage:api_tokens",
-  
+
   // Administrative functions
   MANAGE_ROLES: "manage:roles",
   SYSTEM_ADMIN: "admin:system",
@@ -175,10 +175,10 @@ export const ldapConnections = pgTable("ldap_connections", {
 export const scheduleFrequencies = [
   "once",
   "minutely",
-  "hourly", 
-  "daily", 
-  "weekly", 
-  "monthly", 
+  "hourly",
+  "daily",
+  "weekly",
+  "monthly",
   "yearly"
 ] as const;
 
@@ -234,7 +234,7 @@ export const dynamicGroupRules = pgTable("dynamic_group_rules", {
 
 // Rule conditions (filter logic)
 export const dynamicGroupConditions = pgTable("dynamic_group_conditions", {
-  id: serial("id").primaryKey(), 
+  id: serial("id").primaryKey(),
   ruleId: integer("rule_id").references(() => dynamicGroupRules.id, { onDelete: "cascade" }).notNull(),
   parentId: integer("parent_id").references(() => dynamicGroupConditions.id, { onDelete: "cascade" }),
   type: text("type").notNull(), // "condition", "group"
@@ -498,6 +498,53 @@ export const removeFromGroupSchema = z.object({
   objectType: z.enum(["user", "computer"]),
 });
 
+// Password management schemas
+export const resetPasswordSchema = z.object({
+  userObjectGUID: z.string().min(1, "User ObjectGUID is required"),
+  newPassword: z.string().min(8, "Password must be at least 8 characters long"),
+  skipValidation: z.boolean().optional().default(false),
+  requirePasswordChangeAtNextLogon: z.boolean().optional().default(true),
+});
+
+export const enableUserAccountSchema = z.object({
+  userObjectGUID: z.string().min(1, "User ObjectGUID is required"),
+  enabled: z.boolean(),
+});
+
+// Bulk operations schemas
+export const bulkEnableUserAccountsSchema = z.object({
+  userDNs: z.array(z.string().min(1, "User DN is required")),
+  enabled: z.boolean(),
+});
+
+// Bulk operations schemas
+export const bulkMoveObjectsSchema = z.object({
+  objectDNs: z.array(z.string().min(1, "Object DN is required")),
+  targetOU: z.string().min(1, "Target OU is required"),
+});
+
+export const bulkAddToGroupSchema = z.object({
+  memberDNs: z.array(z.string().min(1, "Member DN is required")),
+  groupDN: z.string().min(1, "Group DN is required"),
+});
+
+export const bulkRemoveFromGroupSchema = z.object({
+  memberDNs: z.array(z.string().min(1, "Member DN is required")),
+  groupDN: z.string().min(1, "Group DN is required"),
+});
+
+export const bulkEnableUserAccountsSchema = z.object({
+  userDNs: z.array(z.string().min(1, "User DN is required")),
+  enabled: z.boolean(),
+});
+
+export const bulkUpdateAttributeSchema = z.object({
+  objectDNs: z.array(z.string().min(1, "Object DN is required")),
+  attributeName: z.string().min(1, "Attribute name is required"),
+  attributeValue: z.union([z.string(), z.array(z.string()), z.null()]),
+  operation: z.enum(["add", "replace", "delete"]).default("replace"),
+});
+
 // ManagedBy operation schema is no longer needed as it's been replaced by object-specific PATCH endpoints
 
 // Export types
@@ -536,6 +583,9 @@ export type MoveComputer = z.infer<typeof moveComputerSchema>;
 export type MoveUser = z.infer<typeof moveUserSchema>;
 export type AddToGroup = z.infer<typeof addToGroupSchema>;
 export type RemoveFromGroup = z.infer<typeof removeFromGroupSchema>;
+export type ResetPassword = z.infer<typeof resetPasswordSchema>;
+export type EnableUserAccount = z.infer<typeof enableUserAccountSchema>;
+export type BulkEnableUserAccounts = z.infer<typeof bulkEnableUserAccountsSchema>;
 export type DynamicGroupRule = typeof dynamicGroupRules.$inferSelect;
 export type InsertDynamicGroupRule = z.infer<typeof insertDynamicGroupRuleSchema>;
 export type DynamicGroupCondition = typeof dynamicGroupConditions.$inferSelect;
@@ -651,22 +701,22 @@ export const ldapAttributesRelations = relations(ldapAttributes, ({ one }) => ({
 }));
 
 // Generate insertion schemas
-export const insertLdapFilterSchema = createInsertSchema(ldapFilters).omit({ 
-  id: true, 
-  createdAt: true, 
+export const insertLdapFilterSchema = createInsertSchema(ldapFilters).omit({
+  id: true,
+  createdAt: true,
   modifiedAt: true,
-  currentVersion: true 
+  currentVersion: true
 });
 
-export const insertLdapFilterRevisionSchema = createInsertSchema(ldapFilterRevisions).omit({ 
-  id: true, 
-  createdAt: true 
+export const insertLdapFilterRevisionSchema = createInsertSchema(ldapFilterRevisions).omit({
+  id: true,
+  createdAt: true
 });
 
-export const insertLdapAttributeSchema = createInsertSchema(ldapAttributes).omit({ 
-  id: true, 
-  createdAt: true, 
-  updatedAt: true 
+export const insertLdapAttributeSchema = createInsertSchema(ldapAttributes).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true
 });
 
 // Export types
@@ -678,8 +728,8 @@ export type LdapAttribute = typeof ldapAttributes.$inferSelect;
 export type InsertLdapAttribute = z.infer<typeof insertLdapAttributeSchema>;
 
 // Audit log schema and types
-export const insertAuditLogSchema = createInsertSchema(auditLogs).omit({ 
-  id: true, 
+export const insertAuditLogSchema = createInsertSchema(auditLogs).omit({
+  id: true,
   timestamp: true
 });
 export type AuditLog = typeof auditLogs.$inferSelect;

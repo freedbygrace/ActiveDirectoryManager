@@ -35,6 +35,32 @@ const swaggerOptions = {
         description: "API base URL",
       },
     ],
+    tags: [
+      {
+        name: "LDAP Connections",
+        description: "Operations for managing LDAP connections"
+      },
+      {
+        name: "AD Users",
+        description: "Operations for managing Active Directory users"
+      },
+      {
+        name: "AD Groups",
+        description: "Operations for managing Active Directory groups"
+      },
+      {
+        name: "AD Computers",
+        description: "Operations for managing Active Directory computers"
+      },
+      {
+        name: "AD Organizational Units",
+        description: "Operations for managing Active Directory organizational units"
+      },
+      {
+        name: "Active Directory",
+        description: "General Active Directory operations including password management and account status"
+      }
+    ],
     components: {
       securitySchemes: {
         bearerAuth: {
@@ -299,7 +325,7 @@ const swaggerOptions = {
             id: { type: "integer" },
             action: { type: "string" },
             targetId: { type: "string" },
-            details: { 
+            details: {
               type: "object",
               additionalProperties: true
             },
@@ -307,6 +333,59 @@ const swaggerOptions = {
             timestamp: { type: "string", format: "date-time" },
             connectionId: { type: "integer" }
           },
+        },
+        PasswordReset: {
+          type: "object",
+          required: ["userObjectGUID", "newPassword"],
+          properties: {
+            userObjectGUID: {
+              type: "string",
+              description: "The ObjectGUID of the user"
+            },
+            newPassword: {
+              type: "string",
+              description: "The new password for the user"
+            },
+            skipValidation: {
+              type: "boolean",
+              description: "Whether to skip password policy validation",
+              default: false
+            },
+            requirePasswordChangeAtNextLogon: {
+              type: "boolean",
+              description: "Whether to require the user to change their password at next logon",
+              default: true
+            }
+          }
+        },
+        EnableUserAccount: {
+          type: "object",
+          required: ["userObjectGUID", "enabled"],
+          properties: {
+            userObjectGUID: {
+              type: "string",
+              description: "The ObjectGUID of the user"
+            },
+            enabled: {
+              type: "boolean",
+              description: "Whether to enable or disable the account"
+            }
+          }
+        },
+        BulkEnableUserAccounts: {
+          type: "object",
+          required: ["userDNs", "enabled"],
+          properties: {
+            userDNs: {
+              type: "array",
+              items: { type: "string" },
+              description: "Array of user distinguished names"
+            },
+            enabled: {
+              type: "boolean",
+              description: "Whether to enable or disable the accounts"
+            }
+          }
         },
       },
       responses: {
@@ -394,13 +473,13 @@ export function setupSwagger(app: Express) {
   // Mount at both paths for backward compatibility
   app.use("/api/docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec, swaggerUiOptions));
   app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec, swaggerUiOptions));
-  
+
   // Provide the JSON spec at multiple paths
   app.get("/api/swagger.json", (req, res) => {
     res.setHeader("Content-Type", "application/json");
     res.send(swaggerSpec);
   });
-  
+
   app.get("/api-docs/swagger.json", (req, res) => {
     res.setHeader("Content-Type", "application/json");
     res.send(swaggerSpec);
@@ -408,8 +487,8 @@ export function setupSwagger(app: Express) {
 
   // Add download endpoint for the OpenAPI specification
   app.get("/api/docs/download", (req, res) => {
-    const format = req.query.format?.toString().toLowerCase() || 'json';
-    
+    const format = req.query.format?.toString().toLowerCase() ?? 'json';
+
     if (format === 'json') {
       res.setHeader('Content-Disposition', 'attachment; filename=openapi-spec.json');
       res.setHeader('Content-Type', 'application/json');
@@ -455,7 +534,7 @@ export function setupSwagger(app: Express) {
         </head>
         <body>
           <h1>Active Directory Management API - Advanced Usage Guide</h1>
-          
+
           <h2>API Documentation</h2>
           <p>The complete API documentation is available at <a href="/api/docs">/api/docs</a>.</p>
           <p>You can also download the OpenAPI specification:</p>
@@ -463,28 +542,28 @@ export function setupSwagger(app: Express) {
             <a href="/api/docs/download?format=json" class="btn">Download OpenAPI Spec (JSON)</a>
             <a href="/api/docs/download?format=yaml" class="btn">Download OpenAPI Spec (YAML)</a>
           </p>
-          
+
           <h2>Query Parameters and Filtering</h2>
           <pre>${queryParamsInfo}</pre>
-          
+
           <h2>Authentication</h2>
           <p>This API supports two authentication methods:</p>
           <ul>
             <li><strong>Session-based authentication</strong>: Used when accessing the API from the web interface.</li>
             <li><strong>API Token authentication</strong>: Used when accessing the API programmatically.</li>
           </ul>
-          
+
           <h3>API Token Authentication</h3>
           <p>To authenticate using an API token, include the token in the Authorization header:</p>
           <pre>Authorization: Bearer YOUR_API_TOKEN</pre>
-          
+
           <h2>Rate Limiting</h2>
           <p>The API has rate limiting in place to prevent abuse. The current limits are:</p>
           <ul>
             <li>100 requests per minute for authenticated users</li>
             <li>20 requests per minute for unauthenticated users</li>
           </ul>
-          
+
           <h2>Error Handling</h2>
           <p>The API returns consistent error responses with the following structure:</p>
           <pre>{
@@ -496,20 +575,20 @@ export function setupSwagger(app: Express) {
     }
   ]
 }</pre>
-          
+
           <h2>Example Usage</h2>
           <h3>Filter Users by Name</h3>
           <pre>GET /api/connections/1/ad-users?filter=displayName contains 'John'</pre>
-          
+
           <h3>Select Specific Fields</h3>
           <pre>GET /api/connections/1/ad-users?select=id,displayName,email</pre>
-          
+
           <h3>Pagination</h3>
           <pre>GET /api/connections/1/ad-users?top=10&skip=20</pre>
-          
+
           <h3>Combining Parameters</h3>
           <pre>GET /api/connections/1/ad-users?filter=enabled eq true&select=id,displayName,email&orderBy=displayName asc&top=10</pre>
-          
+
           <p>Return to <a href="/api/docs">API Documentation</a></p>
         </body>
       </html>

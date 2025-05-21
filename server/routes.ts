@@ -4,13 +4,20 @@ import { setupAuth } from "./auth";
 import { setupSwagger } from "./swagger";
 import { storage } from "./storage";
 import { db } from "./db";
-import { 
-  apiQuerySchema, 
-  PERMISSIONS, 
-  moveComputerSchema, 
-  moveUserSchema, 
-  addToGroupSchema, 
+import {
+  apiQuerySchema,
+  PERMISSIONS,
+  moveComputerSchema,
+  moveUserSchema,
+  addToGroupSchema,
   removeFromGroupSchema,
+  resetPasswordSchema,
+  enableUserAccountSchema,
+  bulkMoveObjectsSchema,
+  bulkAddToGroupSchema,
+  bulkRemoveFromGroupSchema,
+  bulkEnableUserAccountsSchema,
+  bulkUpdateAttributeSchema,
   adUsers,
   adGroups,
   adOrgUnits,
@@ -21,19 +28,19 @@ import {
 } from "@shared/schema";
 import { ZodError } from "zod";
 import rateLimit from "express-rate-limit";
-import { 
-  requireAuth, 
-  requirePermission, 
-  requireAdmin, 
+import {
+  requireAuth,
+  requirePermission,
+  requireAdmin,
   initializeRBAC,
   checkPermission
 } from "./authorization";
 import { ldapClient } from "./ldap";
-import { 
-  applyFilterConditions, 
-  generatePaginationMetadata, 
-  parseFilter, 
-  parsePagination 
+import {
+  applyFilterConditions,
+  generatePaginationMetadata,
+  parseFilter,
+  parsePagination
 } from "./query-parser";
 
 import { eq, sql, count } from "drizzle-orm";
@@ -67,12 +74,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Initialize Role Based Access Control system
   await initializeRBAC();
-  
+
   // Authentication info and providers
   app.get("/api/auth/providers", (req, res) => {
     const ldapEnabled = process.env.LDAP_ENABLED === "true";
     const oidcEnabled = process.env.OIDC_ENABLED === "true";
-    
+
     res.json({
       ldap: {
         enabled: ldapEnabled,
@@ -86,7 +93,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       registrationEnabled: process.env.DISABLE_REGISTRATION !== "true"
     });
   });
-  
+
   // Apply rate limiting middleware for API routes
   const apiLimiter = rateLimit({
     windowMs: 15 * 60 * 1000, // 15 minutes
@@ -153,13 +160,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/ldap-connections", requirePermission(PERMISSIONS.VIEW_LDAP_CONNECTIONS, { allowApiToken: true }), async (req, res, next) => {
     try {
       const connections = await storage.listLdapConnections();
-      
+
       // Hide sensitive fields like password
       const safeConnections = connections.map(conn => {
         const { password, ...safeConn } = conn;
         return safeConn;
       });
-      
+
       res.json(safeConnections);
     } catch (error) {
       next(error);
@@ -218,10 +225,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/ldap-connections", requireAdmin, async (req, res, next) => {
     try {
       const connection = await storage.createLdapConnection(req.body);
-      
+
       // Hide password in response
       const { password, ...safeConn } = connection;
-      
+
       res.status(201).json(safeConn);
     } catch (error) {
       next(error);
@@ -259,16 +266,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!req.isAuthenticated()) {
         return res.status(401).json({ message: "Not authenticated" });
       }
-      
+
       const connection = await storage.getLdapConnection(parseInt(req.params.id));
-      
+
       if (!connection) {
         return res.status(404).json({ message: "LDAP connection not found" });
       }
-      
+
       // Hide password in response
       const { password, ...safeConn } = connection;
-      
+
       res.json(safeConn);
     } catch (error) {
       next(error);
@@ -327,14 +334,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.put("/api/ldap-connections/:id", requireAdmin, async (req, res, next) => {
     try {
       const updatedConnection = await storage.updateLdapConnection(parseInt(req.params.id), req.body);
-      
+
       if (!updatedConnection) {
         return res.status(404).json({ message: "LDAP connection not found" });
       }
-      
+
       // Hide password in response
       const { password, ...safeConn } = updatedConnection;
-      
+
       res.json(safeConn);
     } catch (error) {
       next(error);
@@ -366,11 +373,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.delete("/api/ldap-connections/:id", requireAdmin, async (req, res, next) => {
     try {
       const deleted = await storage.deleteLdapConnection(parseInt(req.params.id));
-      
+
       if (!deleted) {
         return res.status(404).json({ message: "LDAP connection not found" });
       }
-      
+
       res.json({ success: true });
     } catch (error) {
       next(error);
@@ -383,7 +390,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!req.isAuthenticated()) {
         return res.status(401).json({ message: "Not authenticated" });
       }
-      
+
       const tokens = await storage.listApiTokensByUserId(req.user.id);
       res.json(tokens);
     } catch (error) {
@@ -397,29 +404,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!req.isAuthenticated()) {
         return res.status(401).json({ message: "Not authenticated" });
       }
-      
+
       const token = await storage.getApiToken(parseInt(req.params.id));
-      
+
       if (!token) {
         return res.status(404).json({ message: "Token not found" });
       }
-      
+
       // Only allow users to delete their own tokens unless they're admin
       if (token.userId !== req.user.id) {
         // Get the user's role
         const userRole = await storage.getRole(req.user.roleId!);
-        
+
         if (userRole?.name !== "admin") {
           return res.status(403).json({ message: "Forbidden: You cannot delete tokens that don't belong to you" });
         }
       }
-      
+
       const deleted = await storage.deleteApiToken(parseInt(req.params.id));
-      
+
       if (!deleted) {
         return res.status(404).json({ message: "Token not found" });
       }
-      
+
       res.json({ success: true });
     } catch (error) {
       next(error);
@@ -430,13 +437,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/users", requireAdmin, async (req, res, next) => {
     try {
       const users = await storage.listUsers();
-      
+
       // Remove passwords from response
       const safeUsers = users.map(user => {
         const { password, ...safeUser } = user;
         return safeUser;
       });
-      
+
       res.json(safeUsers);
     } catch (error) {
       next(error);
@@ -486,21 +493,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!req.isAuthenticated() && !req.headers.authorization) {
         return res.status(401).json({ message: "Authentication required" });
       }
-      
+
       const connectionId = parseInt(req.params.connectionId);
       const connection = await storage.getLdapConnection(connectionId);
-      
+
       if (!connection) {
         return res.status(404).json({ message: "LDAP connection not found" });
       }
-      
+
       const query = parseQueryParams(req);
       const users = await storage.listAdUsers(connectionId, query);
-      
+
       // Count total records for pagination metadata
       const countQuery = db.select({ count: sql`count(*)` }).from(adUsers)
         .where(eq(adUsers.connectionId, connectionId));
-      
+
       // Apply filters if present
       if (query && query.filter) {
         const conditions = parseFilter(query.filter);
@@ -509,16 +516,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
           countQuery.where(whereClause);
         }
       }
-      
+
       const [countResult] = await countQuery;
       const totalRecords = Number(countResult?.count || 0);
-      
+
       // Add objectType to each result
       const usersWithObjectType = users.map(user => ({
         ...user,
         objectType: 'user'
       }));
-      
+
       // Generate pagination metadata
       const { limit, offset } = parsePagination(query?.top, query?.skip);
       const paginationMetadata = generatePaginationMetadata(
@@ -527,7 +534,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         offset,
         `${req.protocol}://${req.get('host')}${req.originalUrl}`
       );
-      
+
       // Return data with pagination metadata
       res.json({
         data: usersWithObjectType,
@@ -598,34 +605,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!req.isAuthenticated() && !req.headers.authorization) {
         return res.status(401).json({ message: "Authentication required" });
       }
-      
+
       const connectionId = parseInt(req.params.connectionId);
       const connection = await storage.getLdapConnection(connectionId);
-      
+
       if (!connection) {
         return res.status(404).json({ message: "LDAP connection not found" });
       }
-      
+
       // Extract user data from request
       const { name, samAccountName, description, email, firstName, lastName, ou, enabled = true, password } = req.body;
-      
+
       if (!name || !samAccountName || !ou) {
         return res.status(400).json({ message: "Name, samAccountName, and OU are required" });
       }
-      
+
       // Create user in AD using LDAP
       const client = ldapClient.getClient(connectionId);
-      
+
       if (!client) {
         const connected = await ldapClient.connect(connection);
         if (!connected) {
           return res.status(500).json({ message: "Failed to connect to LDAP server" });
         }
       }
-      
+
       // Create a DN for the new user
       const userDN = `CN=${name},${ou}`;
-      
+
       // Attributes for the new user
       const userAttributes = {
         objectClass: ['user', 'person', 'organizationalPerson', 'top'],
@@ -638,30 +645,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
         mail: email || '',
         userAccountControl: enabled ? '512' : '514' // 512 = enabled, 514 = disabled
       };
-      
+
       // Add password if provided
       if (password) {
         // Unicode password format for Active Directory
         const unicodePassword = Buffer.from(`"${password}"`, 'utf16le');
         userAttributes.unicodePwd = unicodePassword;
       }
-      
+
       try {
         const success = await ldapClient.createEntry(connectionId, userDN, userAttributes);
-        
+
         if (!success) {
           return res.status(500).json({ message: "Failed to create AD user" });
         }
-        
+
         // Search for the user to get all its attributes
         const userResults = await ldapClient.searchUsers(connectionId, `(cn=${name})`);
-        
+
         if (!userResults || userResults.length === 0) {
           return res.status(500).json({ message: "User created but could not retrieve details" });
         }
-        
+
         const userData = userResults[0];
-        
+
         // Create entry in our database
         const newUser = await storage.createAdUser({
           connectionId,
@@ -681,7 +688,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           managedBy: null,
           adProperties: userData
         });
-        
+
         // Create audit log entry
         await storage.createAuditLogEntry({
           action: 'create',
@@ -690,7 +697,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           userId: req.user?.id,
           connectionId
         });
-        
+
         res.status(201).json(newUser);
       } catch (err) {
         console.error("Error creating AD user:", err);
@@ -739,13 +746,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!req.isAuthenticated() && !req.headers.authorization) {
         return res.status(401).json({ message: "Authentication required" });
       }
-      
+
       const user = await storage.getAdUser(parseInt(req.params.id));
-      
+
       if (!user || user.connectionId !== parseInt(req.params.connectionId)) {
         return res.status(404).json({ message: "AD user not found" });
       }
-      
+
       // Apply property selection if specified
       let result = user;
       if (req.query.select) {
@@ -758,7 +765,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
         result = selectedUser as typeof user;
       }
-      
+
       res.json(result);
     } catch (error) {
       next(error);
@@ -851,7 +858,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
    *           schema:
    *             type: object
    *             properties:
-   *               givenName: 
+   *               givenName:
    *                 type: string
    *               surname:
    *                 type: string
@@ -880,18 +887,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.put("/api/connections/:connectionId/ad-users/:id", authenticateApiToken, async (req, res, next) => {
     try {
       const user = await storage.getAdUser(parseInt(req.params.id));
-      
+
       if (!user || user.connectionId !== parseInt(req.params.connectionId)) {
         return res.status(404).json({ message: "AD user not found" });
       }
-      
+
       const updatedUser = await storage.updateAdUser(parseInt(req.params.id), req.body);
       res.json(updatedUser);
     } catch (error) {
       next(error);
     }
   });
-  
+
   /**
    * @swagger
    * /api/connections/{connectionId}/ad-users/{id}/managed-by:
@@ -940,19 +947,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const connectionId = parseInt(req.params.connectionId);
       const userId = parseInt(req.params.id);
       const { managerDistinguishedName } = req.body;
-      
+
       // Get the connection
       const connection = await storage.getLdapConnection(connectionId);
       if (!connection) {
         return res.status(404).json({ message: "LDAP connection not found" });
       }
-      
+
       // Get the user
       const user = await storage.getAdUser(userId);
       if (!user || user.connectionId !== connectionId) {
         return res.status(404).json({ message: "AD user not found" });
       }
-      
+
       // Connect to LDAP
       try {
         await ldapClient.connect(connection);
@@ -960,14 +967,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         console.error("LDAP connection error:", error);
         return res.status(500).json({ message: "Failed to connect to LDAP server", error: error.message });
       }
-      
+
       try {
         // Set the managedBy attribute
         await ldapClient.setManagedBy(connectionId, user.distinguishedName, managerDistinguishedName);
-        
+
         // Update the user in the database
         const updatedUser = await storage.updateAdUser(userId, { managedBy: managerDistinguishedName });
-        
+
         // Log the action
         await storage.createAuditLogEntry({
           action: managerDistinguishedName ? "update_manager" : "remove_manager",
@@ -980,7 +987,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           userId: req.user?.id,
           connectionId
         });
-        
+
         return res.status(200).json(updatedUser);
       } catch (error) {
         console.error("Error updating managedBy attribute:", error);
@@ -1022,17 +1029,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.delete("/api/connections/:connectionId/ad-users/:id", authenticateApiToken, async (req, res, next) => {
     try {
       const user = await storage.getAdUser(parseInt(req.params.id));
-      
+
       if (!user || user.connectionId !== parseInt(req.params.connectionId)) {
         return res.status(404).json({ message: "AD user not found" });
       }
-      
+
       const deleted = await storage.deleteAdUser(parseInt(req.params.id));
-      
+
       if (!deleted) {
         return res.status(404).json({ message: "AD user not found" });
       }
-      
+
       res.json({ success: true });
     } catch (error) {
       next(error);
@@ -1101,18 +1108,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.put("/api/connections/:connectionId/ad-groups/:id", authenticateApiToken, async (req, res, next) => {
     try {
       const group = await storage.getAdGroup(parseInt(req.params.id));
-      
+
       if (!group || group.connectionId !== parseInt(req.params.connectionId)) {
         return res.status(404).json({ message: "AD group not found" });
       }
-      
+
       const updatedGroup = await storage.updateAdGroup(parseInt(req.params.id), req.body);
       res.json(updatedGroup);
     } catch (error) {
       next(error);
     }
   });
-  
+
   /**
    * @swagger
    * /api/connections/{connectionId}/ad-groups/{id}/managed-by:
@@ -1161,19 +1168,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const connectionId = parseInt(req.params.connectionId);
       const groupId = parseInt(req.params.id);
       const { managerDistinguishedName } = req.body;
-      
+
       // Get the connection
       const connection = await storage.getLdapConnection(connectionId);
       if (!connection) {
         return res.status(404).json({ message: "LDAP connection not found" });
       }
-      
+
       // Get the group
       const group = await storage.getAdGroup(groupId);
       if (!group || group.connectionId !== connectionId) {
         return res.status(404).json({ message: "AD group not found" });
       }
-      
+
       // Connect to LDAP
       try {
         await ldapClient.connect(connection);
@@ -1181,14 +1188,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         console.error("LDAP connection error:", error);
         return res.status(500).json({ message: "Failed to connect to LDAP server", error: error.message });
       }
-      
+
       try {
         // Set the managedBy attribute
         await ldapClient.setManagedBy(connectionId, group.distinguishedName, managerDistinguishedName);
-        
+
         // Update the group in the database
         const updatedGroup = await storage.updateAdGroup(groupId, { managedBy: managerDistinguishedName });
-        
+
         // Log the action
         await storage.createAuditLogEntry({
           action: managerDistinguishedName ? "update_manager" : "remove_manager",
@@ -1201,7 +1208,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           userId: req.user?.id,
           connectionId
         });
-        
+
         return res.status(200).json(updatedGroup);
       } catch (error) {
         console.error("Error updating managedBy attribute:", error);
@@ -1243,23 +1250,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.delete("/api/connections/:connectionId/ad-groups/:id", authenticateApiToken, async (req, res, next) => {
     try {
       const group = await storage.getAdGroup(parseInt(req.params.id));
-      
+
       if (!group || group.connectionId !== parseInt(req.params.connectionId)) {
         return res.status(404).json({ message: "AD group not found" });
       }
-      
+
       const deleted = await storage.deleteAdGroup(parseInt(req.params.id));
-      
+
       if (!deleted) {
         return res.status(404).json({ message: "AD group not found" });
       }
-      
+
       res.json({ success: true });
     } catch (error) {
       next(error);
     }
   });
-  
+
   // Similar endpoints for AD Groups
   /**
    * @swagger
@@ -1306,21 +1313,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!req.isAuthenticated() && !req.headers.authorization) {
         return res.status(401).json({ message: "Authentication required" });
       }
-      
+
       const connectionId = parseInt(req.params.connectionId);
       const connection = await storage.getLdapConnection(connectionId);
-      
+
       if (!connection) {
         return res.status(404).json({ message: "LDAP connection not found" });
       }
-      
+
       const query = parseQueryParams(req);
       const groups = await storage.listAdGroups(connectionId, query);
-      
+
       // Count total records for pagination metadata
       const countQuery = db.select({ count: sql`count(*)` }).from(adGroups)
         .where(eq(adGroups.connectionId, connectionId));
-      
+
       // Apply filters if present
       if (query && query.filter) {
         const conditions = parseFilter(query.filter);
@@ -1329,16 +1336,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
           countQuery.where(whereClause);
         }
       }
-      
+
       const [countResult] = await countQuery;
       const totalRecords = Number(countResult?.count || 0);
-      
+
       // Add objectType to each result
       const groupsWithObjectType = groups.map(group => ({
         ...group,
         objectType: 'group'
       }));
-      
+
       // Generate pagination metadata
       const { limit, offset } = parsePagination(query?.top, query?.skip);
       const paginationMetadata = generatePaginationMetadata(
@@ -1347,7 +1354,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         offset,
         `${req.protocol}://${req.get('host')}${req.originalUrl}`
       );
-      
+
       // Return data with pagination metadata
       res.json({
         data: groupsWithObjectType,
@@ -1357,7 +1364,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       next(error);
     }
   });
-  
+
   /**
    * @swagger
    * /api/connections/{connectionId}/ad-groups:
@@ -1419,7 +1426,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const connectionId = parseInt(req.params.connectionId);
       const { name, parentDN, description, groupType = 'Global', groupCategory = 'Security' } = req.body;
-      
+
       // Basic validation
       if (!name || !parentDN) {
         return res.status(400).json({ message: "Group name and parent DN are required" });
@@ -1430,15 +1437,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!connection) {
         return res.status(404).json({ message: "LDAP connection not found" });
       }
-      
+
       // Create the DN for the new group
       const groupDN = `CN=${name},${parentDN}`;
-      
+
       // Set the group type value based on type and category
-      const groupTypeValue = 
-        (groupCategory === 'Security' ? 0x80000000 : 0) | 
+      const groupTypeValue =
+        (groupCategory === 'Security' ? 0x80000000 : 0) |
         (groupType === 'Global' ? 0x2 : groupType === 'Universal' ? 0x8 : 0x4);
-      
+
       // Attributes for the new group
       const groupAttributes = {
         objectClass: ['top', 'group'],
@@ -1447,21 +1454,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
         description: description || '',
         groupType: groupTypeValue.toString()
       };
-      
+
       // Create the group in AD
       await ldapClient.createEntry(connectionId, groupDN, groupAttributes);
-      
+
       // Search for the newly created group to get its attributes
       const searchResults = await ldapClient.searchGroups(connectionId, `(&(objectClass=group)(cn=${name}))`, [
         'objectGUID', 'distinguishedName', 'canonicalName', 'cn', 'sAMAccountName', 'description', 'groupType'
       ]);
-      
+
       if (!searchResults || searchResults.length === 0) {
         return res.status(500).json({ message: "Group created but could not retrieve details" });
       }
-      
+
       const adGroup = searchResults[0];
-      
+
       // Store in database
       const storedGroup = await storage.createAdGroup({
         connectionId,
@@ -1475,7 +1482,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         members: [], // No members initially
         adProperties: adGroup // Store all attributes
       });
-      
+
       // Add audit log
       await storage.createAuditLogEntry({
         userId: req.user.id,
@@ -1489,7 +1496,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           groupType: groupCategory + ' ' + groupType
         }
       });
-      
+
       res.status(201).json(storedGroup);
     } catch (err) {
       console.error("Error creating AD group:", err);
@@ -1554,18 +1561,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.put("/api/connections/:connectionId/ad-org-units/:id", authenticateApiToken, async (req, res, next) => {
     try {
       const orgUnit = await storage.getAdOrgUnit(parseInt(req.params.id));
-      
+
       if (!orgUnit || orgUnit.connectionId !== parseInt(req.params.connectionId)) {
         return res.status(404).json({ message: "AD organizational unit not found" });
       }
-      
+
       const updatedOrgUnit = await storage.updateAdOrgUnit(parseInt(req.params.id), req.body);
       res.json(updatedOrgUnit);
     } catch (error) {
       next(error);
     }
   });
-  
+
   /**
    * @swagger
    * /api/connections/{connectionId}/ad-org-units/{id}/managed-by:
@@ -1614,19 +1621,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const connectionId = parseInt(req.params.connectionId);
       const ouId = parseInt(req.params.id);
       const { managerDistinguishedName } = req.body;
-      
+
       // Get the connection
       const connection = await storage.getLdapConnection(connectionId);
       if (!connection) {
         return res.status(404).json({ message: "LDAP connection not found" });
       }
-      
+
       // Get the OU
       const ou = await storage.getAdOrgUnit(ouId);
       if (!ou || ou.connectionId !== connectionId) {
         return res.status(404).json({ message: "AD organizational unit not found" });
       }
-      
+
       // Connect to LDAP
       try {
         await ldapClient.connect(connection);
@@ -1634,14 +1641,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         console.error("LDAP connection error:", error);
         return res.status(500).json({ message: "Failed to connect to LDAP server", error: error.message });
       }
-      
+
       try {
         // Set the managedBy attribute
         await ldapClient.setManagedBy(connectionId, ou.distinguishedName, managerDistinguishedName);
-        
+
         // Update the OU in the database
         const updatedOU = await storage.updateAdOrgUnit(ouId, { managedBy: managerDistinguishedName });
-        
+
         // Log the action
         await storage.createAuditLogEntry({
           action: managerDistinguishedName ? "update_manager" : "remove_manager",
@@ -1654,7 +1661,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           userId: req.user?.id,
           connectionId
         });
-        
+
         return res.status(200).json(updatedOU);
       } catch (error) {
         console.error("Error updating managedBy attribute:", error);
@@ -1696,23 +1703,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.delete("/api/connections/:connectionId/ad-org-units/:id", authenticateApiToken, async (req, res, next) => {
     try {
       const orgUnit = await storage.getAdOrgUnit(parseInt(req.params.id));
-      
+
       if (!orgUnit || orgUnit.connectionId !== parseInt(req.params.connectionId)) {
         return res.status(404).json({ message: "AD organizational unit not found" });
       }
-      
+
       const deleted = await storage.deleteAdOrgUnit(parseInt(req.params.id));
-      
+
       if (!deleted) {
         return res.status(404).json({ message: "AD organizational unit not found" });
       }
-      
+
       res.json({ success: true });
     } catch (error) {
       next(error);
     }
   });
-  
+
   // Organizational Units endpoints
   /**
    * @swagger
@@ -1759,21 +1766,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!req.isAuthenticated() && !req.headers.authorization) {
         return res.status(401).json({ message: "Authentication required" });
       }
-      
+
       const connectionId = parseInt(req.params.connectionId);
       const connection = await storage.getLdapConnection(connectionId);
-      
+
       if (!connection) {
         return res.status(404).json({ message: "LDAP connection not found" });
       }
-      
+
       const query = parseQueryParams(req);
       const orgUnits = await storage.listAdOrgUnits(connectionId, query);
-      
+
       // Count total records for pagination metadata
       const countQuery = db.select({ count: sql`count(*)` }).from(adOrgUnits)
         .where(eq(adOrgUnits.connectionId, connectionId));
-      
+
       // Apply filters if present
       if (query && query.filter) {
         const conditions = parseFilter(query.filter);
@@ -1782,16 +1789,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
           countQuery.where(whereClause);
         }
       }
-      
+
       const [countResult] = await countQuery;
       const totalRecords = Number(countResult?.count || 0);
-      
+
       // Add objectType to each result
       const orgUnitsWithObjectType = orgUnits.map(ou => ({
         ...ou,
         objectType: 'organizationalUnit'
       }));
-      
+
       // Generate pagination metadata
       const { limit, offset } = parsePagination(query?.top, query?.skip);
       const paginationMetadata = generatePaginationMetadata(
@@ -1800,7 +1807,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         offset,
         `${req.protocol}://${req.get('host')}${req.originalUrl}`
       );
-      
+
       // Return data with pagination metadata
       res.json({
         data: orgUnitsWithObjectType,
@@ -1871,18 +1878,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.put("/api/connections/:connectionId/ad-computers/:id", authenticateApiToken, async (req, res, next) => {
     try {
       const computer = await storage.getAdComputer(parseInt(req.params.id));
-      
+
       if (!computer || computer.connectionId !== parseInt(req.params.connectionId)) {
         return res.status(404).json({ message: "AD computer not found" });
       }
-      
+
       const updatedComputer = await storage.updateAdComputer(parseInt(req.params.id), req.body);
       res.json(updatedComputer);
     } catch (error) {
       next(error);
     }
   });
-  
+
   /**
    * @swagger
    * /api/connections/{connectionId}/ad-computers/{id}/managed-by:
@@ -1931,19 +1938,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const connectionId = parseInt(req.params.connectionId);
       const computerId = parseInt(req.params.id);
       const { managerDistinguishedName } = req.body;
-      
+
       // Get the connection
       const connection = await storage.getLdapConnection(connectionId);
       if (!connection) {
         return res.status(404).json({ message: "LDAP connection not found" });
       }
-      
+
       // Get the computer
       const computer = await storage.getAdComputer(computerId);
       if (!computer || computer.connectionId !== connectionId) {
         return res.status(404).json({ message: "AD computer not found" });
       }
-      
+
       // Connect to LDAP
       try {
         await ldapClient.connect(connection);
@@ -1951,14 +1958,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         console.error("LDAP connection error:", error);
         return res.status(500).json({ message: "Failed to connect to LDAP server", error: error.message });
       }
-      
+
       try {
         // Set the managedBy attribute
         await ldapClient.setManagedBy(connectionId, computer.distinguishedName, managerDistinguishedName);
-        
+
         // Update the computer in the database
         const updatedComputer = await storage.updateAdComputer(computerId, { managedBy: managerDistinguishedName });
-        
+
         // Log the action
         await storage.createAuditLogEntry({
           action: managerDistinguishedName ? "update_manager" : "remove_manager",
@@ -1971,7 +1978,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           userId: req.user?.id,
           connectionId
         });
-        
+
         return res.status(200).json(updatedComputer);
       } catch (error) {
         console.error("Error updating managedBy attribute:", error);
@@ -2010,7 +2017,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
    *       404:
    *         $ref: '#/components/responses/NotFoundError'
    */
-   
+
   /**
    * @swagger
    * /api/connections/{connectionId}/ad-ous:
@@ -2057,7 +2064,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const connectionId = parseInt(req.params.connectionId);
       const { name, parentDN, description } = req.body;
-      
+
       // Basic validation
       if (!name || !parentDN) {
         return res.status(400).json({ message: "OU name and parent DN are required" });
@@ -2068,31 +2075,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!connection) {
         return res.status(404).json({ message: "LDAP connection not found" });
       }
-      
+
       // Create the DN for the new OU
       const ouDN = `OU=${name},${parentDN}`;
-      
+
       // Attributes for the new organizational unit
       const ouAttributes = {
         objectClass: ['top', 'organizationalUnit'],
         ou: name,
         description: description || ''
       };
-      
+
       // Create the OU in AD
       await ldapClient.createEntry(connectionId, ouDN, ouAttributes);
-      
+
       // Search for the newly created OU to get its attributes
       const searchResults = await ldapClient.searchOUs(connectionId, `(&(objectClass=organizationalUnit)(ou=${name}))`, [
         'objectGUID', 'distinguishedName', 'canonicalName', 'ou', 'description', 'name'
       ]);
-      
+
       if (!searchResults || searchResults.length === 0) {
         return res.status(500).json({ message: "OU created but could not retrieve details" });
       }
-      
+
       const adOU = searchResults[0];
-      
+
       // Store in database
       const storedOU = await storage.createAdOrgUnit({
         connectionId,
@@ -2103,7 +2110,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         description: adOU.description,
         adProperties: adOU // Store all attributes
       });
-      
+
       // Add audit log
       await storage.createAuditLogEntry({
         userId: req.user.id,
@@ -2117,7 +2124,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           description: description
         }
       });
-      
+
       res.status(201).json(storedOU);
     } catch (err) {
       console.error("Error creating AD organizational unit:", err);
@@ -2130,23 +2137,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.delete("/api/connections/:connectionId/ad-computers/:id", authenticateApiToken, async (req, res, next) => {
     try {
       const computer = await storage.getAdComputer(parseInt(req.params.id));
-      
+
       if (!computer || computer.connectionId !== parseInt(req.params.connectionId)) {
         return res.status(404).json({ message: "AD computer not found" });
       }
-      
+
       const deleted = await storage.deleteAdComputer(parseInt(req.params.id));
-      
+
       if (!deleted) {
         return res.status(404).json({ message: "AD computer not found" });
       }
-      
+
       res.json({ success: true });
     } catch (error) {
       next(error);
     }
   });
-  
+
   // Computers endpoints
   /**
    * @swagger
@@ -2193,21 +2200,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!req.isAuthenticated() && !req.headers.authorization) {
         return res.status(401).json({ message: "Authentication required" });
       }
-      
+
       const connectionId = parseInt(req.params.connectionId);
       const connection = await storage.getLdapConnection(connectionId);
-      
+
       if (!connection) {
         return res.status(404).json({ message: "LDAP connection not found" });
       }
-      
+
       const query = parseQueryParams(req);
       const computers = await storage.listAdComputers(connectionId, query);
-      
+
       // Count total records for pagination metadata
       const countQuery = db.select({ count: sql`count(*)` }).from(adComputers)
         .where(eq(adComputers.connectionId, connectionId));
-      
+
       // Apply filters if present
       if (query && query.filter) {
         const conditions = parseFilter(query.filter);
@@ -2216,16 +2223,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
           countQuery.where(whereClause);
         }
       }
-      
+
       const [countResult] = await countQuery;
       const totalRecords = Number(countResult?.count || 0);
-      
+
       // Add objectType to each result
       const computersWithObjectType = computers.map(computer => ({
         ...computer,
         objectType: 'computer'
       }));
-      
+
       // Generate pagination metadata
       const { limit, offset } = parsePagination(query?.top, query?.skip);
       const paginationMetadata = generatePaginationMetadata(
@@ -2234,7 +2241,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         offset,
         `${req.protocol}://${req.get('host')}${req.originalUrl}`
       );
-      
+
       // Return data with pagination metadata
       res.json({
         data: computersWithObjectType,
@@ -2244,7 +2251,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       next(error);
     }
   });
-  
+
   /**
    * @swagger
    * /api/connections/{connectionId}/ad-computers:
@@ -2308,16 +2315,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/connections/:connectionId/ad-computers", authenticateApiToken, requirePermission(PERMISSIONS.CREATE_AD_COMPUTERS), async (req: Request, res, next) => {
     try {
       const connectionId = parseInt(req.params.connectionId);
-      const { 
-        name, 
-        parentDN, 
-        description, 
-        dnsHostName, 
-        operatingSystem, 
-        operatingSystemVersion, 
-        enabled = true 
+      const {
+        name,
+        parentDN,
+        description,
+        dnsHostName,
+        operatingSystem,
+        operatingSystemVersion,
+        enabled = true
       } = req.body;
-      
+
       // Basic validation
       if (!name || !parentDN) {
         return res.status(400).json({ message: "Computer name and parent DN are required" });
@@ -2328,21 +2335,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!connection) {
         return res.status(404).json({ message: "LDAP connection not found" });
       }
-      
+
       // Create the DN for the new computer
       const computerDN = `CN=${name},${parentDN}`;
-      
+
       // The sAMAccountName needs to end with $
       const sAMAccountName = name.endsWith('$') ? name : `${name}$`;
-      
+
       // Create the userAccountControl value
       // 4096 = WORKSTATION_TRUST_ACCOUNT
       // 2 = ACCOUNTDISABLE (if not enabled)
       const userAccountControl = enabled ? 4096 : 4098;
-      
+
       // Set the dnsHostName if not provided
       const actualDnsHostName = dnsHostName || `${name}.${connection.domain}`;
-      
+
       // Attributes for the new computer
       const computerAttributes: {
         objectClass: string[];
@@ -2361,31 +2368,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
         description: description || '',
         dNSHostName: actualDnsHostName
       };
-      
+
       // Add operating system information if provided
       if (operatingSystem) {
         computerAttributes.operatingSystem = operatingSystem;
       }
-      
+
       if (operatingSystemVersion) {
         computerAttributes.operatingSystemVersion = operatingSystemVersion;
       }
-      
+
       // Create the computer in AD
       await ldapClient.createEntry(connectionId, computerDN, computerAttributes);
-      
+
       // Search for the newly created computer to get its attributes
       const searchResults = await ldapClient.searchComputers(connectionId, `(&(objectClass=computer)(cn=${name}))`, [
         'objectGUID', 'distinguishedName', 'canonicalName', 'cn', 'sAMAccountName', 'description',
         'dNSHostName', 'operatingSystem', 'operatingSystemVersion', 'userAccountControl'
       ]);
-      
+
       if (!searchResults || searchResults.length === 0) {
         return res.status(500).json({ message: "Computer created but could not retrieve details" });
       }
-      
+
       const adComputer = searchResults[0];
-      
+
       // Store in database
       const storedComputer = await storage.createAdComputer({
         connectionId,
@@ -2401,7 +2408,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         enabled: (parseInt(adComputer.userAccountControl) & 2) === 0, // Check if ACCOUNTDISABLE flag is not set
         adProperties: adComputer // Store all attributes
       });
-      
+
       // Add audit log
       await storage.createAuditLogEntry({
         userId: req.user.id,
@@ -2414,7 +2421,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           name: name
         }
       });
-      
+
       res.status(201).json(storedComputer);
     } catch (err) {
       console.error("Error creating AD computer:", err);
@@ -2481,11 +2488,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.put("/api/connections/:connectionId/ad-domains/:id", authenticateApiToken, async (req, res, next) => {
     try {
       const domain = await storage.getAdDomain(parseInt(req.params.id));
-      
+
       if (!domain || domain.connectionId !== parseInt(req.params.connectionId)) {
         return res.status(404).json({ message: "AD domain not found" });
       }
-      
+
       const updatedDomain = await storage.updateAdDomain(parseInt(req.params.id), req.body);
       res.json(updatedDomain);
     } catch (error) {
@@ -2524,23 +2531,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.delete("/api/connections/:connectionId/ad-domains/:id", authenticateApiToken, async (req, res, next) => {
     try {
       const domain = await storage.getAdDomain(parseInt(req.params.id));
-      
+
       if (!domain || domain.connectionId !== parseInt(req.params.connectionId)) {
         return res.status(404).json({ message: "AD domain not found" });
       }
-      
+
       const deleted = await storage.deleteAdDomain(parseInt(req.params.id));
-      
+
       if (!deleted) {
         return res.status(404).json({ message: "AD domain not found" });
       }
-      
+
       res.json({ success: true });
     } catch (error) {
       next(error);
     }
   });
-  
+
   // Domains endpoints
   /**
    * @swagger
@@ -2582,7 +2589,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
    *       404:
    *         $ref: '#/components/responses/NotFoundError'
    */
-   
+
   /**
    * @swagger
    * /api/connections/{connectionId}/ad-domains:
@@ -2638,21 +2645,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!req.isAuthenticated() && !req.headers.authorization) {
         return res.status(401).json({ message: "Authentication required" });
       }
-      
+
       const connectionId = parseInt(req.params.connectionId);
       const connection = await storage.getLdapConnection(connectionId);
-      
+
       if (!connection) {
         return res.status(404).json({ message: "LDAP connection not found" });
       }
-      
+
       const query = parseQueryParams(req);
       const domains = await storage.listAdDomains(connectionId, query);
-      
+
       // Count total records for pagination metadata
       const countQuery = db.select({ count: sql`count(*)` }).from(adDomains)
         .where(eq(adDomains.connectionId, connectionId));
-      
+
       // Apply filters if present
       if (query && query.filter) {
         const conditions = parseFilter(query.filter);
@@ -2661,16 +2668,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
           countQuery.where(whereClause);
         }
       }
-      
+
       const [countResult] = await countQuery;
       const totalRecords = Number(countResult?.count || 0);
-      
+
       // Add objectType to each result
       const domainsWithObjectType = domains.map(domain => ({
         ...domain,
         objectType: 'domain'
       }));
-      
+
       // Generate pagination metadata
       const { limit, offset } = parsePagination(query?.top, query?.skip);
       const paginationMetadata = generatePaginationMetadata(
@@ -2679,7 +2686,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         offset,
         `${req.protocol}://${req.get('host')}${req.originalUrl}`
       );
-      
+
       // Return data with pagination metadata
       res.json({
         data: domainsWithObjectType,
@@ -2689,7 +2696,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       next(error);
     }
   });
-  
+
   /**
    * @swagger
    * /api/connections/{connectionId}/ad-domains/{objectGUID}:
@@ -2739,7 +2746,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
    *       500:
    *         description: Server error
    */
-  
+
   /**
    * @swagger
    * /api/connections/{connectionId}/ad-domains/{objectGUID}:
@@ -2774,7 +2781,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
    *       500:
    *         description: Server error
    */
-  
+
   // Domain PATCH endpoint
   app.patch("/api/connections/:connectionId/ad-domains/:objectGUID", authenticateApiToken, async (req, res, next) => {
     try {
@@ -2783,51 +2790,51 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!hasPermission) {
         return res.status(403).json({ message: "Not authorized to update domains" });
       }
-      
+
       const connectionId = parseInt(req.params.connectionId);
       const objectGUID = req.params.objectGUID;
-      
+
       // Verify the connection exists
       const connection = await storage.getLdapConnection(connectionId);
       if (!connection) {
         return res.status(404).json({ message: "LDAP connection not found" });
       }
-      
+
       // Get domain to update
       const domain = await storage.getAdDomain(connectionId, objectGUID);
       if (!domain) {
         return res.status(404).json({ message: "Domain not found" });
       }
-      
+
       try {
         // Connect to LDAP server
         const ldapClient = await connectToLdap(connection);
-        
+
         // Create modification object based on the request body
         const changes = {};
-        
+
         if (req.body.description !== undefined) {
           changes.description = req.body.description;
         }
-        
+
         if (req.body.netBIOSName !== undefined) {
           changes.netBIOSName = req.body.netBIOSName;
         }
-        
+
         // Skip modification if no changes
         if (Object.keys(changes).length === 0) {
           return res.status(400).json({ message: "No valid attributes provided for update" });
         }
-        
+
         // Modify domain in LDAP
         await ldapClient.modify(domain.distinguishedName, changes);
-        
+
         // Update domain in database
         const updatedDomain = await storage.updateAdDomain(connectionId, objectGUID, {
           ...req.body,
           adProperties: { ...domain.adProperties, ...changes }
         });
-        
+
         // Add audit log
         await storage.createAuditLogEntry({
           action: "update_domain",
@@ -2840,7 +2847,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             changes: changes
           }
         });
-        
+
         res.json({
           ...updatedDomain,
           objectType: 'domain'
@@ -2862,44 +2869,44 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!hasPermission) {
         return res.status(403).json({ message: "Not authorized to delete domains" });
       }
-      
+
       const connectionId = parseInt(req.params.connectionId);
       const objectGUID = req.params.objectGUID;
-      
+
       // Verify the connection exists
       const connection = await storage.getLdapConnection(connectionId);
       if (!connection) {
         return res.status(404).json({ message: "LDAP connection not found" });
       }
-      
+
       // Get domain to delete
       const domain = await storage.getAdDomain(connectionId, objectGUID);
       if (!domain) {
         return res.status(404).json({ message: "Domain not found" });
       }
-      
+
       try {
         // Connect to LDAP server
         const ldapClient = await connectToLdap(connection);
-        
+
         // First check if there are any children under this domain
         const searchResults = await ldapClient.search(domain.distinguishedName, {
           scope: 'one',
           filter: '(objectClass=*)'
         });
-        
+
         if (searchResults.searchEntries && searchResults.searchEntries.length > 0) {
-          return res.status(409).json({ 
-            message: "Cannot delete domain with child objects. Remove all child objects first." 
+          return res.status(409).json({
+            message: "Cannot delete domain with child objects. Remove all child objects first."
           });
         }
-        
+
         // Delete domain from LDAP
         await ldapClient.del(domain.distinguishedName);
-        
+
         // Delete domain from database
         await storage.deleteAdDomain(connectionId, objectGUID);
-        
+
         // Add audit log
         await storage.createAuditLogEntry({
           action: "delete_domain",
@@ -2911,7 +2918,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             distinguishedName: domain.distinguishedName
           }
         });
-        
+
         res.json({ success: true });
       } catch (err) {
         console.error("Error deleting domain:", err);
@@ -2929,52 +2936,52 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!hasPermission) {
         return res.status(403).json({ message: "Not authorized to create domains" });
       }
-      
+
       const connectionId = parseInt(req.params.connectionId);
       const connection = await storage.getLdapConnection(connectionId);
-      
+
       if (!connection) {
         return res.status(404).json({ message: "LDAP connection not found" });
       }
-      
+
       // Validate required fields
       if (!req.body.name || !req.body.distinguishedName) {
         return res.status(400).json({ message: "Name and distinguishedName are required" });
       }
-      
+
       try {
         // Connect to LDAP server
         const ldapClient = await connectToLdap(connection);
-        
+
         // Create domain attributes
         const domainAttributes = {
           objectClass: ['domain'],
           cn: req.body.name,
           description: req.body.description || `Domain ${req.body.name}`
         };
-        
+
         if (req.body.netBIOSName) {
           domainAttributes.netBIOSName = req.body.netBIOSName;
         }
-        
+
         // Add domain to LDAP
         await ldapClient.add(req.body.distinguishedName, domainAttributes);
-        
+
         // Get the created domain's GUID and details
         const searchResults = await ldapClient.search(req.body.distinguishedName, {
           scope: 'base',
           attributes: ['objectGUID', 'distinguishedName', 'cn', 'description', 'name', 'netBIOSName']
         });
-        
+
         if (!searchResults.searchEntries || searchResults.searchEntries.length === 0) {
           return res.status(500).json({ message: "Domain was created but could not be retrieved" });
         }
-        
+
         const domainEntry = searchResults.searchEntries[0];
-        
+
         // Format objectGUID
         const objectGUID = Buffer.from(domainEntry.objectGUID).toString('hex');
-        
+
         // Create domain record in database
         const domainData = {
           name: req.body.name,
@@ -2986,9 +2993,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
           forestName: req.body.forestName,
           adProperties: domainEntry
         };
-        
+
         const createdDomain = await storage.createAdDomain(domainData);
-        
+
         // Add audit log
         await storage.createAuditLogEntry({
           action: "create_domain",
@@ -3000,7 +3007,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             distinguishedName: req.body.distinguishedName
           }
         });
-        
+
         res.status(201).json({
           ...createdDomain,
           objectType: 'domain'
@@ -3011,7 +3018,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         if (err.message && err.message.includes('entryAlreadyExists')) {
           return res.status(409).json({ message: "Domain already exists" });
         }
-        
+
         return res.status(500).json({ message: `Error creating domain: ${err.message}` });
       }
     } catch (error) {
@@ -3057,24 +3064,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const connectionId = parseInt(req.params.connectionId);
       const objectClass = req.query.objectClass as string;
-      
+
       if (!objectClass) {
         return res.status(400).json({ message: "objectClass parameter is required" });
       }
-      
+
       // Verify the connection exists
       const connection = await storage.getLdapConnection(connectionId);
       if (!connection) {
         return res.status(404).json({ message: "LDAP connection not found" });
       }
-      
+
       const attributes = await storage.getLdapAttributes(connectionId, objectClass);
       res.json(attributes);
     } catch (error) {
       next(error);
     }
   });
-  
+
   /**
    * @swagger
    * /api/connections/{connectionId}/ldap-attributes:
@@ -3129,24 +3136,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/connections/:connectionId/ldap-attributes", requireAdmin, async (req, res, next) => {
     try {
       const connectionId = parseInt(req.params.connectionId);
-      
+
       // Verify the connection exists
       const connection = await storage.getLdapConnection(connectionId);
       if (!connection) {
         return res.status(404).json({ message: "LDAP connection not found" });
       }
-      
+
       const attribute = await storage.createLdapAttribute({
         ...req.body,
         connectionId
       });
-      
+
       res.status(201).json(attribute);
     } catch (error) {
       next(error);
     }
   });
-  
+
   /**
    * @swagger
    * /api/ldap-attributes/{id}:
@@ -3196,17 +3203,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const id = parseInt(req.params.id);
       const updatedAttribute = await storage.updateLdapAttribute(id, req.body);
-      
+
       if (!updatedAttribute) {
         return res.status(404).json({ message: "LDAP attribute not found" });
       }
-      
+
       res.json(updatedAttribute);
     } catch (error) {
       next(error);
     }
   });
-  
+
   /**
    * @swagger
    * /api/ldap-attributes/{id}:
@@ -3233,17 +3240,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const id = parseInt(req.params.id);
       const deleted = await storage.deleteLdapAttribute(id);
-      
+
       if (!deleted) {
         return res.status(404).json({ message: "LDAP attribute not found" });
       }
-      
+
       res.json({ success: true });
     } catch (error) {
       next(error);
     }
   });
-  
+
   /**
    * @swagger
    * /api/connections/{connectionId}/ldap-filters:
@@ -3321,17 +3328,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const connectionId = parseInt(req.params.connectionId);
       const { ldapFilter, objectClass } = req.body;
-      
+
       if (!ldapFilter || !objectClass) {
         return res.status(400).json({ message: "ldapFilter and objectClass are required" });
       }
-      
+
       // Verify the connection exists
       const connection = await storage.getLdapConnection(connectionId);
       if (!connection) {
         return res.status(404).json({ message: "LDAP connection not found" });
       }
-      
+
       // Test the filter
       const results = await storage.testLdapFilter(connectionId, ldapFilter, objectClass);
       res.json(results);
@@ -3343,20 +3350,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/connections/:connectionId/ldap-filters", requireAuth, async (req: Request, res: Response, next: NextFunction) => {
     try {
       const connectionId = parseInt(req.params.connectionId);
-      
+
       // Verify the connection exists
       const connection = await storage.getLdapConnection(connectionId);
       if (!connection) {
         return res.status(404).json({ message: "LDAP connection not found" });
       }
-      
+
       const filters = await storage.listLdapFilters(connectionId);
       res.json(filters);
     } catch (error) {
       next(error);
     }
   });
-  
+
   /**
    * @swagger
    * /api/connections/{connectionId}/ldap-filters:
@@ -3409,26 +3416,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/connections/:connectionId/ldap-filters", requireAuth, async (req: Request, res: Response, next: NextFunction) => {
     try {
       const connectionId = parseInt(req.params.connectionId);
-      
+
       // Verify the connection exists
       const connection = await storage.getLdapConnection(connectionId);
       if (!connection) {
         return res.status(404).json({ message: "LDAP connection not found" });
       }
-      
+
       const filter = await storage.createLdapFilter({
         ...req.body,
         connectionId,
         createdBy: req.user.id,
         modifiedBy: req.user.id
       });
-      
+
       res.status(201).json(filter);
     } catch (error) {
       next(error);
     }
   });
-  
+
   /**
    * @swagger
    * /api/ldap-filters/{id}:
@@ -3459,17 +3466,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const id = parseInt(req.params.id);
       const filter = await storage.getLdapFilter(id);
-      
+
       if (!filter) {
         return res.status(404).json({ message: "LDAP filter not found" });
       }
-      
+
       res.json(filter);
     } catch (error) {
       next(error);
     }
   });
-  
+
   /**
    * @swagger
    * /api/ldap-filters/{id}:
@@ -3518,25 +3525,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.put("/api/ldap-filters/:id", requireAuth, async (req: Request, res: Response, next: NextFunction) => {
     try {
       const id = parseInt(req.params.id);
-      
+
       // Check if the filter exists
       const existingFilter = await storage.getLdapFilter(id);
       if (!existingFilter) {
         return res.status(404).json({ message: "LDAP filter not found" });
       }
-      
+
       // Update with the current user as modifier
       const updatedFilter = await storage.updateLdapFilter(id, {
         ...req.body,
         modifiedBy: req.user.id
       });
-      
+
       res.json(updatedFilter);
     } catch (error) {
       next(error);
     }
   });
-  
+
   /**
    * @swagger
    * /api/ldap-filters/{id}:
@@ -3562,13 +3569,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.delete("/api/ldap-filters/:id", requireAuth, async (req: Request, res: Response, next: NextFunction) => {
     try {
       const id = parseInt(req.params.id);
-      
+
       // Check if the filter exists and if the user is allowed to delete it
       const filter = await storage.getLdapFilter(id);
       if (!filter) {
         return res.status(404).json({ message: "LDAP filter not found" });
       }
-      
+
       // Only allow the creator or admins to delete
       if (filter.createdBy !== req.user.id) {
         const userRole = await storage.getRole(req.user.roleId!);
@@ -3576,14 +3583,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
           return res.status(403).json({ message: "You are not authorized to delete this filter" });
         }
       }
-      
+
       const deleted = await storage.deleteLdapFilter(id);
       res.json({ success: deleted });
     } catch (error) {
       next(error);
     }
   });
-  
+
   /**
    * @swagger
    * /api/ldap-filters/{filterId}/revisions:
@@ -3615,20 +3622,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/ldap-filters/:filterId/revisions", requireAuth, async (req: Request, res: Response, next: NextFunction) => {
     try {
       const filterId = parseInt(req.params.filterId);
-      
+
       // Check if the filter exists
       const filter = await storage.getLdapFilter(filterId);
       if (!filter) {
         return res.status(404).json({ message: "LDAP filter not found" });
       }
-      
+
       const revisions = await storage.getLdapFilterRevisions(filterId);
       res.json(revisions);
     } catch (error) {
       next(error);
     }
   });
-  
+
   /**
    * @swagger
    * /api/ldap-filters/{filterId}/revert/{revisionId}:
@@ -3664,13 +3671,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const filterId = parseInt(req.params.filterId);
       const revisionId = parseInt(req.params.revisionId);
-      
+
       // Check if the filter exists
       const filter = await storage.getLdapFilter(filterId);
       if (!filter) {
         return res.status(404).json({ message: "LDAP filter not found" });
       }
-      
+
       // Check if the user has permission to modify this filter
       if (filter.createdBy !== req.user.id) {
         const userRole = await storage.getRole(req.user.roleId!);
@@ -3678,23 +3685,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
           return res.status(403).json({ message: "You are not authorized to modify this filter" });
         }
       }
-      
+
       // First update the modifiedBy to the current user
       await storage.updateLdapFilter(filterId, { modifiedBy: req.user.id });
-      
+
       // Then perform the revert
       const revertedFilter = await storage.revertLdapFilterToRevision(filterId, revisionId);
-      
+
       if (!revertedFilter) {
         return res.status(404).json({ message: "Failed to revert filter or revision not found" });
       }
-      
+
       res.json(revertedFilter);
     } catch (error) {
       next(error);
     }
   });
-  
+
   /**
    * @swagger
    * /api/connections/{connectionId}/test-ldap-filter:
@@ -3742,17 +3749,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const connectionId = parseInt(req.params.connectionId);
       const { ldapFilter, objectClass } = req.body;
-      
+
       if (!ldapFilter || !objectClass) {
         return res.status(400).json({ message: "ldapFilter and objectClass are required" });
       }
-      
+
       // Verify the connection exists
       const connection = await storage.getLdapConnection(connectionId);
       if (!connection) {
         return res.status(404).json({ message: "LDAP connection not found" });
       }
-      
+
       const results = await storage.testLdapFilter(connectionId, ldapFilter, objectClass);
       res.json(results);
     } catch (error) {
@@ -3812,32 +3819,51 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const connectionId = parseInt(req.params.connectionId);
       const connection = await storage.getLdapConnection(connectionId);
-      
+
       if (!connection) {
         return res.status(404).json({ message: "LDAP connection not found" });
       }
-      
+
       try {
         const data = moveComputerSchema.parse(req.body);
-        
-        // This would call a method in the LDAP client to move the computer
-        // For now we'll return a mock success response
-        // In a real implementation, this would interact with the Active Directory
-        
+
+        // Connect to LDAP if not already connected
+        if (!ldapClient.isConnectionActive(connectionId)) {
+          await ldapClient.connect(connection);
+        }
+
+        // Find the computer by GUID to get the distinguishedName
+        const computer = await storage.getAdComputerByObjectGUID(connectionId, data.computerObjectGUID);
+        if (!computer) {
+          return res.status(404).json({ message: "Computer not found" });
+        }
+
+        // Move the computer to the new OU
+        const success = await ldapClient.moveObject(
+          connectionId,
+          computer.distinguishedName,
+          data.targetOUDistinguishedName
+        );
+
+        if (!success) {
+          return res.status(500).json({ message: "Failed to move computer" });
+        }
+
         // Record the action in the audit log
         const auditEntry = {
           action: "MOVE_COMPUTER",
           targetId: data.computerObjectGUID,
           details: {
-            targetOU: data.targetOUDistinguishedName
+            targetOU: data.targetOUDistinguishedName,
+            sourceDN: computer.distinguishedName
           },
-          userId: req.user?.id || null,
+          userId: req.user?.id ?? null,
           connectionId: connectionId
         };
-        
+
         // Save the audit entry to storage
         await storage.createAuditLogEntry(auditEntry);
-        
+
         res.json({
           success: true,
           message: `Computer with GUID ${data.computerObjectGUID} moved to ${data.targetOUDistinguishedName}`
@@ -3905,32 +3931,51 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const connectionId = parseInt(req.params.connectionId);
       const connection = await storage.getLdapConnection(connectionId);
-      
+
       if (!connection) {
         return res.status(404).json({ message: "LDAP connection not found" });
       }
-      
+
       try {
         const data = moveUserSchema.parse(req.body);
-        
-        // This would call a method in the LDAP client to move the user
-        // For now we'll return a mock success response
-        // In a real implementation, this would interact with the Active Directory
-        
+
+        // Connect to LDAP if not already connected
+        if (!ldapClient.isConnectionActive(connectionId)) {
+          await ldapClient.connect(connection);
+        }
+
+        // Find the user by GUID to get the distinguishedName
+        const users = await storage.getAdUserByObjectGUID(connectionId, data.userObjectGUID);
+        if (!users) {
+          return res.status(404).json({ message: "User not found" });
+        }
+
+        // Move the user to the new OU
+        const success = await ldapClient.moveObject(
+          connectionId,
+          users.distinguishedName,
+          data.targetOUDistinguishedName
+        );
+
+        if (!success) {
+          return res.status(500).json({ message: "Failed to move user" });
+        }
+
         // Record the action in the audit log
         const auditEntry = {
           action: "MOVE_USER",
           targetId: data.userObjectGUID,
           details: {
-            targetOU: data.targetOUDistinguishedName
+            targetOU: data.targetOUDistinguishedName,
+            sourceDN: users.distinguishedName
           },
           userId: req.user?.id || null,
           connectionId: connectionId
         };
-        
+
         // Save the audit entry to storage
         await storage.createAuditLogEntry(auditEntry);
-        
+
         res.json({
           success: true,
           message: `User with GUID ${data.userObjectGUID} moved to ${data.targetOUDistinguishedName}`
@@ -4002,33 +4047,71 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const connectionId = parseInt(req.params.connectionId);
       const connection = await storage.getLdapConnection(connectionId);
-      
+
       if (!connection) {
         return res.status(404).json({ message: "LDAP connection not found" });
       }
-      
+
       try {
         const data = addToGroupSchema.parse(req.body);
-        
-        // This would call a method in the LDAP client to add the object to the group
-        // For now we'll return a mock success response
-        // In a real implementation, this would interact with the Active Directory
-        
+
+        // Connect to LDAP if not already connected
+        if (!ldapClient.isConnectionActive(connectionId)) {
+          await ldapClient.connect(connection);
+        }
+
+        // Find the group by GUID to get the distinguishedName
+        const group = await storage.getAdGroupByObjectGUID(connectionId, data.groupObjectGUID);
+        if (!group) {
+          return res.status(404).json({ message: "Group not found" });
+        }
+
+        // Find the object by GUID to get the distinguishedName
+        let objectDN = '';
+        if (data.objectType === 'user') {
+          const user = await storage.getAdUserByObjectGUID(connectionId, data.objectGUID);
+          if (!user) {
+            return res.status(404).json({ message: "User not found" });
+          }
+          objectDN = user.distinguishedName;
+        } else if (data.objectType === 'computer') {
+          const computer = await storage.getAdComputerByObjectGUID(connectionId, data.objectGUID);
+          if (!computer) {
+            return res.status(404).json({ message: "Computer not found" });
+          }
+          objectDN = computer.distinguishedName;
+        } else {
+          return res.status(400).json({ message: "Invalid object type" });
+        }
+
+        // Add the object to the group
+        const success = await ldapClient.addToGroup(
+          connectionId,
+          group.distinguishedName,
+          objectDN
+        );
+
+        if (!success) {
+          return res.status(500).json({ message: `Failed to add ${data.objectType} to group` });
+        }
+
         // Record the action in the audit log
         const auditEntry = {
           action: "ADD_TO_GROUP",
           targetId: data.objectGUID,
           details: {
             groupGUID: data.groupObjectGUID,
-            objectType: data.objectType
+            objectType: data.objectType,
+            objectDN: objectDN,
+            groupDN: group.distinguishedName
           },
-          userId: req.user?.id || null,
+          userId: req.user?.id ?? null,
           connectionId: connectionId
         };
-        
+
         // Save the audit entry to storage
         await storage.createAuditLogEntry(auditEntry);
-        
+
         res.json({
           success: true,
           message: `${data.objectType} with GUID ${data.objectGUID} added to group with GUID ${data.groupObjectGUID}`
@@ -4136,21 +4219,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!req.isAuthenticated() && !req.headers.authorization) {
         return res.status(401).json({ message: "Authentication required" });
       }
-      
+
       const connectionId = parseInt(req.params.connectionId);
       const connection = await storage.getLdapConnection(connectionId);
-      
+
       if (!connection) {
         return res.status(404).json({ message: "LDAP connection not found" });
       }
-      
+
       const query = parseQueryParams(req);
       const sites = await storage.listAdSites(connectionId, query);
-      
+
       // Count total records for pagination metadata
       const countQuery = db.select({ count: sql`count(*)` }).from(adSites)
         .where(eq(adSites.connectionId, connectionId));
-      
+
       // Apply filters if present
       if (query && query.filter) {
         const conditions = parseFilter(query.filter);
@@ -4159,16 +4242,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
           countQuery.where(whereClause);
         }
       }
-      
+
       const [countResult] = await countQuery;
       const totalRecords = Number(countResult?.count || 0);
-      
+
       // Add objectType to each result
       const sitesWithObjectType = sites.map(site => ({
         ...site,
         objectType: 'site'
       }));
-      
+
       // Generate pagination metadata
       const { limit, offset } = parsePagination(query?.top, query?.skip);
       const paginationMetadata = generatePaginationMetadata(
@@ -4177,7 +4260,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         offset,
         `${req.protocol}://${req.get('host')}${req.originalUrl}`
       );
-      
+
       res.json({
         data: sitesWithObjectType,
         metadata: paginationMetadata
@@ -4224,22 +4307,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!req.isAuthenticated() && !req.headers.authorization) {
         return res.status(401).json({ message: "Authentication required" });
       }
-      
+
       const connectionId = parseInt(req.params.connectionId);
       const objectGUID = req.params.objectGUID;
-      
+
       const site = await storage.getAdSiteByObjectGUID(connectionId, objectGUID);
-      
+
       if (!site) {
         return res.status(404).json({ message: "AD site not found" });
       }
-      
+
       // Add objectType to the result
       const siteWithObjectType = {
         ...site,
         objectType: 'site'
       };
-      
+
       res.json(siteWithObjectType);
     } catch (error) {
       next(error);
@@ -4291,32 +4374,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!req.isAuthenticated() && !req.headers.authorization) {
         return res.status(401).json({ message: "Authentication required" });
       }
-      
+
       const connectionId = parseInt(req.params.connectionId);
       const connection = await storage.getLdapConnection(connectionId);
-      
+
       if (!connection) {
         return res.status(404).json({ message: "LDAP connection not found" });
       }
-      
+
       // First create the site in AD
       const siteName = req.body.name;
       const description = req.body.description || '';
       const location = req.body.location || '';
-      
+
       // Create site in AD using LDAP
       const client = ldapClient.getClient(connectionId);
-      
+
       if (!client) {
         const connected = await ldapClient.connect(connection);
         if (!connected) {
           return res.status(500).json({ message: "Failed to connect to LDAP server" });
         }
       }
-      
+
       // Create a CN for the new site
       const siteDN = `CN=${siteName},CN=Sites,CN=Configuration,${ldapClient.getDomainDN(connection)}`;
-      
+
       // Attributes for the new site
       const siteAttributes = {
         objectClass: ['site'],
@@ -4324,23 +4407,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
         description: description,
         location: location
       };
-      
+
       try {
         const success = await ldapClient.createEntry(connectionId, siteDN, siteAttributes);
-        
+
         if (!success) {
           return res.status(500).json({ message: "Failed to create AD site" });
         }
-        
+
         // Search for the site to get all its attributes
         const siteResults = await ldapClient.searchSites(connectionId, `(cn=${siteName})`);
-        
+
         if (!siteResults || siteResults.length === 0) {
           return res.status(500).json({ message: "Site created but could not retrieve details" });
         }
-        
+
         const siteData = siteResults[0];
-        
+
         // Create entry in our database
         const newSite = await storage.createAdSite({
           connectionId,
@@ -4354,7 +4437,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           managedBy: null,
           adProperties: siteData
         });
-        
+
         // Create audit log entry
         await storage.createAuditLogEntry({
           action: 'create',
@@ -4363,7 +4446,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           userId: req.user?.id,
           connectionId
         });
-        
+
         res.status(201).json(newSite);
       } catch (err) {
         console.error("Error creating AD site:", err);
@@ -4424,36 +4507,36 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!req.isAuthenticated() && !req.headers.authorization) {
         return res.status(401).json({ message: "Authentication required" });
       }
-      
+
       const connectionId = parseInt(req.params.connectionId);
       const objectGUID = req.params.objectGUID;
-      
+
       const site = await storage.getAdSiteByObjectGUID(connectionId, objectGUID);
-      
+
       if (!site) {
         return res.status(404).json({ message: "AD site not found" });
       }
-      
+
       const connection = await storage.getLdapConnection(connectionId);
-      
+
       if (!connection) {
         return res.status(404).json({ message: "LDAP connection not found" });
       }
-      
+
       // Connect to LDAP if needed
       const client = ldapClient.getClient(connectionId);
-      
+
       if (!client) {
         const connected = await ldapClient.connect(connection);
         if (!connected) {
           return res.status(500).json({ message: "Failed to connect to LDAP server" });
         }
       }
-      
+
       // Prepare changes
       const changes = [];
       const updateData: Partial<AdSite> = {};
-      
+
       if (req.body.description !== undefined) {
         changes.push({
           operation: 'replace',
@@ -4463,7 +4546,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
         updateData.description = req.body.description;
       }
-      
+
       if (req.body.location !== undefined) {
         changes.push({
           operation: 'replace',
@@ -4473,24 +4556,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
         updateData.location = req.body.location;
       }
-      
+
       // Handle managedBy separately
       if (req.body.managedBy !== undefined) {
         // Set the managedBy attribute
         const success = await ldapClient.setManagedBy(connectionId, site.dn, req.body.managedBy);
-        
+
         if (!success) {
           return res.status(500).json({ message: "Failed to update managedBy attribute" });
         }
-        
+
         updateData.managedBy = req.body.managedBy;
       }
-      
+
       // Apply changes to LDAP if there are any attribute changes
       if (changes.length > 0) {
         try {
           const success = await ldapClient.updateEntry(connectionId, site.dn, changes);
-          
+
           if (!success) {
             return res.status(500).json({ message: "Failed to update AD site" });
           }
@@ -4499,10 +4582,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
           return res.status(500).json({ message: `Error updating AD site: ${err.message}` });
         }
       }
-      
+
       // Update our database record
       const updatedSite = await storage.updateAdSiteByObjectGUID(connectionId, objectGUID, updateData);
-      
+
       // Create audit log entry
       await storage.createAuditLogEntry({
         action: 'update',
@@ -4511,7 +4594,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         userId: req.user?.id,
         connectionId
       });
-      
+
       res.json(updatedSite);
     } catch (error) {
       next(error);
@@ -4558,43 +4641,43 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!req.isAuthenticated() && !req.headers.authorization) {
         return res.status(401).json({ message: "Authentication required" });
       }
-      
+
       const connectionId = parseInt(req.params.connectionId);
       const objectGUID = req.params.objectGUID;
-      
+
       const site = await storage.getAdSiteByObjectGUID(connectionId, objectGUID);
-      
+
       if (!site) {
         return res.status(404).json({ message: "AD site not found" });
       }
-      
+
       const connection = await storage.getLdapConnection(connectionId);
-      
+
       if (!connection) {
         return res.status(404).json({ message: "LDAP connection not found" });
       }
-      
+
       // Connect to LDAP if needed
       const client = ldapClient.getClient(connectionId);
-      
+
       if (!client) {
         const connected = await ldapClient.connect(connection);
         if (!connected) {
           return res.status(500).json({ message: "Failed to connect to LDAP server" });
         }
       }
-      
+
       // Delete from LDAP
       try {
         const success = await ldapClient.deleteEntry(connectionId, site.dn);
-        
+
         if (!success) {
           return res.status(500).json({ message: "Failed to delete AD site" });
         }
-        
+
         // Delete from our database
         await storage.deleteAdSite(site.id);
-        
+
         // Create audit log entry
         await storage.createAuditLogEntry({
           action: 'delete',
@@ -4603,7 +4686,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           userId: req.user?.id,
           connectionId
         });
-        
+
         res.json({ success: true });
       } catch (err) {
         console.error("Error deleting AD site:", err);
@@ -4660,21 +4743,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!req.isAuthenticated() && !req.headers.authorization) {
         return res.status(401).json({ message: "Authentication required" });
       }
-      
+
       const connectionId = parseInt(req.params.connectionId);
       const connection = await storage.getLdapConnection(connectionId);
-      
+
       if (!connection) {
         return res.status(404).json({ message: "LDAP connection not found" });
       }
-      
+
       const query = parseQueryParams(req);
       const subnets = await storage.listAdSubnets(connectionId, query);
-      
+
       // Count total records for pagination metadata
       const countQuery = db.select({ count: sql`count(*)` }).from(adSubnets)
         .where(eq(adSubnets.connectionId, connectionId));
-      
+
       // Apply filters if present
       if (query && query.filter) {
         const conditions = parseFilter(query.filter);
@@ -4683,16 +4766,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
           countQuery.where(whereClause);
         }
       }
-      
+
       const [countResult] = await countQuery;
       const totalRecords = Number(countResult?.count || 0);
-      
+
       // Add objectType to each result
       const subnetsWithObjectType = subnets.map(subnet => ({
         ...subnet,
         objectType: 'subnet'
       }));
-      
+
       // Generate pagination metadata
       const { limit, offset } = parsePagination(query?.top, query?.skip);
       const paginationMetadata = generatePaginationMetadata(
@@ -4701,7 +4784,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         offset,
         `${req.protocol}://${req.get('host')}${req.originalUrl}`
       );
-      
+
       res.json({
         data: subnetsWithObjectType,
         metadata: paginationMetadata
@@ -4748,22 +4831,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!req.isAuthenticated() && !req.headers.authorization) {
         return res.status(401).json({ message: "Authentication required" });
       }
-      
+
       const connectionId = parseInt(req.params.connectionId);
       const objectGUID = req.params.objectGUID;
-      
+
       const subnet = await storage.getAdSubnetByObjectGUID(connectionId, objectGUID);
-      
+
       if (!subnet) {
         return res.status(404).json({ message: "AD subnet not found" });
       }
-      
+
       // Add objectType to the result
       const subnetWithObjectType = {
         ...subnet,
         objectType: 'subnet'
       };
-      
+
       res.json(subnetWithObjectType);
     } catch (error) {
       next(error);
@@ -4822,38 +4905,38 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!req.isAuthenticated() && !req.headers.authorization) {
         return res.status(401).json({ message: "Authentication required" });
       }
-      
+
       const connectionId = parseInt(req.params.connectionId);
       const connection = await storage.getLdapConnection(connectionId);
-      
+
       if (!connection) {
         return res.status(404).json({ message: "LDAP connection not found" });
       }
-      
+
       // First create the subnet in AD
       const subnetName = req.body.name;
       const description = req.body.description || '';
       const location = req.body.location || '';
       const siteObject = req.body.siteObject || '';
       const cidr = req.body.cidr || '';
-      
+
       if (!subnetName) {
         return res.status(400).json({ message: "Subnet name is required" });
       }
-      
+
       // Create subnet in AD using LDAP
       const client = ldapClient.getClient(connectionId);
-      
+
       if (!client) {
         const connected = await ldapClient.connect(connection);
         if (!connected) {
           return res.status(500).json({ message: "Failed to connect to LDAP server" });
         }
       }
-      
+
       // Create a CN for the new subnet
       const subnetDN = `CN=${subnetName},CN=Subnets,CN=Sites,CN=Configuration,${ldapClient.getDomainDN(connection)}`;
-      
+
       // Attributes for the new subnet
       const subnetAttributes = {
         objectClass: ['subnet'],
@@ -4861,28 +4944,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
         description: description,
         location: location
       };
-      
+
       // Add siteObject if provided
       if (siteObject) {
         subnetAttributes.siteObject = siteObject;
       }
-      
+
       try {
         const success = await ldapClient.createEntry(connectionId, subnetDN, subnetAttributes);
-        
+
         if (!success) {
           return res.status(500).json({ message: "Failed to create AD subnet" });
         }
-        
+
         // Search for the subnet to get all its attributes
         const subnetResults = await ldapClient.searchSubnets(connectionId, `(cn=${subnetName})`);
-        
+
         if (!subnetResults || subnetResults.length === 0) {
           return res.status(500).json({ message: "Subnet created but could not retrieve details" });
         }
-        
+
         const subnetData = subnetResults[0];
-        
+
         // Create entry in our database
         const newSubnet = await storage.createAdSubnet({
           connectionId,
@@ -4898,7 +4981,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           managedBy: null,
           adProperties: subnetData
         });
-        
+
         // Create audit log entry
         await storage.createAuditLogEntry({
           action: 'create',
@@ -4907,7 +4990,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           userId: req.user?.id,
           connectionId
         });
-        
+
         res.status(201).json(newSubnet);
       } catch (err) {
         console.error("Error creating AD subnet:", err);
@@ -4974,36 +5057,36 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!req.isAuthenticated() && !req.headers.authorization) {
         return res.status(401).json({ message: "Authentication required" });
       }
-      
+
       const connectionId = parseInt(req.params.connectionId);
       const objectGUID = req.params.objectGUID;
-      
+
       const subnet = await storage.getAdSubnetByObjectGUID(connectionId, objectGUID);
-      
+
       if (!subnet) {
         return res.status(404).json({ message: "AD subnet not found" });
       }
-      
+
       const connection = await storage.getLdapConnection(connectionId);
-      
+
       if (!connection) {
         return res.status(404).json({ message: "LDAP connection not found" });
       }
-      
+
       // Connect to LDAP if needed
       const client = ldapClient.getClient(connectionId);
-      
+
       if (!client) {
         const connected = await ldapClient.connect(connection);
         if (!connected) {
           return res.status(500).json({ message: "Failed to connect to LDAP server" });
         }
       }
-      
+
       // Prepare changes
       const changes = [];
       const updateData: Partial<AdSubnet> = {};
-      
+
       if (req.body.description !== undefined) {
         changes.push({
           operation: 'replace',
@@ -5013,7 +5096,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
         updateData.description = req.body.description;
       }
-      
+
       if (req.body.location !== undefined) {
         changes.push({
           operation: 'replace',
@@ -5023,7 +5106,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
         updateData.location = req.body.location;
       }
-      
+
       if (req.body.siteObject !== undefined) {
         changes.push({
           operation: 'replace',
@@ -5033,28 +5116,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
         updateData.siteObject = req.body.siteObject;
       }
-      
+
       if (req.body.cidr !== undefined) {
         updateData.cidr = req.body.cidr;
       }
-      
+
       // Handle managedBy separately
       if (req.body.managedBy !== undefined) {
         // Set the managedBy attribute
         const success = await ldapClient.setManagedBy(connectionId, subnet.dn, req.body.managedBy);
-        
+
         if (!success) {
           return res.status(500).json({ message: "Failed to update managedBy attribute" });
         }
-        
+
         updateData.managedBy = req.body.managedBy;
       }
-      
+
       // Apply changes to LDAP if there are any attribute changes
       if (changes.length > 0) {
         try {
           const success = await ldapClient.updateEntry(connectionId, subnet.dn, changes);
-          
+
           if (!success) {
             return res.status(500).json({ message: "Failed to update AD subnet" });
           }
@@ -5063,10 +5146,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
           return res.status(500).json({ message: `Error updating AD subnet: ${err.message}` });
         }
       }
-      
+
       // Update our database record
       const updatedSubnet = await storage.updateAdSubnetByObjectGUID(connectionId, objectGUID, updateData);
-      
+
       // Create audit log entry
       await storage.createAuditLogEntry({
         action: 'update',
@@ -5075,7 +5158,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         userId: req.user?.id,
         connectionId
       });
-      
+
       res.json(updatedSubnet);
     } catch (error) {
       next(error);
@@ -5122,43 +5205,43 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!req.isAuthenticated() && !req.headers.authorization) {
         return res.status(401).json({ message: "Authentication required" });
       }
-      
+
       const connectionId = parseInt(req.params.connectionId);
       const objectGUID = req.params.objectGUID;
-      
+
       const subnet = await storage.getAdSubnetByObjectGUID(connectionId, objectGUID);
-      
+
       if (!subnet) {
         return res.status(404).json({ message: "AD subnet not found" });
       }
-      
+
       const connection = await storage.getLdapConnection(connectionId);
-      
+
       if (!connection) {
         return res.status(404).json({ message: "LDAP connection not found" });
       }
-      
+
       // Connect to LDAP if needed
       const client = ldapClient.getClient(connectionId);
-      
+
       if (!client) {
         const connected = await ldapClient.connect(connection);
         if (!connected) {
           return res.status(500).json({ message: "Failed to connect to LDAP server" });
         }
       }
-      
+
       // Delete from LDAP
       try {
         const success = await ldapClient.deleteEntry(connectionId, subnet.dn);
-        
+
         if (!success) {
           return res.status(500).json({ message: "Failed to delete AD subnet" });
         }
-        
+
         // Delete from our database
         await storage.deleteAdSubnet(subnet.id);
-        
+
         // Create audit log entry
         await storage.createAuditLogEntry({
           action: 'delete',
@@ -5167,7 +5250,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           userId: req.user?.id,
           connectionId
         });
-        
+
         res.json({ success: true });
       } catch (err) {
         console.error("Error deleting AD subnet:", err);
@@ -5182,18 +5265,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const connectionId = parseInt(req.params.connectionId);
       const connection = await storage.getLdapConnection(connectionId);
-      
+
       if (!connection) {
         return res.status(404).json({ message: "LDAP connection not found" });
       }
-      
+
       const logs = await storage.getAuditLogs(connectionId);
       res.json(logs);
     } catch (error) {
       next(error);
     }
   });
-  
+
   /**
    * @swagger
    * /api/audit-logs:
@@ -5240,7 +5323,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       next(error);
     }
   });
-  
+
   /**
    * @swagger
    * /api/connections/{connectionId}/remove-from-group:
@@ -5297,33 +5380,71 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const connectionId = parseInt(req.params.connectionId);
       const connection = await storage.getLdapConnection(connectionId);
-      
+
       if (!connection) {
         return res.status(404).json({ message: "LDAP connection not found" });
       }
-      
+
       try {
         const data = removeFromGroupSchema.parse(req.body);
-        
-        // This would call a method in the LDAP client to remove the object from the group
-        // For now we'll return a mock success response
-        // In a real implementation, this would interact with the Active Directory
-        
+
+        // Connect to LDAP if not already connected
+        if (!ldapClient.isConnectionActive(connectionId)) {
+          await ldapClient.connect(connection);
+        }
+
+        // Find the group by GUID to get the distinguishedName
+        const group = await storage.getAdGroupByObjectGUID(connectionId, data.groupObjectGUID);
+        if (!group) {
+          return res.status(404).json({ message: "Group not found" });
+        }
+
+        // Find the object by GUID to get the distinguishedName
+        let objectDN = '';
+        if (data.objectType === 'user') {
+          const user = await storage.getAdUserByObjectGUID(connectionId, data.objectGUID);
+          if (!user) {
+            return res.status(404).json({ message: "User not found" });
+          }
+          objectDN = user.distinguishedName;
+        } else if (data.objectType === 'computer') {
+          const computer = await storage.getAdComputerByObjectGUID(connectionId, data.objectGUID);
+          if (!computer) {
+            return res.status(404).json({ message: "Computer not found" });
+          }
+          objectDN = computer.distinguishedName;
+        } else {
+          return res.status(400).json({ message: "Invalid object type" });
+        }
+
+        // Remove the object from the group
+        const success = await ldapClient.removeFromGroup(
+          connectionId,
+          group.distinguishedName,
+          objectDN
+        );
+
+        if (!success) {
+          return res.status(500).json({ message: `Failed to remove ${data.objectType} from group` });
+        }
+
         // Record the action in the audit log
         const auditEntry = {
           action: "REMOVE_FROM_GROUP",
           targetId: data.objectGUID,
           details: {
             groupGUID: data.groupObjectGUID,
-            objectType: data.objectType
+            objectType: data.objectType,
+            objectDN: objectDN,
+            groupDN: group.distinguishedName
           },
-          userId: req.user?.id || null,
+          userId: req.user?.id ?? null,
           connectionId: connectionId
         };
-        
+
         // Save the audit entry to storage
         await storage.createAuditLogEntry(auditEntry);
-        
+
         res.json({
           success: true,
           message: `${data.objectType} with GUID ${data.objectGUID} removed from group with GUID ${data.groupObjectGUID}`
@@ -5340,7 +5461,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // This dedicated API endpoint has been replaced by object-specific endpoints using the PATCH method
-  // See: /api/connections/:connectionId/ad-users/:id/managed-by, 
+  // See: /api/connections/:connectionId/ad-users/:id/managed-by,
   //      /api/connections/:connectionId/ad-groups/:id/managed-by,
   //      /api/connections/:connectionId/ad-computers/:id/managed-by,
   //      /api/connections/:connectionId/ad-org-units/:id/managed-by
@@ -5350,6 +5471,979 @@ export async function registerRoutes(app: Express): Promise<Server> {
   //      /api/connections/:connectionId/ad-groups/:objectGuid,
   //      /api/connections/:connectionId/ad-computers/:objectGuid,
   //      /api/connections/:connectionId/ad-org-units/:objectGuid
+
+  /**
+   * @swagger
+   * /api/connections/{connectionId}/reset-password:
+   *   post:
+   *     summary: Reset a user's password
+   *     tags: [Active Directory]
+   *     security:
+   *       - cookieAuth: []
+   *       - apiTokenAuth: []
+   *     parameters:
+   *       - name: connectionId
+   *         in: path
+   *         required: true
+   *         schema:
+   *           type: integer
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             $ref: '#/components/schemas/PasswordReset'
+   *     responses:
+   *       200:
+   *         description: Password reset successful
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 success:
+   *                   type: boolean
+   *                 message:
+   *                   type: string
+   *       400:
+   *         description: Invalid request
+   *       401:
+   *         $ref: '#/components/responses/UnauthorizedError'
+   *       404:
+   *         description: User not found
+   *       500:
+   *         description: Server error
+   */
+  app.post("/api/connections/:connectionId/reset-password", requirePermission(PERMISSIONS.UPDATE_AD_USERS, { allowApiToken: true }), async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const connectionId = parseInt(req.params.connectionId);
+      const connection = await storage.getLdapConnection(connectionId);
+
+      if (!connection) {
+        return res.status(404).json({ message: "LDAP connection not found" });
+      }
+
+      try {
+        const data = resetPasswordSchema.parse(req.body);
+
+        // Connect to LDAP if not already connected
+        if (!ldapClient.isConnectionActive(connectionId)) {
+          await ldapClient.connect(connection);
+        }
+
+        // Find the user by GUID to get the distinguishedName
+        const user = await storage.getAdUserByObjectGUID(connectionId, data.userObjectGUID);
+        if (!user) {
+          return res.status(404).json({ message: "User not found" });
+        }
+
+        // Reset the user's password
+        const success = await ldapClient.resetUserPassword(
+          connectionId,
+          user.distinguishedName,
+          data.newPassword,
+          data.skipValidation
+        );
+
+        if (!success) {
+          return res.status(500).json({ message: "Failed to reset password" });
+        }
+
+        // If requirePasswordChangeAtNextLogon is true, set the pwdLastSet attribute to 0
+        if (data.requirePasswordChangeAtNextLogon) {
+          await ldapClient.updateAttribute(
+            connectionId,
+            user.distinguishedName,
+            'pwdLastSet',
+            '0',
+            'replace'
+          );
+        }
+
+        // Record the action in the audit log
+        const auditEntry = {
+          action: "RESET_PASSWORD",
+          targetId: data.userObjectGUID,
+          details: {
+            userDN: user.distinguishedName,
+            requirePasswordChangeAtNextLogon: data.requirePasswordChangeAtNextLogon
+          },
+          userId: req.user?.id ?? null,
+          connectionId: connectionId
+        };
+
+        // Save the audit entry to storage
+        await storage.createAuditLogEntry(auditEntry);
+
+        res.json({
+          success: true,
+          message: `Password reset successful for user with GUID ${data.userObjectGUID}`
+        });
+      } catch (error) {
+        if (error instanceof ZodError) {
+          return handleZodError(error, res);
+        }
+        throw error;
+      }
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  /**
+   * @swagger
+   * /api/connections/{connectionId}/enable-user-account:
+   *   post:
+   *     summary: Enable or disable a user account
+   *     tags: [Active Directory]
+   *     security:
+   *       - cookieAuth: []
+   *       - apiTokenAuth: []
+   *     parameters:
+   *       - name: connectionId
+   *         in: path
+   *         required: true
+   *         schema:
+   *           type: integer
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             $ref: '#/components/schemas/EnableUserAccount'
+   *     responses:
+   *       200:
+   *         description: Account status updated successfully
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 success:
+   *                   type: boolean
+   *                 message:
+   *                   type: string
+   *       400:
+   *         description: Invalid request
+   *       401:
+   *         $ref: '#/components/responses/UnauthorizedError'
+   *       404:
+   *         description: User not found
+   *       500:
+   *         description: Server error
+   */
+  app.post("/api/connections/:connectionId/enable-user-account", requirePermission(PERMISSIONS.UPDATE_AD_USERS, { allowApiToken: true }), async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const connectionId = parseInt(req.params.connectionId);
+      const connection = await storage.getLdapConnection(connectionId);
+
+      if (!connection) {
+        return res.status(404).json({ message: "LDAP connection not found" });
+      }
+
+      try {
+        const data = enableUserAccountSchema.parse(req.body);
+
+        // Connect to LDAP if not already connected
+        if (!ldapClient.isConnectionActive(connectionId)) {
+          await ldapClient.connect(connection);
+        }
+
+        // Find the user by GUID to get the distinguishedName
+        const user = await storage.getAdUserByObjectGUID(connectionId, data.userObjectGUID);
+        if (!user) {
+          return res.status(404).json({ message: "User not found" });
+        }
+
+        // Enable or disable the user account
+        const success = await ldapClient.setUserAccountStatus(
+          connectionId,
+          user.distinguishedName,
+          data.enabled
+        );
+
+        if (!success) {
+          return res.status(500).json({ message: `Failed to ${data.enabled ? 'enable' : 'disable'} user account` });
+        }
+
+        // Record the action in the audit log
+        const auditEntry = {
+          action: data.enabled ? "ENABLE_USER_ACCOUNT" : "DISABLE_USER_ACCOUNT",
+          targetId: data.userObjectGUID,
+          details: {
+            userDN: user.distinguishedName
+          },
+          userId: req.user?.id ?? null,
+          connectionId: connectionId
+        };
+
+        // Save the audit entry to storage
+        await storage.createAuditLogEntry(auditEntry);
+
+        // Update the user in the database
+        await storage.updateAdUserByObjectGUID(connectionId, data.userObjectGUID, { enabled: data.enabled });
+
+        res.json({
+          success: true,
+          message: `User account ${data.enabled ? 'enabled' : 'disabled'} successfully for user with GUID ${data.userObjectGUID}`
+        });
+      } catch (error) {
+        if (error instanceof ZodError) {
+          return handleZodError(error, res);
+        }
+        throw error;
+      }
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  /**
+   * @swagger
+   * /api/connections/{connectionId}/bulk-enable-user-accounts:
+   *   post:
+   *     summary: Enable or disable multiple user accounts
+   *     tags: [Active Directory]
+   *     security:
+   *       - cookieAuth: []
+   *       - apiTokenAuth: []
+   *     parameters:
+   *       - name: connectionId
+   *         in: path
+   *         required: true
+   *         schema:
+   *           type: integer
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             $ref: '#/components/schemas/BulkEnableUserAccounts'
+   *     responses:
+   *       200:
+   *         description: Bulk account status update results
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 success:
+   *                   type: array
+   *                   items:
+   *                     type: string
+   *                 failed:
+   *                   type: array
+   *                   items:
+   *                     type: object
+   *                     properties:
+   *                       dn:
+   *                         type: string
+   *                       error:
+   *                         type: string
+   *       400:
+   *         description: Invalid request
+   *       401:
+   *         $ref: '#/components/responses/UnauthorizedError'
+   *       500:
+   *         description: Server error
+   */
+  app.post("/api/connections/:connectionId/bulk-enable-user-accounts", requirePermission(PERMISSIONS.UPDATE_AD_USERS, { allowApiToken: true }), async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const connectionId = parseInt(req.params.connectionId);
+      const connection = await storage.getLdapConnection(connectionId);
+
+      if (!connection) {
+        return res.status(404).json({ message: "LDAP connection not found" });
+      }
+
+      try {
+        const data = bulkEnableUserAccountsSchema.parse(req.body);
+
+        // Connect to LDAP if not already connected
+        if (!ldapClient.isConnectionActive(connectionId)) {
+          await ldapClient.connect(connection);
+        }
+
+        // Enable or disable the user accounts
+        const results = await ldapClient.bulkSetUserAccountStatus(
+          connectionId,
+          data.userDNs,
+          data.enabled
+        );
+
+        // Record the action in the audit log
+        const auditEntry = {
+          action: data.enabled ? "BULK_ENABLE_USER_ACCOUNTS" : "BULK_DISABLE_USER_ACCOUNTS",
+          targetId: "multiple",
+          details: {
+            userDNs: data.userDNs,
+            results: results
+          },
+          userId: req.user?.id ?? null,
+          connectionId: connectionId
+        };
+
+        // Save the audit entry to storage
+        await storage.createAuditLogEntry(auditEntry);
+
+        // Update the users in the database
+        for (const dn of results.success) {
+          try {
+            // Find the user by DN
+            const users = await ldapClient.searchUsers(connectionId, `(distinguishedName=${dn})`, ['objectGUID']);
+            if (users && users.length > 0) {
+              const objectGUID = users[0].objectGUID;
+              await storage.updateAdUserByObjectGUID(connectionId, objectGUID, { enabled: data.enabled });
+            }
+          } catch (error) {
+            console.error(`Failed to update user in database: ${error}`);
+          }
+        }
+
+        res.json(results);
+      } catch (error) {
+        if (error instanceof ZodError) {
+          return handleZodError(error, res);
+        }
+        throw error;
+      }
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  /**
+   * @swagger
+   * /api/connections/{connectionId}/reset-password:
+   *   post:
+   *     summary: Reset a user's password
+   *     tags: [Active Directory]
+   *     security:
+   *       - cookieAuth: []
+   *       - apiTokenAuth: []
+   *     parameters:
+   *       - name: connectionId
+   *         in: path
+   *         required: true
+   *         schema:
+   *           type: integer
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             required:
+   *               - userObjectGUID
+   *               - newPassword
+   *             properties:
+   *               userObjectGUID:
+   *                 type: string
+   *                 description: The ObjectGUID of the user
+   *               newPassword:
+   *                 type: string
+   *                 description: The new password for the user
+   *               skipValidation:
+   *                 type: boolean
+   *                 description: Whether to skip password policy validation
+   *                 default: false
+   *               requirePasswordChangeAtNextLogon:
+   *                 type: boolean
+   *                 description: Whether to require the user to change their password at next logon
+   *                 default: true
+   *     responses:
+   *       200:
+   *         description: Password reset successful
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 success:
+   *                   type: boolean
+   *                 message:
+   *                   type: string
+   *       400:
+   *         description: Invalid request
+   *       401:
+   *         $ref: '#/components/responses/UnauthorizedError'
+   *       404:
+   *         description: User not found
+   *       500:
+   *         description: Server error
+   */
+  app.post("/api/connections/:connectionId/reset-password", requirePermission(PERMISSIONS.UPDATE_AD_USERS, { allowApiToken: true }), async (req: any, res: any, next: any) => {
+    try {
+      const connectionId = parseInt(req.params.connectionId);
+      const connection = await storage.getLdapConnection(connectionId);
+
+      if (!connection) {
+        return res.status(404).json({ message: "LDAP connection not found" });
+      }
+
+      try {
+        const data = resetPasswordSchema.parse(req.body);
+
+        // Connect to LDAP if not already connected
+        if (!ldapClient.isConnectionActive(connectionId)) {
+          await ldapClient.connect(connection);
+        }
+
+        // Find the user by GUID to get the distinguishedName
+        const user = await storage.getAdUserByObjectGUID(connectionId, data.userObjectGUID);
+        if (!user) {
+          return res.status(404).json({ message: "User not found" });
+        }
+
+        // Reset the user's password
+        const success = await ldapClient.resetUserPassword(
+          connectionId,
+          user.distinguishedName,
+          data.newPassword,
+          data.skipValidation
+        );
+
+        if (!success) {
+          return res.status(500).json({ message: "Failed to reset password" });
+        }
+
+        // If requirePasswordChangeAtNextLogon is true, set the pwdLastSet attribute to 0
+        if (data.requirePasswordChangeAtNextLogon) {
+          await ldapClient.updateAttribute(
+            connectionId,
+            user.distinguishedName,
+            'pwdLastSet',
+            '0',
+            'replace'
+          );
+        }
+
+        // Record the action in the audit log
+        const auditEntry = {
+          action: "RESET_PASSWORD",
+          targetId: data.userObjectGUID,
+          details: {
+            userDN: user.distinguishedName,
+            requirePasswordChangeAtNextLogon: data.requirePasswordChangeAtNextLogon
+          },
+          userId: req.user?.id ?? null,
+          connectionId: connectionId
+        };
+
+        // Save the audit entry to storage
+        await storage.createAuditLogEntry(auditEntry);
+
+        res.json({
+          success: true,
+          message: `Password reset successful for user with GUID ${data.userObjectGUID}`
+        });
+      } catch (error) {
+        if (error instanceof ZodError) {
+          return handleZodError(error, res);
+        }
+        throw error;
+      }
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  /**
+   * @swagger
+   * /api/connections/{connectionId}/enable-user-account:
+   *   post:
+   *     summary: Enable or disable a user account
+   *     tags: [Active Directory]
+   *     security:
+   *       - cookieAuth: []
+   *       - apiTokenAuth: []
+   *     parameters:
+   *       - name: connectionId
+   *         in: path
+   *         required: true
+   *         schema:
+   *           type: integer
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             required:
+   *               - userObjectGUID
+   *               - enabled
+   *             properties:
+   *               userObjectGUID:
+   *                 type: string
+   *                 description: The ObjectGUID of the user
+   *               enabled:
+   *                 type: boolean
+   *                 description: Whether to enable or disable the account
+   *     responses:
+   *       200:
+   *         description: Account status updated successfully
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 success:
+   *                   type: boolean
+   *                 message:
+   *                   type: string
+   *       400:
+   *         description: Invalid request
+   *       401:
+   *         $ref: '#/components/responses/UnauthorizedError'
+   *       404:
+   *         description: User not found
+   *       500:
+   *         description: Server error
+   */
+  app.post("/api/connections/:connectionId/enable-user-account", requirePermission(PERMISSIONS.UPDATE_AD_USERS, { allowApiToken: true }), async (req: any, res: any, next: any) => {
+    try {
+      const connectionId = parseInt(req.params.connectionId);
+      const connection = await storage.getLdapConnection(connectionId);
+
+      if (!connection) {
+        return res.status(404).json({ message: "LDAP connection not found" });
+      }
+
+      try {
+        const data = enableUserAccountSchema.parse(req.body);
+
+        // Connect to LDAP if not already connected
+        if (!ldapClient.isConnectionActive(connectionId)) {
+          await ldapClient.connect(connection);
+        }
+
+        // Find the user by GUID to get the distinguishedName
+        const user = await storage.getAdUserByObjectGUID(connectionId, data.userObjectGUID);
+        if (!user) {
+          return res.status(404).json({ message: "User not found" });
+        }
+
+        // Enable or disable the user account
+        const success = await ldapClient.setUserAccountStatus(
+          connectionId,
+          user.distinguishedName,
+          data.enabled
+        );
+
+        if (!success) {
+          return res.status(500).json({ message: `Failed to ${data.enabled ? 'enable' : 'disable'} user account` });
+        }
+
+        // Record the action in the audit log
+        const auditEntry = {
+          action: data.enabled ? "ENABLE_USER_ACCOUNT" : "DISABLE_USER_ACCOUNT",
+          targetId: data.userObjectGUID,
+          details: {
+            userDN: user.distinguishedName
+          },
+          userId: req.user?.id ?? null,
+          connectionId: connectionId
+        };
+
+        // Save the audit entry to storage
+        await storage.createAuditLogEntry(auditEntry);
+
+        // Update the user in the database
+        await storage.updateAdUser(connectionId, data.userObjectGUID, { enabled: data.enabled });
+
+        res.json({
+          success: true,
+          message: `User account ${data.enabled ? 'enabled' : 'disabled'} successfully for user with GUID ${data.userObjectGUID}`
+        });
+      } catch (error) {
+        if (error instanceof ZodError) {
+          return handleZodError(error, res);
+        }
+        throw error;
+      }
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  /**
+   * @swagger
+   * /api/connections/{connectionId}/bulk-enable-user-accounts:
+   *   post:
+   *     summary: Enable or disable multiple user accounts
+   *     tags: [Active Directory]
+   *     security:
+   *       - cookieAuth: []
+   *       - apiTokenAuth: []
+   *     parameters:
+   *       - name: connectionId
+   *         in: path
+   *         required: true
+   *         schema:
+   *           type: integer
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             required:
+   *               - userDNs
+   *               - enabled
+   *             properties:
+   *               userDNs:
+   *                 type: array
+   *                 items:
+   *                   type: string
+   *                 description: Array of user distinguished names
+   *               enabled:
+   *                 type: boolean
+   *                 description: Whether to enable or disable the accounts
+   *     responses:
+   *       200:
+   *         description: Bulk account status update results
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 success:
+   *                   type: array
+   *                   items:
+   *                     type: string
+   *                 failed:
+   *                   type: array
+   *                   items:
+   *                     type: object
+   *                     properties:
+   *                       dn:
+   *                         type: string
+   *                       error:
+   *                         type: string
+   *       400:
+   *         description: Invalid request
+   *       401:
+   *         $ref: '#/components/responses/UnauthorizedError'
+   *       500:
+   *         description: Server error
+   */
+  app.post("/api/connections/:connectionId/bulk-enable-user-accounts", requirePermission(PERMISSIONS.UPDATE_AD_USERS, { allowApiToken: true }), async (req: any, res: any, next: any) => {
+    try {
+      const connectionId = parseInt(req.params.connectionId);
+      const connection = await storage.getLdapConnection(connectionId);
+
+      if (!connection) {
+        return res.status(404).json({ message: "LDAP connection not found" });
+      }
+
+      try {
+        const data = bulkEnableUserAccountsSchema.parse(req.body);
+
+        // Connect to LDAP if not already connected
+        if (!ldapClient.isConnectionActive(connectionId)) {
+          await ldapClient.connect(connection);
+        }
+
+        // Enable or disable the user accounts
+        const results = await ldapClient.bulkSetUserAccountStatus(
+          connectionId,
+          data.userDNs,
+          data.enabled
+        );
+
+        // Record the action in the audit log
+        const auditEntry = {
+          action: data.enabled ? "BULK_ENABLE_USER_ACCOUNTS" : "BULK_DISABLE_USER_ACCOUNTS",
+          targetId: "multiple",
+          details: {
+            userDNs: data.userDNs,
+            results: results
+          },
+          userId: req.user?.id ?? null,
+          connectionId: connectionId
+        };
+
+        // Save the audit entry to storage
+        await storage.createAuditLogEntry(auditEntry);
+
+        // Update the users in the database
+        for (const dn of results.success) {
+          try {
+            // Find the user by DN
+            const user = await storage.getAdUserByDN(connectionId, dn);
+            if (user) {
+              await storage.updateAdUser(connectionId, user.objectGUID, { enabled: data.enabled });
+            }
+          } catch (error) {
+            console.error(`Failed to update user in database: ${error}`);
+          }
+        }
+
+        res.json(results);
+      } catch (error) {
+        if (error instanceof ZodError) {
+          return handleZodError(error, res);
+        }
+        throw error;
+      }
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  /**
+   * @swagger
+   * /api/connections/{connectionId}/reset-password:
+   *   post:
+   *     summary: Reset a user's password
+   *     tags: [Active Directory]
+   *     security:
+   *       - cookieAuth: []
+   *       - apiTokenAuth: []
+   *     parameters:
+   *       - name: connectionId
+   *         in: path
+   *         required: true
+   *         schema:
+   *           type: integer
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             required:
+   *               - userObjectGUID
+   *               - newPassword
+   *             properties:
+   *               userObjectGUID:
+   *                 type: string
+   *                 description: The ObjectGUID of the user
+   *               newPassword:
+   *                 type: string
+   *                 description: The new password for the user
+   *               skipValidation:
+   *                 type: boolean
+   *                 description: Whether to skip password policy validation
+   *                 default: false
+   *               requirePasswordChangeAtNextLogon:
+   *                 type: boolean
+   *                 description: Whether to require the user to change their password at next logon
+   *                 default: true
+   *     responses:
+   *       200:
+   *         description: Password reset successful
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 success:
+   *                   type: boolean
+   *                 message:
+   *                   type: string
+   *       400:
+   *         description: Invalid request
+   *       401:
+   *         $ref: '#/components/responses/UnauthorizedError'
+   *       404:
+   *         description: User not found
+   *       500:
+   *         description: Server error
+   */
+  app.post("/api/connections/:connectionId/reset-password", requirePermission(PERMISSIONS.UPDATE_AD_USERS, { allowApiToken: true }), async (req, res, next) => {
+    try {
+      const connectionId = parseInt(req.params.connectionId);
+      const connection = await storage.getLdapConnection(connectionId);
+
+      if (!connection) {
+        return res.status(404).json({ message: "LDAP connection not found" });
+      }
+
+      try {
+        const data = resetPasswordSchema.parse(req.body);
+
+        // Connect to LDAP if not already connected
+        if (!ldapClient.isConnectionActive(connectionId)) {
+          await ldapClient.connect(connection);
+        }
+
+        // Find the user by GUID to get the distinguishedName
+        const user = await storage.getAdUserByObjectGUID(connectionId, data.userObjectGUID);
+        if (!user) {
+          return res.status(404).json({ message: "User not found" });
+        }
+
+        // Reset the user's password
+        const success = await ldapClient.resetUserPassword(
+          connectionId,
+          user.distinguishedName,
+          data.newPassword,
+          data.skipValidation
+        );
+
+        if (!success) {
+          return res.status(500).json({ message: "Failed to reset password" });
+        }
+
+        // If requirePasswordChangeAtNextLogon is true, set the pwdLastSet attribute to 0
+        if (data.requirePasswordChangeAtNextLogon) {
+          await ldapClient.updateAttribute(
+            connectionId,
+            user.distinguishedName,
+            'pwdLastSet',
+            '0',
+            'replace'
+          );
+        }
+
+        // Record the action in the audit log
+        const auditEntry = {
+          action: "RESET_PASSWORD",
+          targetId: data.userObjectGUID,
+          details: {
+            userDN: user.distinguishedName,
+            requirePasswordChangeAtNextLogon: data.requirePasswordChangeAtNextLogon
+          },
+          userId: req.user?.id ?? null,
+          connectionId: connectionId
+        };
+
+        // Save the audit entry to storage
+        await storage.createAuditLogEntry(auditEntry);
+
+        res.json({
+          success: true,
+          message: `Password reset successful for user with GUID ${data.userObjectGUID}`
+        });
+      } catch (error) {
+        if (error instanceof ZodError) {
+          return handleZodError(error, res);
+        }
+        throw error;
+      }
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  /**
+   * @swagger
+   * /api/connections/{connectionId}/enable-user-account:
+   *   post:
+   *     summary: Enable or disable a user account
+   *     tags: [Active Directory]
+   *     security:
+   *       - cookieAuth: []
+   *       - apiTokenAuth: []
+   *     parameters:
+   *       - name: connectionId
+   *         in: path
+   *         required: true
+   *         schema:
+   *           type: integer
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             required:
+   *               - userObjectGUID
+   *               - enabled
+   *             properties:
+   *               userObjectGUID:
+   *                 type: string
+   *                 description: The ObjectGUID of the user
+   *               enabled:
+   *                 type: boolean
+   *                 description: Whether to enable or disable the account
+   *     responses:
+   *       200:
+   *         description: Account status updated successfully
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 success:
+   *                   type: boolean
+   *                 message:
+   *                   type: string
+   *       400:
+   *         description: Invalid request
+   *       401:
+   *         $ref: '#/components/responses/UnauthorizedError'
+   *       404:
+   *         description: User not found
+   *       500:
+   *         description: Server error
+   */
+  app.post("/api/connections/:connectionId/enable-user-account", requirePermission(PERMISSIONS.UPDATE_AD_USERS, { allowApiToken: true }), async (req, res, next) => {
+    try {
+      const connectionId = parseInt(req.params.connectionId);
+      const connection = await storage.getLdapConnection(connectionId);
+
+      if (!connection) {
+        return res.status(404).json({ message: "LDAP connection not found" });
+      }
+
+      try {
+        const data = enableUserAccountSchema.parse(req.body);
+
+        // Connect to LDAP if not already connected
+        if (!ldapClient.isConnectionActive(connectionId)) {
+          await ldapClient.connect(connection);
+        }
+
+        // Find the user by GUID to get the distinguishedName
+        const user = await storage.getAdUserByObjectGUID(connectionId, data.userObjectGUID);
+        if (!user) {
+          return res.status(404).json({ message: "User not found" });
+        }
+
+        // Enable or disable the user account
+        const success = await ldapClient.setUserAccountStatus(
+          connectionId,
+          user.distinguishedName,
+          data.enabled
+        );
+
+        if (!success) {
+          return res.status(500).json({ message: `Failed to ${data.enabled ? 'enable' : 'disable'} user account` });
+        }
+
+        // Record the action in the audit log
+        const auditEntry = {
+          action: data.enabled ? "ENABLE_USER_ACCOUNT" : "DISABLE_USER_ACCOUNT",
+          targetId: data.userObjectGUID,
+          details: {
+            userDN: user.distinguishedName
+          },
+          userId: req.user?.id ?? null,
+          connectionId: connectionId
+        };
+
+        // Save the audit entry to storage
+        await storage.createAuditLogEntry(auditEntry);
+
+        // Update the user in the database
+        await storage.updateAdUser(connectionId, data.userObjectGUID, { enabled: data.enabled });
+
+        res.json({
+          success: true,
+          message: `User account ${data.enabled ? 'enabled' : 'disabled'} successfully for user with GUID ${data.userObjectGUID}`
+        });
+      } catch (error) {
+        if (error instanceof ZodError) {
+          return handleZodError(error, res);
+        }
+        throw error;
+      }
+    } catch (error) {
+      next(error);
+    }
+  });
 
   /**
    * @swagger
@@ -5408,7 +6502,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const page = req.query.page ? parseInt(req.query.page as string) : 1;
       const pageSize = req.query.pageSize ? parseInt(req.query.pageSize as string) : 10;
-      
+
       const result = await storage.getAuditLogs(undefined, undefined, page, pageSize);
       res.json(result);
     } catch (error) {
@@ -5481,13 +6575,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const connectionId = parseInt(req.params.connectionId, 10);
       const page = req.query.page ? parseInt(req.query.page as string) : 1;
       const pageSize = req.query.pageSize ? parseInt(req.query.pageSize as string) : 10;
-      
+
       // Verify the connection exists
       const connection = await storage.getLdapConnection(connectionId);
       if (!connection) {
         return res.status(404).json({ message: "Connection not found" });
       }
-      
+
       const result = await storage.getAuditLogs(connectionId, undefined, page, pageSize);
       res.json(result);
     } catch (error) {
@@ -5500,20 +6594,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       // Get data from the first available LDAP connection
       const connections = await storage.listLdapConnections();
-      
+
       if (connections.length === 0) {
         return res.status(200).json({ data: [], message: "No LDAP connections available" });
       }
-      
+
       const connectionId = connections[0].id;
       const users = await storage.listAdUsers(connectionId);
-      
+
       // Add objectType to make filtering easier in the dashboard
       const result = users.map(user => ({
         ...user,
         objectType: 'user'
       }));
-      
+
       res.json({ data: result });
     } catch (error) {
       next(error);
@@ -5525,20 +6619,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       // Get data from the first available LDAP connection
       const connections = await storage.listLdapConnections();
-      
+
       if (connections.length === 0) {
         return res.status(200).json({ data: [], message: "No LDAP connections available" });
       }
-      
+
       const connectionId = connections[0].id;
       const computers = await storage.listAdComputers(connectionId);
-      
+
       // Add objectType to make filtering easier in the dashboard
       const result = computers.map(computer => ({
         ...computer,
         objectType: 'computer'
       }));
-      
+
       res.json({ data: result });
     } catch (error) {
       next(error);
@@ -5550,20 +6644,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       // Get data from the first available LDAP connection
       const connections = await storage.listLdapConnections();
-      
+
       if (connections.length === 0) {
         return res.status(200).json({ data: [], message: "No LDAP connections available" });
       }
-      
+
       const connectionId = connections[0].id;
       const groups = await storage.listAdGroups(connectionId);
-      
+
       // Add objectType to make filtering easier in the dashboard
       const result = groups.map(group => ({
         ...group,
         objectType: 'group'
       }));
-      
+
       res.json({ data: result });
     } catch (error) {
       next(error);
@@ -5575,20 +6669,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       // Get data from the first available LDAP connection
       const connections = await storage.listLdapConnections();
-      
+
       if (connections.length === 0) {
         return res.status(200).json({ data: [], message: "No LDAP connections available" });
       }
-      
+
       const connectionId = connections[0].id;
       const ous = await storage.listAdOrgUnits(connectionId);
-      
+
       // Add objectType to make filtering easier in the dashboard
       const result = ous.map(ou => ({
         ...ou,
         objectType: 'organizationalUnit'
       }));
-      
+
       res.json({ data: result });
     } catch (error) {
       next(error);
@@ -5600,20 +6694,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       // Get data from the first available LDAP connection
       const connections = await storage.listLdapConnections();
-      
+
       if (connections.length === 0) {
         return res.status(200).json({ data: [], message: "No LDAP connections available" });
       }
-      
+
       const connectionId = connections[0].id;
       const domains = await storage.listAdDomains(connectionId);
-      
+
       // Add objectType to make filtering easier in the dashboard
       const result = domains.map(domain => ({
         ...domain,
         objectType: 'domain'
       }));
-      
+
       res.json({ data: result });
     } catch (error) {
       next(error);
@@ -5625,20 +6719,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       // Get data from the first available LDAP connection
       const connections = await storage.listLdapConnections();
-      
+
       if (connections.length === 0) {
         return res.status(200).json({ data: [], message: "No LDAP connections available" });
       }
-      
+
       const connectionId = connections[0].id;
       const sites = await storage.listAdSites(connectionId);
-      
+
       // Add objectType to make filtering easier in the dashboard
       const result = sites.map(site => ({
         ...site,
         objectType: 'site'
       }));
-      
+
       res.json({ data: result });
     } catch (error) {
       next(error);
@@ -5650,20 +6744,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       // Get data from the first available LDAP connection
       const connections = await storage.listLdapConnections();
-      
+
       if (connections.length === 0) {
         return res.status(200).json({ data: [], message: "No LDAP connections available" });
       }
-      
+
       const connectionId = connections[0].id;
       const subnets = await storage.listAdSubnets(connectionId);
-      
+
       // Add objectType to make filtering easier in the dashboard
       const result = subnets.map(subnet => ({
         ...subnet,
         objectType: 'subnet'
       }));
-      
+
       res.json({ data: result });
     } catch (error) {
       next(error);
@@ -5675,7 +6769,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       // Get data from the first available LDAP connection
       const connections = await storage.listLdapConnections();
-      
+
       if (connections.length === 0) {
         return res.status(200).json({
           userCount: 0,
@@ -5686,25 +6780,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
           message: "No LDAP connections available"
         });
       }
-      
+
       const connectionId = connections[0].id;
-      
+
       // Get counts from all AD objects
       const usersCount = await db.select({ count: count() }).from(adUsers)
         .where(eq(adUsers.connectionId, connectionId));
-      
+
       const computersCount = await db.select({ count: count() }).from(adComputers)
         .where(eq(adComputers.connectionId, connectionId));
-      
+
       const groupsCount = await db.select({ count: count() }).from(adGroups)
         .where(eq(adGroups.connectionId, connectionId));
-      
+
       const sitesCount = await db.select({ count: count() }).from(adSites)
         .where(eq(adSites.connectionId, connectionId));
-      
+
       const domainsCount = await db.select({ count: count() }).from(adDomains)
         .where(eq(adDomains.connectionId, connectionId));
-      
+
       // Return the counts
       res.json({
         userCount: Number(usersCount[0]?.count || 0),
@@ -5733,11 +6827,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const id = Number(req.params.id);
       const rule = await storage.getDynamicGroupRule(id);
-      
+
       if (!rule) {
         return res.status(404).json({ error: 'Dynamic group rule not found' });
       }
-      
+
       res.json(rule);
     } catch (error) {
       console.error('Error fetching dynamic group rule:', error);
@@ -5759,11 +6853,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const id = Number(req.params.id);
       const updatedRule = await storage.updateDynamicGroupRule(id, req.body);
-      
+
       if (!updatedRule) {
         return res.status(404).json({ error: 'Dynamic group rule not found' });
       }
-      
+
       res.json(updatedRule);
     } catch (error) {
       console.error('Error updating dynamic group rule:', error);
@@ -5775,11 +6869,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const id = Number(req.params.id);
       const deleted = await storage.deleteDynamicGroupRule(id);
-      
+
       if (!deleted) {
         return res.status(404).json({ error: 'Dynamic group rule not found' });
       }
-      
+
       res.status(204).send();
     } catch (error) {
       console.error('Error deleting dynamic group rule:', error);
@@ -5850,11 +6944,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const id = Number(req.params.id);
       const scheduleRule = await storage.getScheduleRule(id);
-      
+
       if (!scheduleRule) {
         return res.status(404).json({ error: 'Schedule rule not found' });
       }
-      
+
       res.json(scheduleRule);
     } catch (error) {
       console.error('Error fetching schedule rule:', error);
@@ -5899,11 +6993,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const id = Number(req.params.id);
       const updatedRule = await storage.updateScheduleRule(id, req.body);
-      
+
       if (!updatedRule) {
         return res.status(404).json({ error: 'Schedule rule not found' });
       }
-      
+
       res.json(updatedRule);
     } catch (error) {
       console.error('Error updating schedule rule:', error);
@@ -5915,11 +7009,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const id = Number(req.params.id);
       const deleted = await storage.deleteScheduleRule(id);
-      
+
       if (!deleted) {
         return res.status(404).json({ error: 'Schedule rule not found' });
       }
-      
+
       res.status(204).send();
     } catch (error) {
       console.error('Error deleting schedule rule:', error);

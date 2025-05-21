@@ -53,7 +53,7 @@ This document provides detailed instructions for deploying the Active Directory 
    ```bash
    cp .env.example .env
    ```
-   
+
    Edit the .env file with your specific configuration:
    ```bash
    nano .env
@@ -62,9 +62,9 @@ This document provides detailed instructions for deploying the Active Directory 
 3. **SSL Configuration**
 
    For production environments, the application is designed to work behind a reverse proxy or load balancer that handles SSL termination.
-   
+
    If you need to implement SSL directly in your environment, consider:
-   
+
    - Using a reverse proxy like Nginx or Traefik in front of the application
    - Setting up SSL termination at the infrastructure level (e.g., using AWS Application Load Balancer)
    - Configuring your cloud provider's SSL management services
@@ -391,6 +391,8 @@ For deployment on Microsoft Azure:
 
 Detailed Azure deployment instructions can be found in [AZURE_DEPLOYMENT.md](AZURE_DEPLOYMENT.md).
 
+For comprehensive Kubernetes deployment instructions for any cloud provider, refer to the [Kubernetes Deployment Guide](docs/kubernetes-deployment.md).
+
 ### Google Cloud Deployment
 
 For deployment on Google Cloud Platform:
@@ -410,6 +412,8 @@ For deployment on Google Cloud Platform:
    - Use Memorystore for Redis
 
 Detailed GCP deployment instructions can be found in [GCP_DEPLOYMENT.md](GCP_DEPLOYMENT.md).
+
+For comprehensive Kubernetes deployment instructions for any cloud provider, refer to the [Kubernetes Deployment Guide](docs/kubernetes-deployment.md).
 
 ## Production Best Practices
 

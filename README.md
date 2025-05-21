@@ -23,6 +23,9 @@ The Active Directory Management Platform provides the following key features:
 
 ### Core Functionality
 - **User Management**: Create, read, update, and delete Active Directory users with comprehensive attribute support
+  - Password reset with policy validation options
+  - Account enabling/disabling
+  - Bulk account management operations
 - **Group Management**: Manage security and distribution groups, including nested group structures
 - **Organizational Unit (OU) Management**: Create and manage the hierarchical OU structure
 - **Computer Management**: Manage computer accounts with detailed property configuration
@@ -76,6 +79,8 @@ The Active Directory Management Platform provides the following key features:
 
 ### DevOps
 - **Docker**: Containerization platform for consistent deployment
+- **Kubernetes**: Container orchestration for scalable deployments
+- **Infrastructure as Code (IaC)**: Deployment configurations for Docker and Kubernetes
 
 ## Architecture
 
@@ -111,8 +116,8 @@ The application follows a modern web architecture with clear separation of conce
 
 3. Create a .env file from the example:
    ```bash
-   cp .env.example .env
-   # Edit .env with your configuration
+   cp iac/docker/.env.example iac/docker/.env
+   # Edit iac/docker/.env with your configuration
    ```
 
 4. Set up the database:
@@ -142,8 +147,8 @@ The application follows a modern web architecture with clear separation of conce
 
 2. Create a .env file from the example:
    ```bash
-   cp .env.example .env
-   # Edit .env with your production configuration
+   cp iac/docker/.env.example iac/docker/.env
+   # Edit iac/docker/.env with your production configuration
    ```
 
 3. Set up environment variables for production:
@@ -155,6 +160,7 @@ The application follows a modern web architecture with clear separation of conce
 
 4. Start the application stack:
    ```bash
+   cd iac/docker
    docker-compose up -d
    ```
 
@@ -187,6 +193,10 @@ The application is also available as a pre-built Docker image:
 
 For manual deployment instructions, refer to the [Deployment Guide](DEPLOYMENT.md).
 
+#### Kubernetes Deployment
+
+For Kubernetes deployment instructions, refer to the [Kubernetes Deployment Guide](docs/kubernetes-deployment.md).
+
 ## API Documentation
 
 The API is thoroughly documented using the OpenAPI specification (Swagger):
@@ -201,6 +211,10 @@ The API is thoroughly documented using the OpenAPI specification (Swagger):
 - **Request Format**: JSON with proper content-type headers
 - **Response Format**: Consistent JSON structure with appropriate status codes
 - **Error Handling**: Descriptive error messages and appropriate HTTP status codes
+
+### API Examples
+
+For examples of using the API, including the password reset and account management endpoints, refer to the [API Examples Guide](docs/api-examples.md).
 
 ### Filterable Endpoints
 

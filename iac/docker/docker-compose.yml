@@ -1,9 +1,10 @@
 services:
   app:
     build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: ad-management-api
+      context: ../../
+      dockerfile: iac/docker/Dockerfile
+    image: ActiveDirectoryManager:${VERSION:-latest}
+    container_name: ActiveDirectoryManager-api
     restart: unless-stopped
     ports:
       - "5000:5000"
@@ -34,7 +35,7 @@ services:
 
   postgres:
     image: postgres:15-alpine
-    container_name: ad-management-postgres
+    container_name: ActiveDirectoryManager-postgres
     restart: unless-stopped
     environment:
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
@@ -55,7 +56,7 @@ services:
 
   redis:
     image: redis:7-alpine
-    container_name: ad-management-redis
+    container_name: ActiveDirectoryManager-redis
     restart: unless-stopped
     command: redis-server --appendonly yes
     volumes:
